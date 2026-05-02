@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Number Guessing Game</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; padding-top: 50px; }
+        input { padding: 10px; width: 50px; }
+        button { padding: 10px 20px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <h1>Guess the Number!</h1>
+    <p>I'm thinking of a number between 1 and 100.</p>
+
+    <input type="number" id="userGuess">
+    <button onclick="checkGuess()">Guess!</button>
+
+    <p id="message"></p>
+
+    <script>
+        // The computer picks the number once when the page loads
+        const secretNumber = Math.floor(Math.random() * 100) + 1;
+        let attempts = 0;
+
+        function checkGuess() {
+            const guess = document.getElementById("userGuess").value;
+            const message = document.getElementById("message");
+            attempts++;
+
+            if (guess == secretNumber) {
+                message.innerHTML = `🎉 Correct! It took you ${attempts} tries.`;
+                message.style.color = "green";
+            } else if (guess < secretNumber) {
+                message.innerHTML = "Too low! Try again.";
+                message.style.color = "blue";
+            } else {
+                message.innerHTML = "Too high! Try again.";
+                message.style.color = "red";
+            }
+        }
+    </script>
+</body>
+</html>

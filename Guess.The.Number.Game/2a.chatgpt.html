@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Number Guessing Game</title>
+
+<style>
+  body {
+    margin: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #121212;
+    color: #ffffff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+  }
+
+  h1 {
+    margin-top: 0;
+    color: #FFD700;
+    text-align: center;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+  }
+
+  .game-box {
+    margin-top: 20px;
+    background: #1e1e1e;
+    padding: 30px;
+    border-radius: 20px;
+    width: 320px;
+    text-align: center;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  }
+
+  input {
+    width: 90%;
+    padding: 10px;
+    margin-top: 10px;
+    border-radius: 8px;
+    border: 2px solid #333;
+    background-color: #2a2a2a;
+    color: white;
+    outline: none;
+    font-size: 16px;
+  }
+
+  .buttons {
+    margin-top: 15px;
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  button {
+    flex: 1;
+    margin: 0;
+    padding: 10px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+    transition: opacity 0.2s;
+  }
+
+  button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  #guessBtn { background-color: #4CAF50; color: white; }
+  #newGameBtn { background-color: #f44336; color: white; }
+
+  .message {
+    margin-top: 15px;
+    min-height: 24px;
+    font-weight: bold;
+  }
+
+  .attempts {
+    margin-top: 10px;
+    font-size: 14px;
+    color: #aaa;
+  }
+
+  .error { color: #ff4d4d; }
+  .low { color: #4db8ff; }
+  .high { color: #bf00ff; }
+  .success { color: #00ff88; }
+</style>
+</head>
+
+<body>
+
+<h1>Number Guessing Game</h1>
+
+<div class="game-box">
+  <div>I am thinking of a number:</div>
+
+  <input
+    id="guessInput"
+    type="text"
+    placeholder="Guess the number"
+    maxlength="3"
+  />
+
+  <div class="buttons">
+    <button id="guessBtn">Guess</button>
+    <button id="newGameBtn">New Game</button>
+  </div>
+
+  <div id="message" class="message"></div>
+
+  <div class="attempts">
+    Number of Attempts: <span id="attemptCount">0</span>
+  </div>
+</div>
+
+<script>
+  let target;
+  let attempts;
+  let gameOver;
+  let lastGuessMade;
+
+  const input = document.getElementById("guessInput");
+  const guessBtn = document.getElementById("guessBtn");
+  const newGameBtn = document.getElementById("newGameBtn");
+  const message = document.getElementById("message");
+  const attemptCount = document.getElementById("attemptCount");
+
+  function startGame() {
+    target = Math.floor(Math.random() * 100) + 1;
+    attempts = 0;
+    gameOver = false;
+    lastGuessMade = false;
+
+    message.textContent = "";
+    message.className = "message";
+
+    attemptCount.textContent = "0";
+    input.value = "";
+    input.disabled = false;
+    guessBtn.disabled = false;
+    input.focus();
+  }
+
+  function showMessage(text, type) {
+    message.textContent = text;
+    message.className = "message " + type;
+  }
+
+  function validateInput(value) {
+    if (value.length === 0) return "Enter a number.";
+
+    if (!/^\d+$/.test(value)) return "Numbers only.";
+
+    if (value.length > 3) return "Too many digits.";
+
+    const num = Number(value);
+
+    if (num < 1 || num > 100) return "Enter 1 - 100.";
+
+    return null;
+  }
+
+  function handleGuess() {
+    if (gameOver) return;
+
+    const value = input.value.trim();
+    const error = validateInput(value);
+
+    if (error) {
+      showMessage(error, "error");
+      lastGuessMade = true;
+      return;
+    }
+
+    const guess = Number(value);
+    attempts++;
+    attemptCount.textContent = attempts;
+
+    if (guess < target) {
+      showMessage("Too low!", "low");
+    } else if (guess > target) {
+      showMessage("Too high!", "high");
+    } else {
+      showMessage("Correct! 🎉", "success");
+      guessBtn.disabled = true;
+      input.disabled = true;
+      gameOver = true;
+    }
+
+    lastGuessMade = true;
+    input.blur();
+    setTimeout(() => input.focus(), 0);
+  }
+
+  // Enter key support
+  input.addEventListener("keypress", function(e) {
+    if (e.key === "Enter") handleGuess();
+  });
+
+  input.addEventListener("focus", function() {
+    if (lastGuessMade) {
+      input.select();
+      lastGuessMade = false;
+    }
+  });
+
+  guessBtn.addEventListener("click", handleGuess);
+  newGameBtn.addEventListener("click", startGame);
+
+  // Start fresh on load (covers refresh case)
+  startGame();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,125 @@
+/*robot.game.css*/
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f4f7fb;
+}
+
+/* layout */
+.container {
+  display: flex;
+  height: 100vh;
+}
+
+/* left nav */
+.sidebar {
+  width: 220px;
+  background: #eaf2ff;
+  border-right: 1px solid #cdd8ee;
+  padding: 15px;
+  box-sizing: border-box;
+}
+
+/* inputs */
+.control {
+  margin-bottom: 15px;
+}
+
+.control label {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 5px;
+  color: #333;
+}
+
+.control input {
+  width: 100%;
+  padding: 6px;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+/* section */
+.section-title {
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+
+.separator {
+  border-top: 1px solid #cdd8ee;
+  margin: 15px 0;
+}
+
+/* buttons */
+.button-row {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  margin-top: 10px; /* spacing between rows */
+}
+
+/* force buttons to share full width */
+.button-row button {
+  flex: 1;
+}
+
+button {
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+button.active {
+  background: #4a7cff;
+  color: white;
+}
+
+/* arrow icon button */
+.icon-btn {
+  margin-left: auto;
+}
+
+#arrowBtn img {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+/* main area */
+.main {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* canvas styling */
+canvas {
+  background: white;
+  border: 1px solid #ccc;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.sidebar {
+  width: 220px;
+  background: #eaf2ff;
+  border-right: 1px solid #cdd8ee;
+  padding: 15px;
+  box-sizing: border-box;
+
+  height: 100vh;
+  overflow-y: auto;
+
+  scrollbar-width: none;
+}
+
+.sidebar::-webkit-scrollbar {
+  display: none;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #ccc; /* Or whatever looks "grayed out" to you */
+}
+
+

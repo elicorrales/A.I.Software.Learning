@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Canvas UI</title>
+
+<style>
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f4f7fb;
+}
+
+/* layout */
+.container {
+  display: flex;
+  height: 100vh;
+}
+
+/* left nav */
+.sidebar {
+  width: 220px;
+  background: #eaf2ff;
+  border-right: 1px solid #cdd8ee;
+  padding: 15px;
+  box-sizing: border-box;
+}
+
+/* inputs */
+.control {
+  margin-bottom: 15px;
+}
+
+.control label {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 5px;
+  color: #333;
+}
+
+.control input {
+  width: 100%;
+  padding: 6px;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+/* section */
+.section-title {
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+
+.separator {
+  border-top: 1px solid #cdd8ee;
+  margin: 15px 0;
+}
+
+/* buttons */
+.button-row {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+button {
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+button.active {
+  background: #4a7cff;
+  color: white;
+}
+
+/* arrow icon button */
+.icon-btn {
+  margin-left: auto;
+  font-size: 16px;
+}
+
+/* main area */
+.main {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* canvas styling */
+canvas {
+  background: white;
+  border: 1px solid #ccc;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+  <div class="sidebar">
+
+    <div class="section-title">Play Area</div>
+
+    <div class="control">
+      <label>Width</label>
+      <input type="number" id="widthInput" value="400" min="50" step="10">
+    </div>
+
+    <div class="control">
+      <label>Height</label>
+      <input type="number" id="heightInput" value="300" min="50" step="10">
+    </div>
+
+    <div class="separator"></div>
+
+    <div class="section-title">Obstacle</div>
+
+    <div class="control">
+      <label>Side 1</label>
+      <input type="number" id="side1Input" value="20">
+    </div>
+
+    <div class="control">
+      <label>Side 2</label>
+      <input type="number" id="side2Input" value="50">
+    </div>
+
+    <div class="button-row">
+      <button id="horzBtn">Horz</button>
+      <button id="vertBtn">Vert</button>
+      <button id="arrowBtn" class="icon-btn">🖱️</button>
+    </div>
+
+  </div>
+
+  <div class="main">
+    <canvas id="canvas"></canvas>
+  </div>
+
+</div>
+
+<script>
+
+/* =========================
+   VARIABLES / STATE
+========================= */
+
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+const widthInput = document.getElementById("widthInput");
+const heightInput = document.getElementById("heightInput");
+
+const side1Input = document.getElementById("side1Input");
+const side2Input = document.getElementById("side2Input");
+
+const horzBtn = document.getElementById("horzBtn");
+const vertBtn = document.getElementById("vertBtn");
+const arrowBtn = document.getElementById("arrowBtn");
+
+// obstacles list
+let obstacles = [];
+
+// obstacle settings
+let obstacleMode = {
+  orientation: null, // "horz" | "vert"
+  arrowActive: false
+};
+
+// player entity
+let player = {
+  x: 200,
+  y: 150,
+  radius: 15,
+  angle: 0, // radians
+
+  // rotation state
+  rotatingCCW: false,
+  rotatingCW: false,
+  rotationSpeed: 0.05,
+
+  // movement state
+  movingForward: false,
+  movingBackward: false,
+  moveSpeed: 2
+};
+
+
+/* =========================
+   FUNCTION DEFINITIONS
+========================= */
+
+/* reset + rebuild canvas */
+function resetCanvas() {
+  const w = parseInt(widthInput.value);
+  const h = parseInt(heightInput.value);
+
+  canvas.width = w;
+  canvas.height = h;
+
+  // reset player position to center
+  player.x = w / 2;
+  player.y = h / 2;
+  player.angle = 0;
+
+  obstacles = [];
+
+  draw();
+}
+
+/* draw everything */
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  drawObstacles();
+  drawCircle();
+}
+
+/* draw player + direction line */
+function drawCircle() {
+  // circle
+  ctx.beginPath();
+  ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+  ctx.fillStyle = "#ddd";
+  ctx.fill();
+  ctx.strokeStyle = "black";
+  ctx.stroke();
+
+  // gun (direction line)
+  const lineLength = player.radius + 5;
+  const endX = player.x + Math.cos(player.angle) * lineLength;
+  const endY = player.y + Math.sin(player.angle) * lineLength;
+
+  ctx.beginPath();
+  ctx.moveTo(player.x, player.y);
+  ctx.lineTo(endX, endY);
+  ctx.strokeStyle = "black";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+}
+
+/* draw obstacles */
+function drawObstacles() {
+  ctx.fillStyle = "#888";
+  obstacles.forEach(o => {
+    ctx.fillRect(o.x, o.y, o.w, o.h);
+  });
+}
+
+/* animation loop */
+function animate() {
+  if (player.rotatingCCW) player.angle -= player.rotationSpeed;
+  if (player.rotatingCW) player.angle += player.rotationSpeed;
+
+  // movement along gun direction
+  if (player.movingForward) {
+    player.x += Math.cos(player.angle) * player.moveSpeed;
+    player.y += Math.sin(player.angle) * player.moveSpeed;
+  }
+
+  if (player.movingBackward) {
+    player.x -= Math.cos(player.angle) * player.moveSpeed;
+    player.y -= Math.sin(player.angle) * player.moveSpeed;
+  }
+
+  draw();
+  requestAnimationFrame(animate);
+}
+
+
+/* =========================
+   INVOCATIONS / LISTENERS
+========================= */
+
+widthInput.addEventListener("input", resetCanvas);
+heightInput.addEventListener("input", resetCanvas);
+
+/* buttons */
+horzBtn.addEventListener("click", () => {
+  obstacleMode.orientation = "horz";
+  horzBtn.classList.add("active");
+  vertBtn.classList.remove("active");
+});
+
+vertBtn.addEventListener("click", () => {
+  obstacleMode.orientation = "vert";
+  vertBtn.classList.add("active");
+  horzBtn.classList.remove("active");
+});
+
+arrowBtn.addEventListener("click", () => {
+  obstacleMode.arrowActive = !obstacleMode.arrowActive;
+  arrowBtn.classList.toggle("active");
+});
+
+/* keyboard */
+document.addEventListener("keydown", (e) => {
+  if (e.key === "ArrowLeft") player.rotatingCCW = true;
+  if (e.key === "ArrowRight") player.rotatingCW = true;
+  if (e.key === "ArrowUp") player.movingForward = true;
+  if (e.key === "ArrowDown") player.movingBackward = true;
+});
+
+document.addEventListener("keyup", (e) => {
+  if (e.key === "ArrowLeft") player.rotatingCCW = false;
+  if (e.key === "ArrowRight") player.rotatingCW = false;
+  if (e.key === "ArrowUp") player.movingForward = false;
+  if (e.key === "ArrowDown") player.movingBackward = false;
+});
+
+/* mouse */
+canvas.addEventListener("mousedown", (e) => {
+
+  if (obstacleMode.arrowActive) {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const s1 = parseInt(side1Input.value);
+    const s2 = parseInt(side2Input.value);
+
+    // FIX: longest side aligns with chosen orientation
+    const longSide = Math.max(s1, s2);
+    const shortSide = Math.min(s1, s2);
+
+    let w, h;
+
+    if (obstacleMode.orientation === "horz") {
+      w = longSide;
+      h = shortSide;
+    } else {
+      w = shortSide;
+      h = longSide;
+    }
+
+    obstacles.push({ x, y, w, h });
+    return;
+  }
+
+  if (e.button === 0) player.rotatingCCW = true;
+  if (e.button === 2) player.rotatingCW = true;
+});
+
+canvas.addEventListener("mouseup", (e) => {
+  if (e.button === 0) player.rotatingCCW = false;
+  if (e.button === 2) player.rotatingCW = false;
+});
+
+canvas.addEventListener("mouseleave", () => {
+  player.rotatingCCW = false;
+  player.rotatingCW = false;
+});
+
+// prevent context menu on right click
+canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+
+/* initial setup */
+resetCanvas();
+animate();
+
+</script>
+
+</body>
+</html>

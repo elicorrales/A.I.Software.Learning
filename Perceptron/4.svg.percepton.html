@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Live Perceptron Trainer</title>
+
+<style>
+  body {
+    margin: 0;
+    background: #f0f9ff;
+    font-family: Arial, sans-serif;
+    color: #0f172a;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+  }
+
+  .group {
+    display: flex;
+    gap: 16px;
+  }
+
+  .wrap {
+    background: #ffffff;
+    padding: 12px;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+  }
+
+  canvas {
+    background: #e0f2fe;
+    border-radius: 10px;
+    cursor: crosshair;
+  }
+
+  .hint-box {
+    background: #f8fafc;
+    border: 1px solid #cbd5f5;
+    border-radius: 10px;
+    padding: 10px;
+  }
+
+  .controls-box {
+    background: #f8fafc;
+    border: 1px solid #cbd5f5;
+    border-radius: 10px;
+    padding: 10px;
+  }
+
+  .hint {
+    font-size: 20px;
+    color: #334155;
+    line-height: 1.6;
+  }
+
+  .hint-row{
+    display:flex;
+    justify-content: space-between;
+    align-items:stretch;
+    margin-top: 6px;
+    gap: 10px;
+  }
+
+  .controls{
+    display:flex;
+    flex-direction:column;
+    font-size:16px;
+    gap:6px;
+  }
+
+  .controls input[type="number"]{
+    margin-top:6px;
+    padding:4px;
+    font-size:14px;
+    width:100px; /* Widened for 4 digits */
+  }
+
+  .side {
+    background: #ffffff;
+    padding: 12px;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  svg text {
+    font-size: 14px;
+    fill: #0f172a;
+  }
+</style>
+</head>
+
+<body>
+
+<div class="group">
+
+  <div class="wrap">
+    <canvas id="c" width="800" height="500"></canvas>
+
+    <div class="hint-row">
+      
+      <div class="hint-box">
+        <div class="hint">
+          Click to add points.<br>
+          Left click = blue (0)<br>
+          Right click = red (1)<br>
+          CTRL+Z = undo (multiple steps)
+        </div>
+      </div>
+
+      <div class="controls-box">
+        <div class="controls">
+          <label><input type="radio" name="act" value="step" checked> Step</label>
+          <label><input type="radio" name="act" value="sigmoid"> Sigmoid</label>
+
+          <label>
+            Passes:
+            <input id="passesInput" type="number" min="1" max="9999" step="1" value="20">
+          </label>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="side">
+    <svg width="360" height="320">
+
+      <!-- inputs -->
+      <circle cx="50" cy="80" r="16" fill="#e0f2fe"/>
+      <circle cx="50" cy="130" r="16" fill="#e0f2fe"/>
+      <circle cx="50" cy="180" r="16" fill="#e0f2fe"/>
+      <circle cx="50" cy="230" r="16" fill="#e0f2fe"/>
+      <circle cx="50" cy="280" r="16" fill="#e0f2fe"/>
+
+      <!-- neuron -->
+      <circle cx="200" cy="180" r="35" fill="#bae6fd"/>
+
+      <!-- output -->
+      <circle cx="300" cy="180" r="18" fill="#e0f2fe"/>
+
+      <!-- lines -->
+      <line x1="70" y1="80"  x2="165" y2="160" stroke="#0f172a"/>
+      <line x1="70" y1="130" x2="165" y2="170" stroke="#0f172a"/>
+      <line x1="70" y1="180" x2="165" y2="180" stroke="#0f172a"/>
+      <line x1="70" y1="230" x2="165" y2="190" stroke="#0f172a"/>
+      <line x1="70" y1="280" x2="165" y2="200" stroke="#0f172a"/>
+
+      <line x1="235" y1="180" x2="282" y2="180" stroke="#0f172a"/>
+
+      <!-- labels -->
+      <text x="20" y="85">x1</text>
+      <text x="20" y="135">x2</text>
+      <text x="20" y="185">x3</text>
+      <text x="20" y="235">x4</text>
+      <text x="20" y="285">x5</text>
+
+      <text id="valX1" x="10" y="100">0</text>
+      <text id="valX2" x="10" y="150">0</text>
+      <text id="valX3" x="10" y="200">0</text>
+      <text id="valX4" x="10" y="250">0</text>
+      <text id="valX5" x="10" y="300">0</text>
+
+      <text id="valW1" x="120" y="90">w1</text>
+      <text id="valW2" x="120" y="110">w2</text>
+      <text id="valW3" x="120" y="130">w3</text>
+      <text id="valW4" x="120" y="150">w4</text>
+      <text id="valW5" x="120" y="170">w5</text>
+
+      <text id="valB" x="180" y="240">b</text>
+
+      <text x="290" y="160">out</text>
+      <text id="valOut" x="290" y="210">0</text>
+
+    </svg>
+  </div>
+
+</div>
+
+<script>
+
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+
+document.querySelector('input[value="step"]').checked = true;
+document.getElementById("passesInput").value = 20;
+
+let points = [];
+
+let w1 = Math.random()*2 - 1;
+let w2 = Math.random()*2 - 1;
+let b  = Math.random()*2 - 1;
+
+const originalW1 = w1;
+const originalW2 = w2;
+const originalB  = b;
+
+let lr = 0.1;
+
+// State management for animation
+let animRequest = null;
+let currentPass = 0;
+let currentPointIdx = 0;
+
+let stablePasses = 0;
+const requiredStable = 3;
+
+function getPasses(){
+  const el = document.getElementById("passesInput");
+  return Math.max(1, parseInt(el.value) || 1);
+}
+
+function getMode(){
+  const checked = document.querySelector('input[name="act"]:checked');
+  return checked ? checked.value : "step";
+}
+
+function toScreenX(x){ return x * canvas.width; }
+function toScreenY(y){ return y * canvas.height; }
+
+function step(v){ return v >= 0 ? 1 : 0; }
+
+function sigmoid(v){
+  return 1 / (1 + Math.exp(-v));
+}
+
+function predict(x,y){
+  let z = w1*x + w2*y + b;
+  return (getMode() === "sigmoid") ? sigmoid(z) : step(z);
+}
+
+function updateSVG(x=0,y=0){
+  document.getElementById("valX1").textContent = x.toFixed(2);
+  document.getElementById("valX2").textContent = y.toFixed(2);
+  document.getElementById("valW1").textContent = w1.toFixed(2);
+  document.getElementById("valW2").textContent = w2.toFixed(2);
+  document.getElementById("valB").textContent  = b.toFixed(2);
+  document.getElementById("valOut").textContent = predict(x,y).toFixed(2);
+}
+
+function draw(){
+
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  for(let p of points){
+
+    let sx = toScreenX(p.x);
+    let sy = toScreenY(p.y);
+
+    ctx.beginPath();
+    ctx.arc(sx,sy,5,0,Math.PI*2);
+
+    ctx.fillStyle = p.label === 1 ? "#ef4444" : "#3b82f6";
+    ctx.fill();
+  }
+
+  ctx.strokeStyle = "#0f172a";
+  ctx.lineWidth = 2;
+
+  ctx.beginPath();
+  let lx1 = 0;
+  let ly1 = -(w1*0 + b)/w2;
+  let lx2 = 1;
+  let ly2 = -(w1*1 + b)/w2;
+  ctx.moveTo(toScreenX(lx1), toScreenY(ly1));
+  ctx.lineTo(toScreenX(lx2), toScreenY(ly2));
+  ctx.stroke();
+}
+
+function trainStep(x, y, label){
+  const z = w1*x + w2*y + b;
+  const pred = z >= 0 ? 1 : 0;
+  const err = label - pred;
+
+  w1 += lr * err * x;
+  w2 += lr * err * y;
+  b  += lr * err;
+
+  return { pred, err };
+}
+
+//this helper function is for the trainSigmoid()
+function crossEntropy(pred, label){
+  // clamp to avoid log(0)
+  const eps = 1e-7;
+  pred = Math.min(1 - eps, Math.max(eps, pred));
+
+  return -(label * Math.log(pred) + (1 - label) * Math.log(1 - pred));
+}
+
+//Sigmoid + Mean Squared Error (MSE) loss
+function trainSigmoidMSE(x, y, label){
+  const z = w1*x + w2*y + b;
+  const pred = 1 / (1 + Math.exp(-z));
+
+  const err = label - pred;
+  const grad = pred * (1 - pred); // sigmoid derivative
+
+  w1 += lr * err * grad * x;
+  w2 += lr * err * grad * y;
+  b  += lr * err * grad;
+
+  return { pred, err };
+}
+
+//Sigmoid + Cross-Entropy loss (gradient form)
+function trainSigmoidCE(x, y, label){
+  const z = w1*x + w2*y + b;
+  const pred = 1 / (1 + Math.exp(-z));
+
+  // cross-entropy gradient for sigmoid simplifies to:
+  const err = label - pred;
+
+  w1 += lr * err * x;
+  w2 += lr * err * y;
+  b  += lr * err;
+
+  return { pred, err };
+}
+
+function train(x, y, label){
+  const mode = getMode();
+
+  if (mode === "sigmoid") {
+//    return trainSigmoidMSE(x, y, label);  //WORSE
+    return trainSigmoidCE(x, y, label);  //BETTER
+  } else {
+    return trainStep(x, y, label);
+  }
+}
+
+// THE ANIMATION LOOP: Runs one update per point per frame
+function loopAnimation() {
+  if (points.length === 0) return;
+
+  if (currentPass < getPasses() && stablePasses < requiredStable) {
+
+    let p = points[currentPointIdx];
+    train(p.x, p.y, p.label);
+
+    draw();
+    updateSVG(p.x, p.y);
+
+    currentPointIdx++;
+
+    // finished one full pass
+    if (currentPointIdx >= points.length) {
+      currentPointIdx = 0;
+      currentPass++;
+
+      // ---- stability check runs once per full pass ----
+      let allCorrect = true;
+
+      for (let p of points) {
+        const z = w1 * p.x + w2 * p.y + b;
+        const pred = sigmoid(z) >= 0.5 ? 1 : 0;
+
+        if (pred !== p.label) {
+          allCorrect = false;
+          break;
+        }
+      }
+
+      if (allCorrect) {
+        stablePasses++;
+      } else {
+        stablePasses = 0;
+      }
+    }
+
+    animRequest = requestAnimationFrame(loopAnimation);
+
+  } else {
+    cancelAnimationFrame(animRequest);
+    animRequest = null;
+  }
+}
+
+function startTraining() {
+  if (animRequest) cancelAnimationFrame(animRequest);
+  stablePasses = 0;
+  currentPass = 0;
+  currentPointIdx = 0;
+  loopAnimation();
+}
+
+function retrainAll(){
+  w1 = originalW1;
+  w2 = originalW2;
+  b  = originalB;
+  startTraining();
+}
+
+
+
+canvas.addEventListener("contextmenu", e => e.preventDefault());
+
+canvas.addEventListener("mousedown", (e)=>{
+
+  const rect = canvas.getBoundingClientRect();
+  let x = (e.clientX - rect.left) / canvas.width;
+  let y = (e.clientY - rect.top) / canvas.height;
+
+  let label = (e.button === 2) ? 1 : 0;
+
+  points.push({x,y,label});
+  startTraining();
+});
+
+// CTRL+Z undo
+document.addEventListener("keydown", (e)=>{
+  if ((e.ctrlKey || e.metaKey) && e.key === "z") {
+    if (points.length > 0) {
+      points.pop();
+      retrainAll();
+    }
+  }
+});
+
+draw();
+updateSVG();
+
+</script>
+
+</body>
+</html>

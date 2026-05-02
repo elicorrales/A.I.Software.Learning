@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Tic-Tac-Toe</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #020617;
+      --accent: #38bdf8;
+      --accent-soft: rgba(56, 189, 248, 0.15);
+      --x-color: #f97316;
+      --o-color: #22c55e;
+      --grid-line: #1e293b;
+      --text-main: #e5e7eb;
+      --text-muted: #9ca3af;
+      --shadow-soft: 0 18px 45px rgba(15, 23, 42, 0.9);
+      --radius-lg: 18px;
+      --radius-pill: 999px;
+      --transition-fast: 160ms ease-out;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+        "Segoe UI", sans-serif;
+      background: radial-gradient(circle at top, #1e293b 0, #020617 55%, #000 100%);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .app-shell {
+      width: 100%;
+      max-width: 960px;
+      background: linear-gradient(145deg, #020617 0%, #020617 45%, #020617 100%);
+      border-radius: 28px;
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      box-shadow: var(--shadow-soft);
+      padding: 24px 24px 28px;
+      display: grid;
+      grid-template-columns: minmax(0, 2fr) minmax(0, 1.4fr);
+      gap: 24px;
+    }
+
+    @media (max-width: 800px) {
+      .app-shell {
+        grid-template-columns: minmax(0, 1fr);
+        padding: 18px;
+      }
+    }
+
+    .left-panel,
+    .right-panel {
+      background: radial-gradient(circle at top left, #020617 0, #020617 55%, #020617 100%);
+      border-radius: 22px;
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      padding: 18px 18px 20px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .left-panel::before {
+      content: "";
+      position: absolute;
+      inset: -40%;
+      background:
+        radial-gradient(circle at 0% 0%, rgba(56, 189, 248, 0.12), transparent 55%),
+        radial-gradient(circle at 100% 100%, rgba(34, 197, 94, 0.12), transparent 55%);
+      opacity: 0.9;
+      pointer-events: none;
+    }
+
+    .panel-inner {
+      position: relative;
+      z-index: 1;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+      gap: 12px;
+    }
+
+    .title-block {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .title-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo-pill {
+      width: 34px;
+      height: 34px;
+      border-radius: 14px;
+      background: radial-gradient(circle at 30% 0%, #38bdf8 0, #0ea5e9 35%, #0369a1 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.9),
+        0 10px 25px rgba(8, 47, 73, 0.9);
+    }
+
+    .logo-pill span {
+      font-weight: 800;
+      font-size: 18px;
+      letter-spacing: 0.04em;
+      color: #e5f3ff;
+    }
+
+    .game-title {
+      font-size: 20px;
+      font-weight: 650;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+
+    .subtitle {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .mode-pill {
+      padding: 6px 12px;
+      border-radius: var(--radius-pill);
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      background: radial-gradient(circle at top left, rgba(56, 189, 248, 0.18), transparent 60%);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: #e5f3ff;
+    }
+
+    .mode-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: #22c55e;
+      box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.25);
+    }
+
+    .board-wrapper {
+      margin-top: 10px;
+      padding: 18px 16px 16px;
+      border-radius: 18px;
+      background: radial-gradient(circle at top, rgba(15, 23, 42, 0.9), #020617 70%);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.9);
+    }
+
+    .board-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+      gap: 10px;
+    }
+
+    .turn-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-radius: var(--radius-pill);
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      font-size: 12px;
+    }
+
+    .turn-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-muted);
+    }
+
+    .turn-badge {
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(56, 189, 248, 0.16);
+      color: var(--accent);
+      font-weight: 600;
+      font-size: 12px;
+    }
+
+    .score-strip {
+      display: flex;
+      gap: 8px;
+      font-size: 11px;
+    }
+
+    .score-pill {
+      padding: 4px 9px;
+      border-radius: var(--radius-pill);
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text-muted);
+    }
+
+    .score-pill span.value {
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .board {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      gap: 0;
+      border-radius: 16px;
+      overflow: hidden;
+      background: var(--panel);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      position: relative;
+      isolation: isolate;
+    }
+
+    .board::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(to right, transparent 32%, var(--grid-line) 32%, var(--grid-line) 34%, transparent 34%, transparent 66%, var(--grid-line) 66%, var(--grid-line) 68%, transparent 68%),
+        linear-gradient(to bottom, transparent 32%, var(--grid-line) 32%, var(--grid-line) 34%, transparent 34%, transparent 66%, var(--grid-line) 66%, var(--grid-line) 68%, transparent 68%);
+      opacity: 0.9;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .cell {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: background var(--transition-fast), transform var(--transition-fast),
+        box-shadow var(--transition-fast);
+      font-size: clamp(40px, 5vw, 54px);
+      font-weight: 700;
+      user-select: none;
+      color: var(--text-main);
+    }
+
+    .cell::before {
+      content: "";
+      position: absolute;
+      inset: 12%;
+      border-radius: 18px;
+      background: radial-gradient(circle at top, rgba(15, 23, 42, 0.9), transparent 70%);
+      opacity: 0;
+      transition: opacity var(--transition-fast);
+      pointer-events: none;
+    }
+
+    .cell:hover::before {
+      opacity: 1;
+    }
+
+    .cell:hover {
+      background: radial-gradient(circle at top, rgba(56, 189, 248, 0.12), transparent 70%);
+      transform: translateY(-1px);
+      box-shadow: 0 10px 25px rgba(15, 23, 42, 0.9);
+    }
+
+    .cell:active {
+      transform: translateY(0);
+      box-shadow: none;
+      background: radial-gradient(circle at center, rgba(56, 189, 248, 0.18), transparent 70%);
+    }
+
+    .cell.x {
+      color: var(--x-color);
+      text-shadow: 0 0 18px rgba(249, 115, 22, 0.55);
+    }
+
+    .cell.o {
+      color: var(--o-color);
+      text-shadow: 0 0 18px rgba(34, 197, 94, 0.55);
+    }
+
+    .footer-row {
+      margin-top: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .hint {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .hint-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.9);
+    }
+
+    .primary-btn {
+      padding: 7px 14px;
+      border-radius: var(--radius-pill);
+      border: none;
+      outline: none;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+      color: #0b1120;
+      box-shadow: 0 12px 30px rgba(8, 47, 73, 0.9);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: transform var(--transition-fast), box-shadow var(--transition-fast),
+        filter var(--transition-fast);
+    }
+
+    .primary-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 16px 40px rgba(8, 47, 73, 0.95);
+      filter: brightness(1.05);
+    }
+
+    .primary-btn:active {
+      transform: translateY(0);
+      box-shadow: 0 8px 20px rgba(8, 47, 73, 0.9);
+      filter: brightness(0.98);
+    }
+
+    .primary-btn span.icon {
+      font-size: 14px;
+    }
+
+    /* Right panel */
+
+    .right-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      gap: 10px;
+    }
+
+    .right-title {
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .chip {
+      padding: 4px 9px;
+      border-radius: var(--radius-pill);
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      font-size: 11px;
+      color: var(--text-muted);
+      background: rgba(15, 23, 42, 0.9);
+    }
+
+    .chip.highlight {
+      border-color: rgba(56, 189, 248, 0.9);
+      background: rgba(15, 23, 42, 0.9);
+      color: var(--accent);
+    }
+
+    .info-card {
+      margin-top: 10px;
+      padding: 12px 12px 13px;
+      border-radius: 14px;
+      background: radial-gradient(circle at top left, rgba(56, 189, 248, 0.16), transparent 60%);
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      font-size: 12px;
+      color: var(--text-muted);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .info-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .info-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .info-list li::before {
+      content: "•";
+      margin-right: 6px;
+      color: var(--accent);
+    }
+
+    .badge-row {
+      margin-top: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      font-size: 11px;
+    }
+
+    .badge {
+      padding: 4px 8px;
+      border-radius: var(--radius-pill);
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      background: rgba(15, 23, 42, 0.9);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text-muted);
+    }
+
+    .badge-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: rgba(56, 189, 248, 0.9);
+    }
+
+    .ghost-label {
+      margin-top: 10px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: rgba(148, 163, 184, 0.7);
+    }
+
+    .ghost-bar {
+      margin-top: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(15, 23, 42, 0.9), rgba(30, 64, 175, 0.9));
+      overflow: hidden;
+      position: relative;
+    }
+
+    .ghost-bar-fill {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, rgba(56, 189, 248, 0.2), rgba(56, 189, 248, 0.9));
+      width: 55%;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Left: Board -->
+    <div class="left-panel">
+      <div class="panel-inner">
+        <header class="header">
+          <div class="title-block">
+            <div class="title-row">
+              <div class="logo-pill">
+                <span>XO</span>
+              </div>
+              <div class="game-title">Tic-Tac-Toe</div>
+            </div>
+            <div class="subtitle">You vs. AI • Best of your next moves</div>
+          </div>
+          <div class="mode-pill">
+            <span class="mode-dot"></span>
+            <span>Player vs Computer</span>
+          </div>
+        </header>
+
+        <section class="board-wrapper">
+          <div class="board-header">
+            <div class="turn-indicator">
+              <div>
+                <div class="turn-label">Current turn</div>
+                <div class="turn-badge">Player • X</div>
+              </div>
+            </div>
+            <div class="score-strip">
+              <div class="score-pill">
+                <span>Player</span>
+                <span class="value">0</span>
+              </div>
+              <div class="score-pill">
+                <span>AI</span>
+                <span class="value">0</span>
+              </div>
+              <div class="score-pill">
+                <span>Draws</span>
+                <span class="value">0</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="board">
+            <div class="cell" data-index="0"></div>
+            <div class="cell" data-index="1"></div>
+            <div class="cell" data-index="2"></div>
+            <div class="cell" data-index="3"></div>
+            <div class="cell" data-index="4"></div>
+            <div class="cell" data-index="5"></div>
+            <div class="cell" data-index="6"></div>
+            <div class="cell" data-index="7"></div>
+            <div class="cell" data-index="8"></div>
+          </div>
+
+          <div class="footer-row">
+            <div class="hint">
+              <span class="hint-dot"></span>
+              <span>Click a square to place your move.</span>
+            </div>
+            <button class="primary-btn" type="button">
+              <span class="icon">↻</span>
+              <span>New game</span>
+            </button>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- Right: Side info -->
+    <div class="right-panel">
+      <div class="panel-inner">
+        <div class="right-panel-header">
+          <div class="right-title">Session overview</div>
+          <div class="chip-row">
+            <div class="chip highlight">Player: X</div>
+            <div class="chip">AI: O</div>
+          </div>
+        </div>
+
+        <div class="info-card">
+          <div class="info-title">How this will feel once it’s alive</div>
+          <ul class="info-list">
+            <li>Tap a tile to place your X; the AI responds instantly.</li>
+            <li>Subtle glow highlights the winning line when the game ends.</li>
+            <li>Scores update and the board gently resets for the next round.</li>
+          </ul>
+        </div>
+
+        <div class="badge-row">
+          <div class="badge">
+            <span class="badge-dot"></span>
+            <span>Responsive layout</span>
+          </div>
+          <div class="badge">
+            <span class="badge-dot"></span>
+            <span>Dark glass UI</span>
+          </div>
+          <div class="badge">
+            <span class="badge-dot"></span>
+            <span>Ready for JS logic</span>
+          </div>
+        </div>
+
+        <div class="ghost-label">Prototype status</div>
+        <div class="ghost-bar">
+          <div class="ghost-bar-fill"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Placeholder JS hook for later game logic -->
+  <script>
+    // For now, just a visual click effect: toggle X/O classes in sequence
+    (function () {
+      const cells = document.querySelectorAll(".cell");
+      let toggle = true;
+
+      cells.forEach((cell) => {
+        cell.addEventListener("click", () => {
+          if (cell.textContent) return; // ignore if already filled (visual only)
+          const mark = toggle ? "X" : "O";
+          cell.textContent = mark;
+          cell.classList.add(mark.toLowerCase());
+          toggle = !toggle;
+        });
+      });
+
+      const resetBtn = document.querySelector(".primary-btn");
+      resetBtn.addEventListener("click", () => {
+        cells.forEach((cell) => {
+          cell.textContent = "";
+          cell.classList.remove("x", "o");
+        });
+        toggle = true;
+      });
+    })();
+  </script>
+</body>
+</html>
+

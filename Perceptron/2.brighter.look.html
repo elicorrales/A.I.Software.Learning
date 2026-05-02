@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Live Perceptron Trainer</title>
+
+<style>
+  body {
+    margin: 0;
+    background: #f0f9ff;
+    font-family: Arial, sans-serif;
+    color: #0f172a;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+  }
+
+  .wrap {
+    background: #ffffff;
+    padding: 12px;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+  }
+
+  canvas {
+    background: #e0f2fe;
+    border-radius: 10px;
+    cursor: crosshair;
+  }
+
+  .hint {
+    font-size: 20px;
+    color: #334155;
+    text-align: center;
+    margin-top: 6px;
+  }
+</style>
+</head>
+
+<body>
+
+<div class="wrap">
+  <canvas id="c" width="800" height="500"></canvas>
+  <div class="hint">
+    Click to add points. Left click = blue (0), Right click = red (1). The line updates automatically.
+  </div>
+</div>
+
+<script>
+
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+
+let points = [];
+
+// perceptron parameters
+let w1 = Math.random()*2 - 1;
+let w2 = Math.random()*2 - 1;
+let b  = Math.random()*2 - 1;
+
+let lr = 0.1;
+
+// previous state tracking (NEW)
+let prevW1 = w1;
+let prevW2 = w2;
+let prevB  = b;
+
+// coordinate helpers
+function toModelX(x){ return x / canvas.width; }
+function toModelY(y){ return y / canvas.height; }
+
+function toScreenX(x){ return x * canvas.width; }
+function toScreenY(y){ return y * canvas.height; }
+
+// activation
+function step(v){ return v >= 0 ? 1 : 0; }
+
+// prediction
+function predict(x,y){
+  return step(w1*x + w2*y + b);
+}
+
+// draw everything
+function draw(){
+
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // draw points
+  for(let p of points){
+
+    let sx = toScreenX(p.x);
+    let sy = toScreenY(p.y);
+
+    ctx.beginPath();
+    ctx.arc(sx,sy,5,0,Math.PI*2);
+
+    ctx.fillStyle = p.label === 1 ? "#ef4444" : "#3b82f6";
+    ctx.fill();
+  }
+
+  // draw decision boundary
+  ctx.strokeStyle = "#0f172a";
+  ctx.lineWidth = 2;
+
+  ctx.beginPath();
+
+  let x1 = 0;
+  let y1 = -(w1*0 + b)/w2;
+
+  let x2 = 1;
+  let y2 = -(w1*1 + b)/w2;
+
+  ctx.moveTo(toScreenX(x1), toScreenY(y1));
+  ctx.lineTo(toScreenX(x2), toScreenY(y2));
+
+  ctx.stroke();
+}
+
+// training step
+function train(x,y,label){
+
+  let pred = predict(x,y);
+  let err = label - pred;
+
+  w1 += lr * err * x;
+  w2 += lr * err * y;
+  b  += lr * err;
+
+  return {pred, err};
+}
+
+// mouse interaction
+canvas.addEventListener("contextmenu", e => e.preventDefault());
+
+canvas.addEventListener("mousedown", (e)=>{
+
+  const rect = canvas.getBoundingClientRect();
+  let x = (e.clientX - rect.left) / canvas.width;
+  let y = (e.clientY - rect.top) / canvas.height;
+
+  let label = (e.button === 2) ? 1 : 0;
+
+  let result = train(x,y,label);
+
+  // detect boundary change (NEW)
+  let moved =
+    w1 !== prevW1 ||
+    w2 !== prevW2 ||
+    b  !== prevB;
+
+  console.log("---- CLICK ----");
+  console.log("Input:", {x, y, label});
+  console.log("Prediction:", result.pred);
+  console.log("Error:", result.err);
+  console.log("Weights before:", {prevW1, prevW2, prevB});
+  console.log("Weights after:", {w1, w2, b});
+  console.log("Boundary moved:", moved);
+
+  prevW1 = w1;
+  prevW2 = w2;
+  prevB  = b;
+
+  points.push({x,y,label});
+
+  //CHANGE #2 multiple passes over all points
+  for (let i = 0; i < 20; i++) {
+    for (let p of points) {
+      train(p.x, p.y, p.label);
+    }
+  }
+
+  draw();
+});
+
+draw();
+
+</script>
+
+</body>
+</html>

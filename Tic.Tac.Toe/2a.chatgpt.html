@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Tic-Tac-Toe</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+<style>
+  body {
+    font-family: system-ui, sans-serif;
+    background: #0f172a;
+    color: #e5e7eb;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+  }
+
+  .game {
+    width: 360px;
+    text-align: center;
+  }
+
+  h1 {
+    margin-bottom: 10px;
+  }
+
+  .status {
+    font-size: 14px;
+    margin-bottom: 10px;
+    opacity: 0.8;
+  }
+
+  .score {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    margin-bottom: 12px;
+    opacity: 0.8;
+  }
+
+  .board {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .cell {
+    height: 110px;
+    background: #020617;
+    border: 1px solid #1e293b;
+    border-radius: 12px;
+    font-size: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .cell.x { color: #f97316; }
+  .cell.o { color: #22c55e; }
+
+  button {
+    padding: 8px 14px;
+    border: none;
+    border-radius: 999px;
+    background: #38bdf8;
+    cursor: pointer;
+    font-weight: 600;
+  }
+</style>
+</head>
+
+<body>
+
+<div class="game">
+  <h1>Tic-Tac-Toe</h1>
+
+  <div class="status" id="status">Your turn (X)</div>
+
+  <div class="score">
+    <div>Player: <span id="pScore">0</span></div>
+    <div>AI: <span id="aScore">0</span></div>
+    <div>Draws: <span id="dScore">0</span></div>
+  </div>
+
+  <div class="board" id="board"></div>
+
+  <button id="reset">New Game</button>
+</div>
+
+<script>
+const boardEl = document.getElementById("board");
+const statusEl = document.getElementById("status");
+
+let board = Array(9).fill(null);
+let playerTurn = true;
+let gameOver = false;
+
+let pScore = 0, aScore = 0, dScore = 0;
+
+function init() {
+  boardEl.innerHTML = "";
+  board.forEach((_, i) => {
+    const cell = document.createElement("div");
+    cell.className = "cell";
+    cell.dataset.i = i;
+    cell.onclick = playerMove;
+    boardEl.appendChild(cell);
+  });
+}
+
+function playerMove(e) {
+  const i = e.target.dataset.i;
+  if (!playerTurn || board[i] || gameOver) return;
+
+  makeMove(i, "X");
+  if (checkGame()) return;
+
+  playerTurn = false;
+  statusEl.textContent = "AI thinking...";
+
+  setTimeout(aiMove, 300);
+}
+
+function aiMove() {
+  let empty = board.map((v,i)=>v?null:i).filter(v=>v!==null);
+  let choice = empty[Math.floor(Math.random()*empty.length)];
+
+  makeMove(choice, "O");
+  checkGame();
+
+  playerTurn = true;
+  if (!gameOver) statusEl.textContent = "Your turn (X)";
+}
+
+function makeMove(i, mark) {
+  board[i] = mark;
+  const cell = boardEl.children[i];
+  cell.textContent = mark;
+  cell.classList.add(mark.toLowerCase());
+}
+
+function checkGame() {
+  const wins = [
+    [0,1,2],[3,4,5],[6,7,8],
+    [0,3,6],[1,4,7],[2,5,8],
+    [0,4,8],[2,4,6]
+  ];
+
+  for (let w of wins) {
+    const [a,b,c] = w;
+    if (board[a] && board[a] === board[b] && board[a] === board[c]) {
+      endGame(board[a]);
+      return true;
+    }
+  }
+
+  if (!board.includes(null)) {
+    endGame("draw");
+    return true;
+  }
+
+  return false;
+}
+
+function endGame(result) {
+  gameOver = true;
+
+  if (result === "X") {
+    pScore++;
+    statusEl.textContent = "You win!";
+  } else if (result === "O") {
+    aScore++;
+    statusEl.textContent = "AI wins!";
+  } else {
+    dScore++;
+    statusEl.textContent = "Draw!";
+  }
+
+  document.getElementById("pScore").textContent = pScore;
+  document.getElementById("aScore").textContent = aScore;
+  document.getElementById("dScore").textContent = dScore;
+}
+
+document.getElementById("reset").onclick = () => {
+  board = Array(9).fill(null);
+  playerTurn = true;
+  gameOver = false;
+  statusEl.textContent = "Your turn (X)";
+  init();
+};
+
+init();
+</script>
+
+</body>
+</html>

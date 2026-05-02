@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Live Perceptron Trainer</title>
+
+<style>
+  body {
+    margin: 0;
+    background: #f0f9ff;
+    font-family: Arial, sans-serif;
+    color: #0f172a;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+  }
+
+  .group {
+    display: flex;
+    gap: 16px;
+  }
+
+  .wrap {
+    background: #ffffff;
+    padding: 12px;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+  }
+
+  canvas {
+    background: #e0f2fe;
+    border-radius: 10px;
+    cursor: crosshair;
+  }
+
+  .hint-box {
+    background: #f8fafc;
+    border: 1px solid #cbd5f5;
+    border-radius: 10px;
+    padding: 10px;
+  }
+
+  .controls-box {
+    background: #f8fafc;
+    border: 1px solid #cbd5f5;
+    border-radius: 10px;
+    padding: 10px;
+  }
+
+  .hint {
+    font-size: 20px;
+    color: #334155;
+    line-height: 1.6;
+  }
+
+  .hint-row{
+    display:flex;
+    justify-content: space-between;
+    align-items:stretch;
+    margin-top: 6px;
+    gap: 10px;
+  }
+
+  .controls{
+    display:flex;
+    flex-direction:column;
+    font-size:16px;
+    gap:6px;
+  }
+
+  .controls input[type="number"]{
+    margin-top:6px;
+    padding:4px;
+    font-size:14px;
+    width:100px; /* Widened for 4 digits */
+  }
+
+  .side {
+    background: #ffffff;
+    padding: 12px;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  svg text {
+    font-size: 14px;
+    fill: #0f172a;
+  }
+
+.stats-box {
+    display: flex;
+    flex-direction: row;
+    gap: 20px;
+    align-items: flex-end;
+    background: #ffffff;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+    height: 500px; /* Match canvas height */
+  }
+
+  .meter-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 100%;
+    width: 40px;
+  }
+
+  .meter-track {
+    flex-grow: 1;
+    width: 12px;
+    background: #e2e8f0;
+    border-radius: 6px;
+    position: relative;
+    overflow: hidden;
+    margin: 10px 0;
+  }
+
+  .meter-fill {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    transition: height 0.2s ease-out, background 0.3s;
+  }
+
+  /* Red to Green Gradient */
+  .acc-fill { background: linear-gradient(to top, #ef4444, #22c55e); }
+  /* Loss is inverted: high is red (top), low is green (bottom) */
+  .loss-fill { background: linear-gradient(to top, #22c55e, #ef4444); }
+
+  .label-text { font-size: 12px; font-weight: bold; writing-mode: vertical-rl; transform: rotate(180deg); }
+
+</style>
+</head>
+
+<body>
+
+<div class="group">
+
+  <div class="wrap">
+    <canvas id="c" width="800" height="500"></canvas>
+
+    <div class="hint-row">
+      
+      <div class="hint-box">
+        <div class="hint">
+          Click to add points.<br>
+          Left click = blue (0)<br>
+          Right click = red (1)<br>
+          CTRL+Z = undo (multiple steps)
+        </div>
+      </div>
+
+      <div class="controls-box">
+        <div class="controls">
+          <label><input type="radio" name="act" value="step" checked> Step</label>
+          <label><input type="radio" name="act" value="sigmoid"> Sigmoid</label>
+
+          <label>
+            Passes:
+            <input id="passesInput" type="number" min="1" max="9999" step="1" value="20">
+          </label>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+<div class="stats-box">
+  <div class="meter-container">
+    <div class="label-text">ACCURACY</div>
+    <div class="meter-track">
+      <div id="fillAcc" class="meter-fill acc-fill" style="height: 0%"></div>
+    </div>
+    <div id="statAcc" style="font-size:14px">0%</div>
+  </div>
+
+  <div class="meter-container">
+    <div class="label-text">LOSS</div>
+    <div class="meter-track">
+      <div id="fillLoss" class="meter-fill loss-fill" style="height: 0%"></div>
+    </div>
+    <div id="statLoss" style="font-size:14px">0.00</div>
+  </div>
+</div>
+
+  <div class="side">
+
+    <svg width="330" height="340">
+
+      <circle cx="50" cy="60" r="16" fill="#e0f2fe"/>
+      <circle cx="50" cy="110" r="16" fill="#e0f2fe"/>
+      <circle cx="50" cy="160" r="16" fill="#e0f2fe"/>
+      <circle cx="50" cy="210" r="16" fill="#e0f2fe"/>
+
+      <circle cx="180" cy="160" r="30" fill="#bae6fd"/>
+
+      <circle cx="285" cy="160" r="18" fill="#e0f2fe"/>
+
+      <line x1="70" y1="60" x2="150" y2="135" stroke="#0f172a"/>
+      <line x1="70" y1="110" x2="150" y2="145" stroke="#0f172a"/>
+      <line x1="70" y1="160" x2="150" y2="160" stroke="#0f172a"/>
+      <line x1="70" y1="210" x2="150" y2="175" stroke="#0f172a"/>
+
+      <line x1="210" y1="160" x2="268" y2="160" stroke="#0f172a"/>
+
+      <text x="20" y="65">x1</text>
+      <text x="20" y="115">x2</text>
+      <text x="20" y="165">x3</text>
+      <text x="20" y="215">x4</text>
+
+      <text id="valX1" x="10" y="90">0</text>
+      <text id="valX2" x="10" y="140">0</text>
+      <text id="valX3" x="10" y="190">0</text>
+      <text id="valX4" x="10" y="240">0</text>
+
+      <text id="valW1" x="95" y="80">w1</text>
+      <text id="valW2" x="95" y="100">w2</text>
+      <text id="valW3" x="95" y="120">w3</text>
+      <text id="valW4" x="95" y="140">w4</text>
+
+      <text id="valB" x="165" y="220">b</text>
+
+      <text x="270" y="140">out</text>
+      <text id="valOut" x="270" y="190">0</text>
+
+    </svg>
+  </div>
+
+</div>
+
+<script>
+
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+
+document.querySelector('input[value="step"]').checked = true;
+document.getElementById("passesInput").value = 20;
+
+let points = [];
+
+let w1 = Math.random()*2 - 1;
+let w2 = Math.random()*2 - 1;
+let w3 = Math.random()*2 - 1;
+let w4 = Math.random()*2 - 1;
+let b  = Math.random()*2 - 1;
+
+const originalW1 = w1;
+const originalW2 = w2;
+const originalW3 = w3;
+const originalW4 = w4;
+const originalB  = b;
+
+let linearLearningRate = 0.3;
+let sigmoidLearningRate = 0.05;
+// We need to remember the "fresh" rates to reset them later
+const baseLinearLR = 0.3;
+const baseSigmoidLR = 0.05;
+
+// State management for animation
+let animRequest = null;
+let currentPass = 0;
+let currentPointIdx = 0;
+
+let stablePasses = 0;
+const requiredStable = 3;
+
+function getPasses(){
+  const el = document.getElementById("passesInput");
+  return Math.max(1, parseInt(el.value) || 1);
+}
+
+function getMode(){
+  const checked = document.querySelector('input[name="act"]:checked');
+  return checked ? checked.value : "step";
+}
+
+function toScreenX(x){ return (x + 1) * 0.5 * canvas.width; }
+function toScreenY(y){ return (y + 1) * 0.5 * canvas.height; }
+
+function step(v){ return v >= 0 ? 1 : 0; }
+
+function sigmoid(v){
+  return 1 / (1 + Math.exp(-Math.max(-20, Math.min(20, v))));
+}
+
+function predict(p={x1: 0, x2: 0, x3: 0, x4: 0}){
+  let z = w1*p.x1 + w2*p.x2 + w3*p.x3 + w4*p.x4 + b;
+  return (getMode() === "sigmoid") ? sigmoid(z) : step(z);
+}
+
+function updateSVG(x={x1: 0, x2: 0, x3: 0, x4: 0}){
+  const fmt = (v) => isNaN(v) ? "ERR" : v.toFixed(2);
+  document.getElementById("valX1").textContent = fmt(x.x1);
+  document.getElementById("valX2").textContent = fmt(x.x2);
+  document.getElementById("valX3").textContent = fmt(x.x3);
+  document.getElementById("valX4").textContent = fmt(x.x4);
+  document.getElementById("valW1").textContent = fmt(w1);
+  document.getElementById("valW2").textContent = fmt(w2);
+  document.getElementById("valW3").textContent = fmt(w3);
+  document.getElementById("valW4").textContent = fmt(w4);
+  document.getElementById("valB").textContent = fmt(b);
+  document.getElementById("valOut").textContent = fmt(predict(x));
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const res = 4; 
+  for (let i = 0; i < canvas.width; i += res) {
+    for (let j = 0; j < canvas.height; j += res) {
+      let nx1 = (i / canvas.width) * 2 - 1;
+      let nx2 = (j / canvas.height) * 2 - 1;
+      let z = w1*nx1 + w2*nx2 + w3*(nx1*nx1) + w4*(nx2*nx2) + b;
+      let p = sigmoid(z);
+      ctx.fillStyle = p > 0.5 ? `rgba(239, 68, 68, ${p * 0.2})` : `rgba(59, 130, 246, ${(1-p) * 0.2})`;
+      ctx.fillRect(i, j, res, res);
+      if (Math.abs(z) < 0.05) {
+        ctx.fillStyle = "#0f172a";
+        ctx.fillRect(i, j, res, res);
+      }
+    }
+  }
+  for (let p of points) {
+    ctx.beginPath();
+    ctx.arc(toScreenX(p.x1), toScreenY(p.x2), 6, 0, Math.PI * 2);
+    ctx.fillStyle = p.label === 1 ? "#ef4444" : "#3b82f6";
+    ctx.fill();
+    ctx.strokeStyle = "white";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+}
+
+function trainStep(x, y, label){
+  const z = w1*x.x1 + w2*x.x2 + w3*x.x3 + w4*x.x4 + b;
+  const pred = z >= 0 ? 1 : 0;
+  const err = label - pred;
+  w1 += linearLearningRate * err * x.x1;
+  w2 += linearLearningRate * err * x.x2;
+  w3 += linearLearningRate * err * x.x3;
+  w4 += linearLearningRate * err * x.x4;
+  b  += linearLearningRate * err;
+  return { pred, err };
+}
+
+function trainSigmoidCE(x, y, label) {
+  let z = w1*x.x1 + w2*x.x2 + w3*x.x3 + w4*x.x4 + b;
+  const pred = 1 / (1 + Math.exp(-Math.max(-20, Math.min(20, z))));
+  const err = label - pred;
+  w1 += sigmoidLearningRate * err * x.x1;
+  w2 += sigmoidLearningRate * err * x.x2;
+  w3 += sigmoidLearningRate * err * x.x3;
+  w4 += sigmoidLearningRate * err * x.x4;
+  b  += sigmoidLearningRate * err;
+  return { pred, err };
+}
+
+function train(x, y, label){
+  return (getMode() === "sigmoid") ? trainSigmoidCE(x, y, label) : trainStep(x, y, label);
+}
+
+function evaluate() {
+  let correctCount = 0;
+  let totalLoss = 0;
+  const eps = 1e-7;
+
+  for (let pt of points) {
+    let z = w1 * pt.x1 + w2 * pt.x2 + w3 * pt.x3 + w4 * pt.x4 + b;
+    let prob = 1 / (1 + Math.exp(-Math.max(-20, Math.min(20, z))));
+    let cls = (getMode() === "sigmoid") ? (prob >= 0.5 ? 1 : 0) : (z >= 0 ? 1 : 0);
+    
+    if (cls === pt.label) correctCount++;
+
+    let pClamped = Math.min(1 - eps, Math.max(eps, prob));
+    totalLoss += -(pt.label * Math.log(pClamped) + (1 - pt.label) * Math.log(1 - pClamped));
+  }
+
+  return {
+    accuracy: correctCount / points.length,
+    avgLoss: totalLoss / points.length,
+    isPerfect: correctCount === points.length
+  };
+}
+
+function decay(accuracy) {
+  if (accuracy < 1.0) {
+    // Bold explorer
+    linearLearningRate = baseLinearLR;
+    sigmoidLearningRate = baseSigmoidLR;
+  } else {
+    // Fine-tuning surgeon
+    linearLearningRate *= 0.90;
+    sigmoidLearningRate *= 0.90;
+  }
+}
+
+function evaluateAndDecay() {
+  // 1. Get the numbers
+  const stats = evaluate();
+
+  // 2. Adjust the speed
+  decay(stats.accuracy);
+
+  // --- UPDATE TEXT ---
+  document.getElementById("statAcc").textContent = (stats.accuracy * 100).toFixed(1) + "%";
+  document.getElementById("statLoss").textContent = stats.avgLoss.toFixed(4);
+
+  // --- UPDATE BARS ---
+  // Accuracy is simple: 0 to 100%
+  const accHeight = stats.accuracy * 100;
+  document.getElementById("fillAcc").style.height = accHeight + "%";
+
+  // Loss is inverted: 0 loss is 100% full (Green bottom), 
+  // We'll assume a loss of 1.0 is "Empty/Red top" for scaling purposes.
+  const lossHeight = Math.max(0, (1 - stats.avgLoss) * 100);
+  document.getElementById("fillLoss").style.height = lossHeight + "%";
+
+  stablePasses = stats.isPerfect ? stablePasses + 1 : 0;
+}
+
+function loopAnimation() {
+  if (points.length === 0) return;
+
+  if (currentPass < getPasses() && stablePasses < requiredStable) {
+    let p = points[currentPointIdx];
+    train(p, p, p.label);
+    draw();
+    updateSVG(p);
+    currentPointIdx++;
+
+    if (currentPointIdx >= points.length) {
+      currentPointIdx = 0;
+      currentPass++;
+      
+      // Call the extracted helper
+      evaluateAndDecay();
+    }
+    animRequest = requestAnimationFrame(loopAnimation);
+  } else {
+    cancelAnimationFrame(animRequest);
+    animRequest = null;
+  }
+}
+
+function startTraining() {
+  if (animRequest) cancelAnimationFrame(animRequest);
+
+  // --- RESET LEARNING RATES ---
+  // If we don't do this, adding a new point will use the tiny, 
+  // decayed rates from the last run!
+  linearLearningRate = baseLinearLR;
+  sigmoidLearningRate = baseSigmoidLR;
+
+  stablePasses = 0; currentPass = 0; currentPointIdx = 0;
+  loopAnimation();
+}
+
+function retrainAll(){
+  w1 = originalW1; w2 = originalW2; w3 = originalW3; w4 = originalW4; b = originalB;
+  startTraining();
+}
+
+canvas.addEventListener("contextmenu", e => e.preventDefault());
+canvas.addEventListener("mousedown", (e)=>{
+  const rect = canvas.getBoundingClientRect();
+  let x1 = ((e.clientX - rect.left) / canvas.width) * 2 - 1;
+  let x2 = ((e.clientY - rect.top) / canvas.height) * 2 - 1;
+  let label = (e.button === 2) ? 1 : 0;
+  points.push({ x1, x2, x3: x1 * x1, x4: x2 * x2, label });
+  startTraining();
+});
+
+document.addEventListener("keydown", (e)=>{
+  if ((e.ctrlKey || e.metaKey) && e.key === "z") {
+    if (points.length > 0) { points.pop(); retrainAll(); }
+  }
+});
+
+draw();
+updateSVG();
+</script>
+
+</body>
+</html>

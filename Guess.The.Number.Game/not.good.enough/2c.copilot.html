@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Number Guessing Game</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at top, #333 0, #111 55%, #000 100%);
+      color: #f5f5f5;
+    }
+
+    .game-container {
+      width: 90%;
+      max-width: 420px;
+      background: #1f1f2b;
+      border-radius: 18px;
+      padding: 24px 26px 28px;
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.6);
+      text-align: center;
+    }
+
+    .game-title {
+      font-size: 1.8rem;
+      margin-bottom: 18px;
+      color: #ffd700;
+      letter-spacing: 0.06em;
+      text-shadow: 0 0 8px rgba(255, 215, 0, 0.6);
+    }
+
+    .label {
+      font-size: 1rem;
+      margin-bottom: 10px;
+    }
+
+    .input-row {
+      margin-bottom: 14px;
+    }
+
+    #guessInput {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid #444;
+      background: #12121a;
+      color: #f5f5f5;
+      font-size: 1rem;
+      outline: none;
+      text-align: center;
+    }
+
+    #guessInput::placeholder {
+      color: #777;
+    }
+
+    #guessInput:focus {
+      border-color: #ffd700;
+      box-shadow: 0 0 0 1px #ffd70033;
+    }
+
+    .button-row {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin-bottom: 14px;
+      margin-top: 4px;
+    }
+
+    button {
+      flex: 1;
+      padding: 9px 0;
+      border-radius: 999px;
+      border: none;
+      cursor: pointer;
+      font-size: 0.95rem;
+      font-weight: 600;
+      transition: transform 0.08s ease, box-shadow 0.08s ease, background 0.15s ease;
+    }
+
+    #guessBtn {
+      background: linear-gradient(135deg, #ffb300, #ff7a00);
+      color: #1b1300;
+      box-shadow: 0 4px 10px rgba(255, 140, 0, 0.4);
+    }
+
+    #guessBtn:disabled {
+      background: #555;
+      color: #bbb;
+      box-shadow: none;
+      cursor: not-allowed;
+    }
+
+    #newGameBtn {
+      background: #2f3bff;
+      color: #f5f5f5;
+      box-shadow: 0 4px 10px rgba(47, 59, 255, 0.4);
+    }
+
+    button:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 14px rgba(0, 0, 0, 0.5);
+    }
+
+    button:active:not(:disabled) {
+      transform: translateY(0);
+      box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5);
+    }
+
+    .message {
+      min-height: 1.5em;
+      margin-bottom: 10px;
+      font-size: 0.98rem;
+    }
+
+    .message.error {
+      color: #ff4b4b;
+    }
+
+    .message.too-low {
+      color: #4da3ff; /* medium blue */
+    }
+
+    .message.too-high {
+      color: #b066ff; /* purple */
+    }
+
+    .message.correct {
+      color: #4caf50; /* green */
+    }
+
+    .attempts {
+      font-size: 0.95rem;
+      color: #ccc;
+    }
+
+    .party-icon {
+      margin-left: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div class="game-container">
+    <h1 class="game-title">Number Guessing Game</h1>
+
+    <div class="label">I am thinking of a number:</div>
+
+    <div class="input-row">
+      <input
+        id="guessInput"
+        type="text"
+        placeholder="Guess the number"
+        autocomplete="off"
+        inputmode="numeric"
+        maxlength="3"
+      />
+    </div>
+
+    <div class="button-row">
+      <button id="guessBtn">Guess</button>
+      <button id="newGameBtn">New Game</button>
+    </div>
+
+    <div id="message" class="message"></div>
+
+    <div id="attempts" class="attempts">Number of Attempts: 0</div>
+  </div>
+
+  <script>
+    (function () {
+      let secretNumber;
+      let attempts;
+      let gameOver;
+
+      const guessInput = document.getElementById("guessInput");
+      const guessBtn = document.getElementById("guessBtn");
+      const newGameBtn = document.getElementById("newGameBtn");
+      const messageEl = document.getElementById("message");
+      const attemptsEl = document.getElementById("attempts");
+
+      function resetMessageClasses() {
+        messageEl.classList.remove("error", "too-low", "too-high", "correct");
+      }
+
+      function setMessage(text, type) {
+        resetMessageClasses();
+        if (type) {
+          messageEl.classList.add(type);
+        }
+        messageEl.textContent = text;
+      }
+
+      function updateAttempts() {
+        attemptsEl.textContent = "Number of Attempts: " + attempts;
+      }
+
+      function startNewGame() {
+        secretNumber = Math.floor(Math.random() * 100) + 1;
+        attempts = 0;
+        gameOver = false;
+        guessInput.value = "";
+        guessInput.disabled = false;
+        guessBtn.disabled = false;
+        resetMessageClasses();
+        messageEl.textContent = "";
+        updateAttempts();
+        guessInput.focus();
+      }
+
+      function validateInput(rawValue) {
+        // Trim and basic length check
+        const value = rawValue.trim();
+
+        if (value.length === 0) {
+          return { valid: false, error: "Please enter a number." };
+        }
+
+        if (value.length > 3) {
+          return {
+            valid: false,
+            error: "Input too long. Please enter a number between 1 and 100."
+          };
+        }
+
+        // Ensure only digits
+        if (!/^\d+$/.test(value)) {
+          return {
+            valid: false,
+            error: "Only numeric digits are allowed."
+          };
+        }
+
+        const num = Number(value);
+
+        if (!Number.isFinite(num)) {
+          return { valid: false, error: "Invalid number." };
+        }
+
+        if (num < 1 || num > 100) {
+          return {
+            valid: false,
+            error: "Number must be between 1 and 100."
+          };
+        }
+
+        return { valid: true, value: num };
+      }
+
+      function handleGuess() {
+        if (gameOver) return;
+
+        const rawValue = guessInput.value;
+        const validation = validateInput(rawValue);
+
+        if (!validation.valid) {
+          setMessage(validation.error, "error");
+          return;
+        }
+
+        const guess = validation.value;
+        attempts++;
+        updateAttempts();
+
+        if (guess < secretNumber) {
+          setMessage("Too low. Try again!", "too-low");
+        } else if (guess > secretNumber) {
+          setMessage("Too high. Try again!", "too-high");
+        } else {
+          gameOver = true;
+          guessBtn.disabled = true;
+          guessInput.disabled = true;
+          resetMessageClasses();
+          messageEl.classList.add("correct");
+          messageEl.innerHTML =
+            "Correct! You guessed the number! <span class='party-icon'>🎉</span>";
+        }
+
+        guessInput.select();
+      }
+
+      // Button click handlers
+      guessBtn.addEventListener("click", handleGuess);
+      newGameBtn.addEventListener("click", startNewGame);
+
+      // Allow Enter key to trigger Guess
+      guessInput.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          handleGuess();
+        }
+      });
+
+      // Optional: live filter non-digit characters as user types
+      guessInput.addEventListener("input", function () {
+        const cleaned = this.value.replace(/\D+/g, "");
+        if (this.value !== cleaned) {
+          this.value = cleaned;
+        }
+      });
+
+      // Initialize on first load; refresh naturally resets everything
+      startNewGame();
+    })();
+  </script>
+</body>
+</html>
+

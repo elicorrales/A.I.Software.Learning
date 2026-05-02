@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Canvas UI</title>
+<link rel="stylesheet" href="robot.game.css">
+</head>
+
+<body>
+
+<div class="container">
+
+  <div class="sidebar">
+
+    <div class="section-title">Play Area</div>
+
+    <div class="control">
+      <label>Width</label>
+      <input type="number" id="widthInput" value="400" min="50" step="10">
+    </div>
+
+    <div class="control">
+      <label>Height</label>
+      <input type="number" id="heightInput" value="300" min="50" step="10">
+    </div>
+
+    <div class="separator"></div>
+
+    <div class="section-title">Obstacle</div>
+
+    <div class="control">
+      <label>Side 1</label>
+      <input type="number" id="side1Input" value="20">
+    </div>
+
+    <div class="control">
+      <label>Side 2</label>
+      <input type="number" id="side2Input" value="50">
+    </div>
+
+    <div class="button-row">
+      <button id="horzBtn">Horz</button>
+      <button id="vertBtn">Vert</button>
+      <button id="arrowBtn" class="icon-btn">
+        <img src="Mouse-Cursor-Pointer.svg" alt="pointer">
+      </button>
+    </div>
+
+    <div class="separator"></div>
+
+    <div class="section-title">Player</div>
+
+    <div class="button-row">
+      <button id="manualBtn" class="active">Manual</button>
+      <button id="randomBtn">Random</button>
+    </div>
+
+    <div class="button-row">
+      <button id="cloakBtn">Cloak</button>
+      <button id="appearBtn">Appear</button>
+    </div>
+
+    <!-- NEW BUTTONS -->
+    <div class="button-row">
+      <button id="fireBtn">Fire</button>
+      <button id="evadeBtn">Evade</button>
+    </div>
+
+    <div class="button-row">
+      <button id="reloadBtn">Reload</button>
+      <button id="huntBtn">Hunt</button>
+    </div>
+
+    <div class="separator"></div>
+
+    <!-- NEW -->
+    <div class="section-title">Robots</div>
+    <div class="button-row">
+      <button class="robotBtn" data-id="0">R</button>
+      <button class="robotBtn" data-id="1">R</button>
+      <button class="robotBtn" data-id="2">R</button>
+      <button class="robotBtn" data-id="3">R</button>
+      <button class="robotBtn" data-id="4">R</button>
+    </div>
+
+    <div class="separator"></div>
+
+  </div>
+
+  <div class="main">
+    <canvas id="canvas"></canvas>
+  </div>
+
+</div>
+<script src="robot.game.helper.functions.js"></script>
+<script src="robot.game.player.functions.js"></script>
+<script src="robot.game.robot.functions.js"></script>
+<script>
+
+/* =========================
+   VARIABLES / STATE
+========================= */
+
+let draggingObstacle = null;
+let previewObstacle = null; // Track the one currently being placed
+let selectedObstacleIndex = null;
+
+let gameState = {
+  player: {
+    x: 200,
+    y: 150,
+    radius: 15,
+    angle: 0,
+    visible: true,
+
+    isStrafing: false,
+    rotatingCCW: false,
+    rotatingCW: false,
+    rotationSpeed: 0.04,
+
+    movingForward: false,
+    movingBackward: false,
+    moveSpeed: 2,
+
+    isColliding: false,
+    flashState: false,
+    flashTimer: 0,
+
+    movementMode: "manual",
+    randomTurnBias: 0,
+
+    fireMode: false,
+    evadeMode: false,
+    huntMode: false,
+
+    reloadReady: false,
+
+    ammo: 100,
+    projectiles: []
+  },
+
+  obstacles : [],
+
+  obstacleMode: {
+    orientation: "horz",
+    arrowActive: false
+  },
+
+  placingPlayer: false,
+
+  robots:  new Array(5).fill(null),
+
+  stuckTimer: 0,
+  stuckActive: false,
+
+  ui: {
+    canvas: null,
+    ctx: null,
+
+    widthInput: null,
+    heightInput: null,
+
+    side1Input: null,
+    side2Input: null,
+
+    horzBtn: null,
+    vertBtn: null,
+    arrowBtn: null,
+
+    manualBtn: null,
+    randomBtn: null,
+
+    cloakBtn: null,
+    appearBtn: null,
+
+    fireBtn: null,
+    evadeBtn: null,
+
+    reloadBtn: null,
+    huntBtn: null,
+  },
+};
+
+gameState.ui.canvas = document.getElementById("canvas");
+gameState.ui.ctx = gameState.ui.canvas.getContext("2d");
+
+gameState.ui.widthInput = document.getElementById("widthInput");
+gameState.ui.heightInput = document.getElementById("heightInput");
+
+gameState.ui.side1Input = document.getElementById("side1Input");
+gameState.ui.side2Input = document.getElementById("side2Input");
+
+gameState.ui.horzBtn = document.getElementById("horzBtn");
+gameState.ui.vertBtn = document.getElementById("vertBtn");
+gameState.ui.arrowBtn = document.getElementById("arrowBtn");
+
+gameState.ui.manualBtn = document.getElementById("manualBtn");
+gameState.ui.randomBtn = document.getElementById("randomBtn");
+
+gameState.ui.cloakBtn = document.getElementById("cloakBtn");
+gameState.ui.appearBtn = document.getElementById("appearBtn");
+
+gameState.ui.fireBtn = document.getElementById("fireBtn");
+gameState.ui.evadeBtn = document.getElementById("evadeBtn");
+
+gameState.ui.reloadBtn = document.getElementById("reloadBtn");
+gameState.ui.huntBtn = document.getElementById("huntBtn");
+
+/* =========================
+   PERSISTENCE
+========================= */
+const STORAGE_KEY = "simple_robot_shooting_game";
+
+function getSaveData() {
+  return {
+    player: {
+      x: gameState.player.x,
+      y: gameState.player.y,
+      angle: gameState.player.angle,
+      visible: gameState.player.visible,
+      movementMode: gameState.player.movementMode,
+      fireMode: gameState.player.fireMode,
+      evadeMode: gameState.player.evadeMode,
+      huntMode: gameState.player.huntMode,
+      ammo: gameState.player.ammo
+    },
+    obstacles: gameState.obstacles,
+    obstacleMode: gameState.obstacleMode,
+    //robots: gameState.robots,
+    width: gameState.ui.canvas.width,
+    height: gameState.ui.canvas.height,
+    side1: parseInt(gameState.ui.side1Input.value),
+    side2: parseInt(gameState.ui.side2Input.value)
+  };
+}
+
+function saveGame() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(getSaveData()));
+}
+
+function loadGame() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return;
+
+  const data = JSON.parse(raw);
+
+  Object.assign(gameState.player, data.player || {});
+  gameState.obstacles = data.obstacles || [];
+  Object.assign(gameState.obstacleMode, data.obstacleMode || {});
+  //gameState.robots = data.robots || new Array(5).fill(null);
+
+  if (data.width != null && data.height != null) {
+    gameState.ui.canvas.width = data.width;
+    gameState.ui.canvas.height = data.height;
+    gameState.ui.widthInput.value = data.width;
+    gameState.ui.heightInput.value = data.height;
+  }
+
+  // FORCE PLAYER TO CENTER ON LOAD
+  gameState.player.x = gameState.ui.canvas.width / 2;
+  gameState.player.y = gameState.ui.canvas.height / 2;
+  gameState.player.visible = true; // Ensure they aren't hidden
+
+  if (data.side1 !== undefined) { gameState.ui.side1Input.value = data.side1; }
+
+  if (data.side2 !== undefined) { gameState.ui.side2Input.value = data.side2; }
+}
+
+
+/* =========================
+   HELPERS
+========================= */
+// moved to robot.game.helper.functions.js
+
+
+/* =========================
+   FUNCTION DEFINITIONS
+========================= */
+
+function resetCanvas() {
+console.log("RESET CALLED");
+console.log("BEFORE RESET obstacles:", gameState.obstacles);
+  const w = parseInt(gameState.ui.widthInput.value);
+  const h = parseInt(gameState.ui.heightInput.value);
+
+  gameState.ui.canvas.width = w;
+  gameState.ui.canvas.height = h;
+
+  gameState.player.x = w / 2;
+  gameState.player.y = h / 2;
+  gameState.player.angle = 0;
+  gameState.player.visible = true;
+
+  gameState.obstacles = [];
+  gameState.player.projectiles = [];
+  gameState.player.ammo = 100;
+
+  draw();
+  saveGame();
+console.log("AFTER RESET obstacles:", gameState.obstacles);
+}
+
+function draw() {
+  gameState.ui.ctx.clearRect(0, 0, gameState.ui.canvas.width, gameState.ui.canvas.height);
+
+  drawObstacles();
+
+  if (gameState.player.visible) {
+    drawProjectiles();
+    drawPlayer(gameState);
+  }
+}
+
+
+function drawProjectiles() {
+  gameState.ui.ctx.fillStyle = "black";
+  gameState.player.projectiles.forEach(p => {
+    gameState.ui.ctx.beginPath();
+    gameState.ui.ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+    gameState.ui.ctx.fill();
+  });
+}
+
+function drawObstacles() {
+  // If this obstacle is selected, make it Red/Orange, otherwise the default Grey
+  gameState.obstacles.forEach((o, index) => {
+    gameState.ui.ctx.fillStyle = (selectedObstacleIndex === index) ? "#ff4444" : "#888";
+    gameState.ui.ctx.fillRect(o.x, o.y, o.w, o.h);
+  });
+
+  // Draw the preview obstacle in a slightly different color (e.g., semi-transparent)
+  if (previewObstacle) {
+    gameState.ui.ctx.fillStyle = "rgba(136, 136, 136, 0.5)"; 
+    gameState.ui.ctx.fillRect(previewObstacle.x, previewObstacle.y, previewObstacle.w, previewObstacle.h);
+  }
+}
+
+
+
+function projectileHits(p) {
+  if (p.x < 0 || p.x > gameState.ui.canvas.width || p.y < 0 || p.y > gameState.ui.canvas.height) {
+    console.log("Bullet hit: Wall");
+    return true;
+  }
+
+  for (let o of gameState.obstacles) {
+    if (p.x > o.x && p.x < o.x + o.w && p.y > o.y && p.y < o.y + o.h) {
+      console.log("Bullet hit: Obstacle");
+      return true;
+    }
+  }
+
+  for (let i = 0; i < gameState.robots.length; i++) {
+    const rb = gameState.robots[i];
+    if (!rb) continue;
+
+    const dx = p.x - rb.x;
+    const dy = p.y - rb.y;
+    const distSq = dx * dx + dy * dy;
+
+    if (distSq < 400) {
+      console.log(`Bullet hit: Robot ${i} at distance: ${Math.sqrt(distSq).toFixed(2)}`);
+      const btn = document.querySelector(`.robotBtn[data-id="${i}"]`);
+      if (btn) btn.click();
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/** * New Helper to make sure the buttons match the data 
+ */
+function syncUI() {
+    // Clear selection whenever the UI state is synchronized/changed
+    selectedObstacleIndex = null;
+
+    // Obstacle Orientation
+    const isHorz = gameState.obstacleMode.orientation === "horz";
+    gameState.ui.horzBtn.classList.toggle("active", isHorz);
+    gameState.ui.vertBtn.classList.toggle("active", !isHorz);
+    
+    // Arrow/Placement Tool
+    gameState.ui.arrowBtn.classList.toggle("active", gameState.obstacleMode.arrowActive);
+
+    // Movement Modes
+    const isManual = gameState.player.movementMode === "manual";
+    gameState.ui.manualBtn.classList.toggle("active", isManual);
+    gameState.ui.randomBtn.classList.toggle("active", !isManual);
+
+    // Combat Modes
+    gameState.ui.fireBtn.classList.toggle("active", gameState.player.fireMode);
+    gameState.ui.evadeBtn.classList.toggle("active", gameState.player.evadeMode);
+    gameState.ui.huntBtn.classList.toggle("active", gameState.player.huntMode);
+}
+
+/* =========================
+   MAIN LOOP
+========================= */
+
+function animate() {
+
+  updatePlayer(gameState);
+
+  gameState.player.projectiles = gameState.player.projectiles.filter(p => {
+    p.x += Math.cos(p.angle) * p.speed;
+    p.y += Math.sin(p.angle) * p.speed;
+    return !projectileHits(p);
+  });
+
+  updateRobots(gameState);
+  updateFireButtonState();
+
+
+  draw();
+  requestAnimationFrame(animate);
+}
+
+/* =========================
+   INVOCATIONS / LISTENERS
+========================= */
+function updateFireButtonState() {
+  const outOfAmmo = gameState.player.ammo <= 0;
+
+  if (outOfAmmo) {
+    gameState.player.fireMode = false;
+    gameState.player.huntMode = false;
+    gameState.ui.fireBtn.classList.remove("active");
+    gameState.ui.fireBtn.style.background = "red";
+    gameState.ui.fireBtn.style.color = "white";
+  } else {
+    gameState.ui.fireBtn.style.background = "";
+    gameState.ui.fireBtn.style.color = "";
+  }
+  updatePlayerActionButtons();
+}
+
+function updatePlayerActionButtons() {
+  const isRandom = gameState.player.movementMode === "random";
+  const outOfAmmo = gameState.player.ammo <= 0;
+
+  gameState.ui.fireBtn.disabled = !isRandom;
+  gameState.ui.evadeBtn.disabled = !isRandom;
+
+  gameState.ui.reloadBtn.disabled = !(isRandom && outOfAmmo);
+
+  gameState.ui.huntBtn.disabled = !isRandom;
+  gameState.ui.huntBtn.classList.toggle("active", gameState.player.huntMode);
+
+  // If not random, ensure visual active state is cleared
+  if (!isRandom) {
+    gameState.ui.fireBtn.classList.remove("active");
+    gameState.ui.evadeBtn.classList.remove("active");
+  } else {
+    // If we are in random, sync visuals to current state
+    gameState.ui.fireBtn.classList.toggle("active", gameState.player.fireMode);
+    gameState.ui.evadeBtn.classList.toggle("active", gameState.player.evadeMode);
+  }
+}
+
+gameState.ui.widthInput.addEventListener("input", () => {
+  resetCanvas();
+  saveGame(); // ADD (optional since reset already saves, but safe)
+});
+gameState.ui.heightInput.addEventListener("input", () => {
+  resetCanvas();
+  saveGame(); // ADD (optional since reset already saves, but safe)
+});
+
+gameState.ui.horzBtn.classList.add("active");
+
+gameState.ui.horzBtn.addEventListener("click", () => {
+  gameState.obstacleMode.orientation = "horz";
+  gameState.ui.horzBtn.classList.add("active");
+  gameState.ui.vertBtn.classList.remove("active");
+  saveGame();
+});
+
+gameState.ui.vertBtn.addEventListener("click", () => {
+  gameState.obstacleMode.orientation = "vert";
+  gameState.ui.vertBtn.classList.add("active");
+  gameState.ui.horzBtn.classList.remove("active");
+  saveGame();
+});
+
+gameState.ui.arrowBtn.addEventListener("click", () => {
+  gameState.obstacleMode.arrowActive = !gameState.obstacleMode.arrowActive;
+  gameState.ui.arrowBtn.classList.toggle("active");
+  saveGame();
+});
+
+gameState.ui.manualBtn.addEventListener("click", () => {
+  gameState.player.movementMode = "manual";
+
+  gameState.player.fireMode = false;
+  gameState.player.evadeMode = false;
+
+  gameState.ui.manualBtn.classList.add("active");
+  gameState.ui.randomBtn.classList.remove("active");
+
+  updatePlayerActionButtons();
+  saveGame();
+});
+
+gameState.ui.randomBtn.addEventListener("click", () => {
+  gameState.player.movementMode = "random";
+  gameState.ui.randomBtn.classList.add("active");
+  gameState.ui.manualBtn.classList.remove("active");
+  updatePlayerActionButtons();
+  saveGame();
+});
+
+gameState.ui.cloakBtn.addEventListener("click", () => {
+  gameState.player.visible = false;
+  gameState.ui.cloakBtn.classList.add("active");
+  gameState.ui.appearBtn.classList.remove("active");
+  gameState.placingPlayer = false;
+  gameState.obstacleMode.arrowActive = false;
+  gameState.ui.arrowBtn.classList.remove("active");
+  saveGame();
+});
+
+gameState.ui.appearBtn.addEventListener("click", () => {
+  gameState.placingPlayer = true;
+  gameState.ui.appearBtn.classList.add("active");
+  gameState.ui.cloakBtn.classList.remove("active");
+  saveGame();
+});
+
+gameState.ui.fireBtn.addEventListener("click", () => {
+  // Toggle current state
+  gameState.player.fireMode = !gameState.player.fireMode;
+
+  // EXCLUSIVE: If turning on Fire, force Evade off
+  if (gameState.player.fireMode) {
+    gameState.player.evadeMode = false;
+  }
+
+  // Use the helper to sync ALL button visuals (active classes)
+  updatePlayerActionButtons();
+  saveGame();
+});
+
+gameState.ui.evadeBtn.addEventListener("click", () => {
+  // Toggle current state
+  gameState.player.evadeMode = !gameState.player.evadeMode;
+
+  // EXCLUSIVE: If turning on Evade, force Fire off
+  if (gameState.player.evadeMode) {
+    gameState.player.fireMode = false;
+  }
+
+  // Use the helper to sync ALL button visuals (active classes)
+  updatePlayerActionButtons();
+  saveGame();
+});
+
+gameState.ui.reloadBtn.addEventListener("click", () => {
+  if (gameState.ui.reloadBtn.disabled) return;
+
+  gameState.player.ammo = 100;
+  gameState.ui.fireBtn.style.background = "";
+  gameState.ui.fireBtn.style.color = "";
+
+  updatePlayerActionButtons();
+  saveGame();
+});
+
+gameState.ui.huntBtn.addEventListener("click", () => {
+  gameState.player.huntMode = !gameState.player.huntMode;
+  if (gameState.player.huntMode) gameState.player.evadeMode = false;
+  updatePlayerActionButtons();
+  saveGame();
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === " ") {
+    e.preventDefault();
+  }
+
+  if (e.target.tagName === 'INPUT') return;
+
+  const key = e.key.toLowerCase();
+
+  // --- NEW: Delete Logic ---
+  if (selectedObstacleIndex !== null) {
+    if (e.key === "Delete" || e.key === "Backspace") {
+      gameState.obstacles.splice(selectedObstacleIndex, 1);
+      selectedObstacleIndex = null;
+      saveGame();
+      return; // Exit after deleting
+    } else {
+      // Any other key cancels the selection
+      selectedObstacleIndex = null;
+    }
+  }
+  // -------------------------
+
+  if (key === "m") {
+    gameState.ui.manualBtn.click();
+  }
+  else if (key === "r") {
+    gameState.ui.randomBtn.click();
+  }
+  else if (key === "c") {
+    gameState.ui.cloakBtn.click();
+  }
+  else if (key === "a") {
+    gameState.ui.appearBtn.click();
+
+    const pos = randomPosition(gameState, gameState.player.radius);
+    if (pos) {
+      gameState.player.x = pos.x;
+      gameState.player.y = pos.y;
+      gameState.player.visible = true;
+      gameState.placingPlayer = false;
+      gameState.ui.appearBtn.classList.remove("active");
+    }
+  }
+
+  if (!gameState.player.visible) return;
+
+  // Track Shift Key
+  if (e.shiftKey) gameState.player.isStrafing = true;
+
+  if (e.key === "ArrowLeft") gameState.player.rotatingCCW = true;
+  if (e.key === "ArrowRight") gameState.player.rotatingCW = true;
+  if (e.key === "ArrowUp") gameState.player.movingForward = true;
+  if (e.key === "ArrowDown") gameState.player.movingBackward = true;
+
+  if (e.key === " " || key === "f") {
+    gameState.player.wantFire = true;
+  }
+});
+
+document.addEventListener("keyup", (e) => {
+  // Track Shift Release
+  if (e.key === "Shift") gameState.player.isStrafing = false;
+
+  if (e.key === "ArrowLeft") gameState.player.rotatingCCW = false;
+  if (e.key === "ArrowRight") gameState.player.rotatingCW = false;
+  if (e.key === "ArrowUp") gameState.player.movingForward = false;
+  if (e.key === "ArrowDown") gameState.player.movingBackward = false;
+});
+
+gameState.ui.canvas.addEventListener("mousedown", (e) => {
+  const rect = gameState.ui.canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+
+  // --- NEW: Hit Testing for existing obstacles ---
+  let clickedIndex = null;
+  for (let i = 0; i < gameState.obstacles.length; i++) {
+    const o = gameState.obstacles[i];
+    if (x >= o.x && x <= o.x + o.w && y >= o.y && y <= o.y + o.h) {
+      clickedIndex = i;
+      break; 
+    }
+  }
+
+  // If we clicked an obstacle, select it and stop other actions
+  if (clickedIndex !== null) {
+    selectedObstacleIndex = clickedIndex;
+    return; 
+  } else {
+    // If we clicked empty space, deselect
+    selectedObstacleIndex = null;
+  }
+  // ----------------------------------------------
+
+  // 1. Handle Player Placement
+  if (gameState.placingPlayer) {
+    gameState.player.x = x;
+    gameState.player.y = y;
+    gameState.player.visible = true;
+    gameState.placingPlayer = false;
+    gameState.ui.appearBtn.classList.remove("active");
+    return;
+  }
+
+  // 2. Handle Obstacle Preview Start
+  if (gameState.obstacleMode.arrowActive) {
+
+    const s1 = parseInt(gameState.ui.side1Input.value);
+    const s2 = parseInt(gameState.ui.side2Input.value);
+
+    const longSide = Math.max(s1, s2);
+    const shortSide = Math.min(s1, s2);
+
+    let w, h;
+
+    if (gameState.obstacleMode.orientation === "horz") {
+      w = longSide;
+      h = shortSide;
+    } else {
+      w = shortSide;
+      h = longSide;
+    }
+
+    // We ONLY create the preview here. 
+    // We do NOT push to gameState.obstacles yet.
+    previewObstacle = {
+      x: x - w / 2,
+      y: y - h / 2,
+      w,
+      h
+    };
+
+    return;
+  }
+
+  // 3. Handle Rotation (if not placing anything)
+  if (e.button === 0) gameState.player.rotatingCCW = true;
+  if (e.button === 2) gameState.player.rotatingCW = true;
+});
+
+gameState.ui.canvas.addEventListener("mousemove", (e) => {
+  if (previewObstacle) {
+    const rect = gameState.ui.canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    // Update center position to follow mouse
+    previewObstacle.x = x - previewObstacle.w / 2;
+    previewObstacle.y = y - previewObstacle.h / 2;
+  }
+});
+
+
+
+gameState.ui.canvas.addEventListener("mouseup", (e) => {
+
+  // If we were previewing an obstacle, save it to the real list now
+  if (previewObstacle) {
+    gameState.obstacles.push(previewObstacle);
+    previewObstacle = null;
+    saveGame();
+  }
+
+  if (e.button === 0) gameState.player.rotatingCCW = false;
+  if (e.button === 2) gameState.player.rotatingCW = false;
+});
+
+gameState.ui.canvas.addEventListener("mouseleave", () => {
+  gameState.player.rotatingCCW = false;
+  gameState.player.rotatingCW = false;
+});
+
+gameState.ui.canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+
+gameState.ui.side1Input.addEventListener("input", saveGame);
+gameState.ui.side2Input.addEventListener("input", saveGame);
+
+document.querySelectorAll(".robotBtn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const id = parseInt(btn.dataset.id);
+
+    if (gameState.robots[id]) {
+      gameState.robots[id] = null;
+      btn.classList.remove("active");
+    } else {
+      gameState.robots[id] = createRobot(gameState);
+      if (gameState.robots[id]) btn.classList.add("active");
+    }
+
+    btn.blur();
+    saveGame();
+  });
+});
+
+/* reset hook */
+const originalReset = resetCanvas;
+resetCanvas = function() {
+  originalReset();
+  gameState.robots = new Array(5).fill(null);
+  document.querySelectorAll(".robotBtn").forEach(b => b.classList.remove("active"));
+};
+
+/* draw hook override */
+const originalDraw = draw;
+draw = function() {
+  originalDraw();
+  drawRobots(gameState);
+};
+
+/* init */
+// 1. Load the data first to populate gameState
+loadGame();
+
+// 2. Decide: Do we need a fresh start or a restore?
+const hasSave = localStorage.getItem(STORAGE_KEY);
+
+if (!hasSave) {
+    // No save found? Run the full reset to defaults
+    resetCanvas();
+} else {
+    // Save found? Ensure the canvas matches the loaded dimensions
+    gameState.ui.canvas.width = parseInt(gameState.ui.widthInput.value);
+    gameState.ui.canvas.height = parseInt(gameState.ui.heightInput.value);
+    
+    // Sync the UI buttons to match the loaded gameState
+    syncUI(); 
+}
+
+updatePlayerActionButtons();
+animate();
+
+</script>
+
+</body>
+</html>
+
+
+
+//robot.game.robot.functions.js
+
+function createRobot(gameState) {
+  const pos = randomPosition(gameState, 15);
+  if (!pos) return null;
+
+  return {
+    x: pos.x,
+    y: pos.y,
+    radius: 15,
+    angle: Math.random() * Math.PI * 2,
+    color: `hsl(${Math.random()*360},60%,70%)`,
+    projectiles: [],
+    ammo: 100,
+    isColliding: false
+  };
+}
+
+function updateRobots(gameState) {
+  gameState.robots.forEach(rb => {
+    if (!rb) return;
+
+    /* NEW: line-of-sight check */
+    const seesPlayer = hasLineOfSight(gameState, rb.x, rb.y, gameState.player.x, gameState.player.y, rb);
+
+    if (seesPlayer && gameState.player.visible) {
+      /* NEW:
+         If robot sees player, force angle toward gameState.player.
+         We do NOT bypass collision system.
+         This preserves bump behavior consistency.
+      */
+      rb.angle = Math.atan2(gameState.player.y - rb.y, gameState.player.x - rb.x);
+    } else {
+      /* existing drift */
+      rb.angle += (Math.random() - 0.5) * 0.1;
+    }
+
+    let nextX = rb.x + Math.cos(rb.angle) * 2;
+    let nextY = rb.y + Math.sin(rb.angle) * 2;
+
+    // FIX: pass rb as "self"
+    if (!checkCollisions(gameState, nextX, nextY, rb)) {
+      rb.x = nextX;
+      rb.y = nextY;
+      rb.isColliding = false;
+    } else {
+      rb.isColliding = true;
+
+      // same escape logic style as player
+      const leftTry = rb.angle - 0.4;
+      const rightTry = rb.angle + 0.4;
+
+      const lx = rb.x + Math.cos(leftTry) * 2;
+      const ly = rb.y + Math.sin(leftTry) * 2;
+
+      const rx = rb.x + Math.cos(rightTry) * 2;
+      const ry = rb.y + Math.sin(rightTry) * 2;
+
+      // FIX: pass rb as "self"
+      if (!checkCollisions(gameState, lx, ly, rb)) {
+        rb.angle = leftTry;
+      } else if (!checkCollisions(gameState, rx, ry, rb)) {
+        rb.angle = rightTry;
+      } else {
+        rb.angle += (Math.random() - 0.5) * 1.2;
+      }
+    }
+
+    // projectile update (kept, but no firing trigger change yet)
+    rb.projectiles = rb.projectiles.filter(p => {
+
+      p.x += Math.cos(p.angle) * p.speed;
+      p.y += Math.sin(p.angle) * p.speed;
+
+      return !projectileHits(p);
+    });
+  });
+}
+
+function drawRobots(gameState) {
+  gameState.robots.forEach(rb => {
+    if (!rb) return;
+
+    gameState.ui.ctx.fillStyle = rb.color;
+    gameState.ui.ctx.beginPath();
+    gameState.ui.ctx.arc(rb.x, rb.y, rb.radius, 0, Math.PI * 2);
+    gameState.ui.ctx.fill();
+    gameState.ui.ctx.stroke();
+
+    // gun
+    const ex = rb.x + Math.cos(rb.angle) * (rb.radius + 5);
+    const ey = rb.y + Math.sin(rb.angle) * (rb.radius + 5);
+
+    gameState.ui.ctx.beginPath();
+    gameState.ui.ctx.moveTo(rb.x, rb.y);
+    gameState.ui.ctx.lineTo(ex, ey);
+    gameState.ui.ctx.stroke();
+
+    // projectiles
+    gameState.ui.ctx.fillStyle = "black";
+    rb.projectiles.forEach(p => {
+      gameState.ui.ctx.beginPath();
+      gameState.ui.ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+      gameState.ui.ctx.fill();
+    });
+  });
+}
+
+I want a "Fire" button in the "Robots" left nav panel section, below the 5 "R" buttons.  It should behave very similar to the player's Fire button, and also its state (activat/not active) should be saved, just like the player's Fire button.  
+
+One difference is that it is not paired with any other button, so the toggling of its state is just depending on it being clicked. 
+
+Its starting default state is disabled, unless it was saved previously, then that state overrides.  
+
+It should be cleared just like all the other buttons whenever user changes canvas size.
+
+Stop there for now - i assume this change/addition just affects the main html file.
+
+give me exactly what to do where in the code.
+
+
+
+

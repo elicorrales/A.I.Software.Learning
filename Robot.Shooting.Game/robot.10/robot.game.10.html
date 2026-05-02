@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Canvas UI</title>
+
+<style>
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f4f7fb;
+}
+
+/* layout */
+.container {
+  display: flex;
+  height: 100vh;
+}
+
+/* left nav */
+.sidebar {
+  width: 220px;
+  background: #eaf2ff;
+  border-right: 1px solid #cdd8ee;
+  padding: 15px;
+  box-sizing: border-box;
+}
+
+/* inputs */
+.control {
+  margin-bottom: 15px;
+}
+
+.control label {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 5px;
+  color: #333;
+}
+
+.control input {
+  width: 100%;
+  padding: 6px;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+/* section */
+.section-title {
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+
+.separator {
+  border-top: 1px solid #cdd8ee;
+  margin: 15px 0;
+}
+
+/* buttons */
+.button-row {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  margin-top: 10px; /* spacing between rows */
+}
+
+/* force buttons to share full width */
+.button-row button {
+  flex: 1;
+}
+
+button {
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+button.active {
+  background: #4a7cff;
+  color: white;
+}
+
+/* arrow icon button */
+.icon-btn {
+  margin-left: auto;
+}
+
+#arrowBtn img {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+/* main area */
+.main {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* canvas styling */
+canvas {
+  background: white;
+  border: 1px solid #ccc;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.sidebar {
+  width: 220px;
+  background: #eaf2ff;
+  border-right: 1px solid #cdd8ee;
+  padding: 15px;
+  box-sizing: border-box;
+
+  height: 100vh;
+  overflow-y: auto;
+
+  scrollbar-width: none;
+}
+
+.sidebar::-webkit-scrollbar {
+  display: none;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+  <div class="sidebar">
+
+    <div class="section-title">Play Area</div>
+
+    <div class="control">
+      <label>Width</label>
+      <input type="number" id="widthInput" value="400" min="50" step="10">
+    </div>
+
+    <div class="control">
+      <label>Height</label>
+      <input type="number" id="heightInput" value="300" min="50" step="10">
+    </div>
+
+    <div class="separator"></div>
+
+    <div class="section-title">Obstacle</div>
+
+    <div class="control">
+      <label>Side 1</label>
+      <input type="number" id="side1Input" value="20">
+    </div>
+
+    <div class="control">
+      <label>Side 2</label>
+      <input type="number" id="side2Input" value="50">
+    </div>
+
+    <div class="button-row">
+      <button id="horzBtn">Horz</button>
+      <button id="vertBtn">Vert</button>
+      <button id="arrowBtn" class="icon-btn">
+        <img src="Mouse-Cursor-Pointer.svg" alt="pointer">
+      </button>
+    </div>
+
+    <div class="separator"></div>
+
+    <div class="section-title">Player</div>
+
+    <div class="button-row">
+      <button id="manualBtn" class="active">Manual</button>
+      <button id="randomBtn">Random</button>
+    </div>
+
+    <div class="button-row">
+      <button id="cloakBtn">Cloak</button>
+      <button id="appearBtn">Appear</button>
+    </div>
+
+    <div class="separator"></div>
+
+    <!-- NEW -->
+    <div class="section-title">Robots</div>
+    <div class="button-row">
+      <button class="robotBtn" data-id="0">R</button>
+      <button class="robotBtn" data-id="1">R</button>
+      <button class="robotBtn" data-id="2">R</button>
+      <button class="robotBtn" data-id="3">R</button>
+      <button class="robotBtn" data-id="4">R</button>
+    </div>
+
+    <div class="separator"></div>
+
+  </div>
+
+  <div class="main">
+    <canvas id="canvas"></canvas>
+  </div>
+
+</div>
+
+<script>
+
+/* =========================
+   VARIABLES / STATE
+========================= */
+
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+const widthInput = document.getElementById("widthInput");
+const heightInput = document.getElementById("heightInput");
+
+const side1Input = document.getElementById("side1Input");
+const side2Input = document.getElementById("side2Input");
+
+const horzBtn = document.getElementById("horzBtn");
+const vertBtn = document.getElementById("vertBtn");
+const arrowBtn = document.getElementById("arrowBtn");
+
+const manualBtn = document.getElementById("manualBtn");
+const randomBtn = document.getElementById("randomBtn");
+
+/* NEW */
+const cloakBtn = document.getElementById("cloakBtn");
+const appearBtn = document.getElementById("appearBtn");
+
+let obstacles = [];
+
+let obstacleMode = {
+  orientation: "horz",
+  arrowActive: false
+};
+
+let player = {
+  x: 200,
+  y: 150,
+  radius: 15,
+  angle: 0,
+  visible: true,
+
+  rotatingCCW: false,
+  rotatingCW: false,
+  rotationSpeed: 0.05,
+
+  movingForward: false,
+  movingBackward: false,
+  moveSpeed: 2,
+
+  isColliding: false,
+  flashState: false,
+  flashTimer: 0,
+
+  movementMode: "manual",
+  randomTurnBias: 0,
+
+  ammo: 100,
+  projectiles: []
+};
+
+let placingPlayer = false;
+
+let robots = new Array(5).fill(null);
+
+let stuckTimer = 0;
+let stuckActive = false;
+
+
+/* =========================
+   HELPERS
+========================= */
+
+function randomSteer() {
+  player.angle += (Math.random() - 0.5) * 0.4;
+}
+
+function randomPosition(radius) {
+  let x, y, tries = 0;
+
+  while (tries < 100) {
+    x = Math.random() * canvas.width;
+    y = Math.random() * canvas.height;
+
+    if (!checkCollisions(x, y) && !robotOverlap(x, y, radius)) {
+      return { x, y };
+    }
+    tries++;
+  }
+  return null;
+}
+
+function robotOverlap(x, y, r) {
+  const dxp = x - player.x;
+  const dyp = y - player.y;
+  if (Math.sqrt(dxp*dxp + dyp*dyp) < r + player.radius) return true;
+
+  for (let rb of robots) {
+    if (!rb) continue;
+    const dx = x - rb.x;
+    const dy = y - rb.y;
+    if (Math.sqrt(dx*dx + dy*dy) < r + rb.radius) return true;
+  }
+  return false;
+}
+
+function robotSelfHit(rb, x, y) {
+  const dx = x - rb.x;
+  const dy = y - rb.y;
+  return Math.sqrt(dx*dx + dy*dy) < 1;
+}
+
+function hasLineOfSight(x1, y1, x2, y2, self) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const dist = Math.sqrt(dx*dx + dy*dy);
+
+  const steps = Math.floor(dist / 5);
+  const stepX = dx / steps;
+  const stepY = dy / steps;
+
+  let x = x1;
+  let y = y1;
+
+  for (let i = 0; i < steps; i++) {
+    x += stepX;
+    y += stepY;
+
+    for (let o of obstacles) {
+      if (x > o.x && x < o.x + o.w && y > o.y && y < o.y + o.h) return false;
+    }
+
+    for (let rb of robots) {
+      if (!rb) continue;
+      if (rb === self) continue;
+
+      const dxr = x - rb.x;
+      const dyr = y - rb.y;
+
+      if (Math.sqrt(dxr*dxr + dyr*dyr) < rb.radius) return false;
+    }
+  }
+
+  return true;
+}
+
+function playerRayDistance(angle) {
+
+  const step = 4;
+  let dist = 0;
+
+  let x = player.x;
+  let y = player.y;
+
+  while (true) {
+    x += Math.cos(angle) * step;
+    y += Math.sin(angle) * step;
+    dist += step;
+
+    if (x < 0 || x > canvas.width || y < 0 || y > canvas.height) return dist;
+
+    for (let o of obstacles) {
+      if (x > o.x && x < o.x + o.w && y > o.y && y < o.y + o.h) return dist;
+    }
+
+    for (let rb of robots) {
+      if (!rb) continue;
+
+      const dx = x - rb.x;
+      const dy = y - rb.y;
+      if (Math.sqrt(dx*dx + dy*dy) < rb.radius) return dist;
+    }
+  }
+}
+
+function relocatePlayerAvoiding(oldX, oldY) {
+
+  let tries = 0;
+
+  while (tries < 200) {
+    const pos = randomPosition(player.radius);
+    if (!pos) break;
+
+    const dx = pos.x - oldX;
+    const dy = pos.y - oldY;
+
+    if (Math.sqrt(dx*dx + dy*dy) > player.radius * 4) {
+
+      // placement
+      player.x = pos.x;
+      player.y = pos.y;
+
+      // mimic canvas click behavior
+      player.visible = true;
+      placingPlayer = false;
+      appearBtn.classList.remove("active");
+
+      return;
+    }
+
+    tries++;
+  }
+}
+
+/* NEW HELPER:
+   WHY:
+   keeps async UI timing (cloak → appear → relocate)
+   OUTSIDE main loop to avoid breaking structure
+*/
+function triggerAutoRelocate() {
+
+  const oldX = player.x;
+  const oldY = player.y;
+
+  cloakBtn.click();
+
+  setTimeout(() => {
+
+    appearBtn.click();
+
+    setTimeout(() => {
+
+      relocatePlayerAvoiding(oldX, oldY);
+
+    }, 1000);
+
+  }, 1000);
+}
+/* =========================
+   FUNCTION DEFINITIONS
+========================= */
+
+function resetCanvas() {
+  const w = parseInt(widthInput.value);
+  const h = parseInt(heightInput.value);
+
+  canvas.width = w;
+  canvas.height = h;
+
+  player.x = w / 2;
+  player.y = h / 2;
+  player.angle = 0;
+  player.visible = true;
+
+  obstacles = [];
+  player.projectiles = [];
+  player.ammo = 100;
+
+  draw();
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  drawObstacles();
+
+  if (player.visible) {
+    drawProjectiles();
+    drawCircle();
+  }
+}
+
+function drawCircle() {
+
+  if (player.isColliding) {
+    player.flashTimer++;
+    if (player.flashTimer % 10 === 0) {
+      player.flashState = !player.flashState;
+    }
+  } else {
+    player.flashState = false;
+    player.flashTimer = 0;
+  }
+
+  ctx.beginPath();
+  ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+
+  ctx.fillStyle = (player.isColliding && player.flashState) ? "red" : "#ddd";
+
+  ctx.fill();
+  ctx.strokeStyle = "black";
+  ctx.stroke();
+
+  const endX = player.x + Math.cos(player.angle) * (player.radius + 5);
+  const endY = player.y + Math.sin(player.angle) * (player.radius + 5);
+
+  ctx.beginPath();
+  ctx.moveTo(player.x, player.y);
+  ctx.lineTo(endX, endY);
+  ctx.strokeStyle = "black";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+}
+
+function drawProjectiles() {
+  ctx.fillStyle = "black";
+  player.projectiles.forEach(p => {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+function drawObstacles() {
+  ctx.fillStyle = "#888";
+  obstacles.forEach(o => ctx.fillRect(o.x, o.y, o.w, o.h));
+}
+
+function checkCollisions(nextX, nextY, self = null) {
+
+  const r = player.radius;
+
+  if (
+    nextX - r < 0 ||
+    nextX + r > canvas.width ||
+    nextY - r < 0 ||
+    nextY + r > canvas.height
+  ) return true;
+
+  for (let o of obstacles) {
+    const closestX = Math.max(o.x, Math.min(nextX, o.x + o.w));
+    const closestY = Math.max(o.y, Math.min(nextY, o.y + o.h));
+
+    const dx = nextX - closestX;
+    const dy = nextY - closestY;
+
+    if (dx * dx + dy * dy < r * r) return true;
+  }
+
+  for (let rb of robots) {
+    if (!rb) continue;
+    if (rb === self) continue;
+
+    const dx = nextX - rb.x;
+    const dy = nextY - rb.y;
+
+    if (Math.sqrt(dx*dx + dy*dy) < r + rb.radius) return true;
+  }
+
+  if (self && self !== player) {
+    const dxp = nextX - player.x;
+    const dyp = nextY - player.y;
+
+    if (Math.sqrt(dxp*dxp + dyp*dyp) < r + player.radius) return true;
+  }
+
+  return false;
+}
+
+function projectileHits(p) {
+  // 1. Wall Collisions
+  if (p.x < 0 || p.x > canvas.width || p.y < 0 || p.y > canvas.height) {
+    console.log("Bullet hit: Wall");
+    return true;
+  }
+
+  // 2. Obstacle Collisions
+  for (let o of obstacles) {
+    if (p.x > o.x && p.x < o.x + o.w && p.y > o.y && p.y < o.y + o.h) {
+      console.log("Bullet hit: Obstacle");
+      return true;
+    }
+  }
+
+  // 3. Robot Collisions
+  for (let i = 0; i < robots.length; i++) {
+    const rb = robots[i];
+    if (!rb) continue; 
+    
+    const dx = p.x - rb.x;
+    const dy = p.y - rb.y;
+    const distSq = dx * dx + dy * dy;
+    
+    // Using a slightly larger hit window (20px) to account for high speeds
+    if (distSq < 400) { 
+      console.log(`Bullet hit: Robot ${i} at distance: ${Math.sqrt(distSq).toFixed(2)}`);
+      // --- ADD THESE LINES HERE ---
+      const btn = document.querySelector(`.robotBtn[data-id="${i}"]`);
+      if (btn) btn.click();
+      // ----------------------------
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function fireProjectile() {
+
+  if (player.ammo <= 0) return;
+
+  const startX = player.x + Math.cos(player.angle) * (player.radius + 6);
+  const startY = player.y + Math.sin(player.angle) * (player.radius + 6);
+
+  player.projectiles.push({
+    x: startX,
+    y: startY,
+    angle: player.angle,
+    speed: 5,
+    radius: 3
+  });
+
+  player.ammo--;
+}
+
+/* NEW FUNCTIONS */
+
+function createRobot() {
+  const pos = randomPosition(15);
+  if (!pos) return null;
+
+  return {
+    x: pos.x,
+    y: pos.y,
+    radius: 15,
+    angle: Math.random() * Math.PI * 2,
+    color: `hsl(${Math.random()*360},60%,70%)`,
+    projectiles: [],
+    ammo: 100,
+    isColliding: false
+  };
+}
+
+function updateRobots() {
+  robots.forEach(rb => {
+    if (!rb) return;
+
+    /* NEW: line-of-sight check */
+    const seesPlayer = hasLineOfSight(rb.x, rb.y, player.x, player.y, rb);
+
+    if (seesPlayer && player.visible) {
+      /* NEW:
+         If robot sees player, force angle toward player.
+         We do NOT bypass collision system.
+         This preserves bump behavior consistency.
+      */
+      rb.angle = Math.atan2(player.y - rb.y, player.x - rb.x);
+    } else {
+      /* existing drift */
+      rb.angle += (Math.random() - 0.5) * 0.1;
+    }
+
+    let nextX = rb.x + Math.cos(rb.angle) * 2;
+    let nextY = rb.y + Math.sin(rb.angle) * 2;
+
+    // FIX: pass rb as "self"
+    if (!checkCollisions(nextX, nextY, rb)) {
+      rb.x = nextX;
+      rb.y = nextY;
+      rb.isColliding = false;
+    } else {
+      rb.isColliding = true;
+
+      // same escape logic style as player
+      const leftTry = rb.angle - 0.4;
+      const rightTry = rb.angle + 0.4;
+
+      const lx = rb.x + Math.cos(leftTry) * 2;
+      const ly = rb.y + Math.sin(leftTry) * 2;
+
+      const rx = rb.x + Math.cos(rightTry) * 2;
+      const ry = rb.y + Math.sin(rightTry) * 2;
+
+      // FIX: pass rb as "self"
+      if (!checkCollisions(lx, ly, rb)) {
+        rb.angle = leftTry;
+      } else if (!checkCollisions(rx, ry, rb)) {
+        rb.angle = rightTry;
+      } else {
+        rb.angle += (Math.random() - 0.5) * 1.2;
+      }
+    }
+
+    // projectile update (kept, but no firing trigger change yet)
+    rb.projectiles = rb.projectiles.filter(p => {
+
+      p.x += Math.cos(p.angle) * p.speed;
+      p.y += Math.sin(p.angle) * p.speed;
+
+      return !projectileHits(p);
+    });
+  });
+}
+
+
+function drawRobots() {
+  robots.forEach(rb => {
+    if (!rb) return;
+
+    ctx.fillStyle = rb.color;
+    ctx.beginPath();
+    ctx.arc(rb.x, rb.y, rb.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // gun
+    const ex = rb.x + Math.cos(rb.angle) * (rb.radius + 5);
+    const ey = rb.y + Math.sin(rb.angle) * (rb.radius + 5);
+
+    ctx.beginPath();
+    ctx.moveTo(rb.x, rb.y);
+    ctx.lineTo(ex, ey);
+    ctx.stroke();
+
+    // projectiles
+    ctx.fillStyle = "black";
+    rb.projectiles.forEach(p => {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  });
+}
+
+
+/* =========================
+   MAIN LOOP
+========================= */
+function updatePlayerManualMovementMode() {
+    let nextX = player.x;
+    let nextY = player.y;
+
+    if (player.rotatingCCW) player.angle -= player.rotationSpeed;
+    if (player.rotatingCW) player.angle += player.rotationSpeed;
+
+    if (player.movingForward) {
+      nextX += Math.cos(player.angle) * player.moveSpeed;
+      nextY += Math.sin(player.angle) * player.moveSpeed;
+    }
+
+    if (player.movingBackward) {
+      nextX -= Math.cos(player.angle) * player.moveSpeed;
+      nextY -= Math.sin(player.angle) * player.moveSpeed;
+    }
+
+    if (!checkCollisions(nextX, nextY)) {
+      player.x = nextX;
+      player.y = nextY;
+      player.isColliding = false;
+    } else {
+      player.isColliding = true;
+    }
+}
+
+function updatePlayerRandomMovementMode() {
+
+    const forward = playerRayDistance(player.angle);
+    const left = playerRayDistance(player.angle - Math.PI / 6);
+    const right = playerRayDistance(player.angle + Math.PI / 6);
+
+    let targetAngle = player.angle;
+
+    if (left > forward && left > right) {
+      targetAngle = player.angle - Math.PI / 6;
+    } else if (right > forward && right > left) {
+      targetAngle = player.angle + Math.PI / 6;
+    }
+
+    let bias = 0;
+
+    if (left < right) {
+      bias = +0.08;
+    } else if (right < left) {
+      bias = -0.08;
+    }
+
+    player.angle += (targetAngle - player.angle) * 0.2 + bias;
+
+    let nextX = player.x + Math.cos(player.angle) * player.moveSpeed;
+    let nextY = player.y + Math.sin(player.angle) * player.moveSpeed;
+
+    if (checkCollisions(nextX, nextY)) {
+      player.isColliding = true;
+
+      const leftTry = player.angle - 0.4;
+      const rightTry = player.angle + 0.4;
+
+      const lx = player.x + Math.cos(leftTry) * player.moveSpeed;
+      const ly = player.y + Math.sin(leftTry) * player.moveSpeed;
+
+      const rx = player.x + Math.cos(rightTry) * player.moveSpeed;
+      const ry = player.y + Math.sin(rightTry) * player.moveSpeed;
+
+      if (!checkCollisions(lx, ly)) {
+        player.angle = leftTry;
+      } else if (!checkCollisions(rx, ry)) {
+        player.angle = rightTry;
+      } else {
+        player.angle += (Math.random() - 0.5) * 1.2;
+      }
+
+    } else {
+      player.isColliding = false;
+      player.x = nextX;
+      player.y = nextY;
+    }
+
+    /* NEW:
+       STUCK DETECTION + AUTO RECOVERY
+       WHY:
+       uses existing collision/flashing signal instead of new system
+    */
+
+    if (player.isColliding) {
+      stuckTimer++;
+
+      if (stuckTimer > 60 && !stuckActive) { // ~1 second at 60fps
+        stuckActive = true;
+
+        triggerAutoRelocate();
+
+        /* WHY:
+           prevent repeated triggering during async cycle
+        */
+        setTimeout(() => {
+          stuckActive = false;
+          stuckTimer = 0;
+        }, 2500);
+      }
+
+    } else {
+      stuckTimer = 0;
+    }
+}
+
+function updatePlayer() {
+
+  if (player.movementMode === "manual") {
+
+    updatePlayerManualMovementMode();
+
+  } else { //random movement mode
+
+    updatePlayerRandomMovementMode();
+
+  }
+}
+
+function animate() {
+
+  updatePlayer();
+
+  player.projectiles = player.projectiles.filter(p => {
+    p.x += Math.cos(p.angle) * p.speed;
+    p.y += Math.sin(p.angle) * p.speed;
+    return !projectileHits(p);
+  });
+
+  updateRobots();
+
+  draw();
+  requestAnimationFrame(animate);
+}
+
+/* =========================
+   INVOCATIONS / LISTENERS
+========================= */
+
+widthInput.addEventListener("input", resetCanvas);
+heightInput.addEventListener("input", resetCanvas);
+
+horzBtn.classList.add("active");
+
+horzBtn.addEventListener("click", () => {
+  obstacleMode.orientation = "horz";
+  horzBtn.classList.add("active");
+  vertBtn.classList.remove("active");
+});
+
+vertBtn.addEventListener("click", () => {
+  obstacleMode.orientation = "vert";
+  vertBtn.classList.add("active");
+  horzBtn.classList.remove("active");
+});
+
+arrowBtn.addEventListener("click", () => {
+  obstacleMode.arrowActive = !obstacleMode.arrowActive;
+  arrowBtn.classList.toggle("active");
+});
+
+manualBtn.addEventListener("click", () => {
+  player.movementMode = "manual";
+  manualBtn.classList.add("active");
+  randomBtn.classList.remove("active");
+});
+
+randomBtn.addEventListener("click", () => {
+  player.movementMode = "random";
+  randomBtn.classList.add("active");
+  manualBtn.classList.remove("active");
+});
+
+cloakBtn.addEventListener("click", () => {
+  player.visible = false;
+  cloakBtn.classList.add("active");
+
+  appearBtn.classList.remove("active");
+  placingPlayer = false;
+
+  obstacleMode.arrowActive = false;
+  arrowBtn.classList.remove("active");
+});
+
+appearBtn.addEventListener("click", () => {
+  placingPlayer = true;
+  appearBtn.classList.add("active");
+  cloakBtn.classList.remove("active");
+});
+
+document.addEventListener("keydown", (e) => {
+  if (!player.visible) return;
+
+  if (e.key === "ArrowLeft") player.rotatingCCW = true;
+  if (e.key === "ArrowRight") player.rotatingCW = true;
+  if (e.key === "ArrowUp") player.movingForward = true;
+  if (e.key === "ArrowDown") player.movingBackward = true;
+
+  if (e.key === " " || e.key.toLowerCase() === "f") {
+    fireProjectile();
+  }
+});
+
+document.addEventListener("keyup", (e) => {
+  if (e.key === "ArrowLeft") player.rotatingCCW = false;
+  if (e.key === "ArrowRight") player.rotatingCW = false;
+  if (e.key === "ArrowUp") player.movingForward = false;
+  if (e.key === "ArrowDown") player.movingBackward = false;
+});
+
+canvas.addEventListener("mousedown", (e) => {
+
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+
+  if (placingPlayer) {
+    player.x = x;
+    player.y = y;
+    player.visible = true;
+
+    placingPlayer = false;
+    appearBtn.classList.remove("active");
+    return;
+  }
+
+  if (obstacleMode.arrowActive) {
+    const s1 = parseInt(side1Input.value);
+    const s2 = parseInt(side2Input.value);
+
+    const longSide = Math.max(s1, s2);
+    const shortSide = Math.min(s1, s2);
+
+    let w, h;
+
+    if (obstacleMode.orientation === "horz") {
+      w = longSide;
+      h = shortSide;
+    } else {
+      w = shortSide;
+      h = longSide;
+    }
+
+    obstacles.push({ x, y, w, h });
+    return;
+  }
+
+  if (e.button === 0) player.rotatingCCW = true;
+  if (e.button === 2) player.rotatingCW = true;
+});
+
+canvas.addEventListener("mouseup", (e) => {
+  if (e.button === 0) player.rotatingCCW = false;
+  if (e.button === 2) player.rotatingCW = false;
+});
+
+canvas.addEventListener("mouseleave", () => {
+  player.rotatingCCW = false;
+  player.rotatingCW = false;
+});
+
+canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+
+document.querySelectorAll(".robotBtn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const id = parseInt(btn.dataset.id);
+
+    if (robots[id]) {
+      robots[id] = null;
+      btn.classList.remove("active");
+    } else {
+      robots[id] = createRobot();
+      if (robots[id]) btn.classList.add("active");
+    }
+  });
+});
+
+/* reset hook */
+const originalReset = resetCanvas;
+resetCanvas = function() {
+  originalReset();
+  robots = new Array(5).fill(null);
+  document.querySelectorAll(".robotBtn").forEach(b => b.classList.remove("active"));
+};
+
+/* draw hook override */
+const originalDraw = draw;
+draw = function() {
+  originalDraw();
+  drawRobots();
+};
+
+/* init */
+resetCanvas();
+animate();
+
+</script>
+
+</body>
+</html>

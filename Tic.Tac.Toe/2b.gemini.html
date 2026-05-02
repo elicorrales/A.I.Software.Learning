@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Tic-Tac-Toe Pro</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+        :root {
+            --bg: #0f172a;
+            --panel: #020617;
+            --accent: #38bdf8;
+            --x-color: #f97316;
+            --o-color: #22c55e;
+            --grid-line: #1e293b;
+            --text-main: #e5e7eb;
+            --text-muted: #9ca3af;
+            --shadow-soft: 0 18px 45px rgba(15, 23, 42, 0.9);
+            --transition-fast: 160ms ease-out;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: radial-gradient(circle at top, #1e293b 0, #020617 55%, #000 100%);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        .app-shell {
+            width: 100%;
+            max-width: 500px;
+            background: #020617;
+            border-radius: 28px;
+            border: 1px solid rgba(148, 163, 184, 0.12);
+            box-shadow: var(--shadow-soft);
+            padding: 24px;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .logo-pill {
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #38bdf8, #0369a1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            color: white;
+            margin-right: 12px;
+        }
+
+        .game-title { font-size: 18px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+        
+        .mode-pill {
+            padding: 6px 12px;
+            border-radius: 999px;
+            background: rgba(56, 189, 248, 0.1);
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .mode-dot { width: 6px; height: 6px; background: #22c55e; border-radius: 50%; box-shadow: 0 0 8px #22c55e; }
+
+        .board-wrapper {
+            padding: 20px;
+            border-radius: 22px;
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+        }
+
+        .stats-bar {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+        }
+
+        .turn-badge {
+            padding: 4px 12px;
+            border-radius: 999px;
+            background: var(--panel);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            font-size: 12px;
+            color: var(--accent);
+        }
+
+        .scores { display: flex; gap: 8px; font-size: 11px; }
+        .score-item { color: var(--text-muted); }
+        .score-item span { color: white; font-weight: 700; }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            aspect-ratio: 1;
+            background: var(--grid-line);
+            gap: 2px;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 2px solid var(--grid-line);
+        }
+
+        .cell {
+            background: var(--panel);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 48px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .cell:hover { background: #0f172a; }
+        .cell.x { color: var(--x-color); }
+        .cell.o { color: var(--o-color); }
+
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .primary-btn {
+            background: var(--accent);
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 999px;
+            font-weight: 700;
+            text-transform: uppercase;
+            font-size: 12px;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+
+        .primary-btn:active { transform: scale(0.95); }
+        
+        .hint { font-size: 12px; color: var(--text-muted); }
+    </style>
+</head>
+<body>
+
+<div class="app-shell">
+    <header class="header">
+        <div style="display: flex; align-items: center;">
+            <div class="logo-pill">XO</div>
+            <div class="game-title">Tic-Tac-Toe</div>
+        </div>
+        <div class="mode-pill">
+            <span class="mode-dot"></span>
+            <span>AI Mode</span>
+        </div>
+    </header>
+
+    <div class="board-wrapper">
+        <div class="stats-bar">
+            <div class="turn-badge" id="turn-display">Turn: Player (X)</div>
+            <div class="scores">
+                <div class="score-item">P: <span id="p-score">0</span></div>
+                <div class="score-item">AI: <span id="ai-score">0</span></div>
+                <div class="score-item">D: <span id="d-score">0</span></div>
+            </div>
+        </div>
+
+        <div class="board" id="board">
+            <div class="cell" data-index="0"></div>
+            <div class="cell" data-index="1"></div>
+            <div class="cell" data-index="2"></div>
+            <div class="cell" data-index="3"></div>
+            <div class="cell" data-index="4"></div>
+            <div class="cell" data-index="5"></div>
+            <div class="cell" data-index="6"></div>
+            <div class="cell" data-index="7"></div>
+            <div class="cell" data-index="8"></div>
+        </div>
+
+        <div class="controls">
+            <span class="hint" id="hint-text">Your move!</span>
+            <button class="primary-btn" onclick="resetGame()">New Game</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let board = ["", "", "", "", "", "", "", "", ""];
+    let playerWins = 0, aiWins = 0, draws = 0;
+    let isGameActive = true;
+    const cells = document.querySelectorAll('.cell');
+    const turnDisplay = document.getElementById('turn-display');
+    const hintText = document.getElementById('hint-text');
+
+    const winConditions = [
+        [0, 1, 2], [3, 4, 5], [6, 7, 8],
+        [0, 3, 6], [1, 4, 7], [2, 5, 8],
+        [0, 4, 8], [2, 4, 6]
+    ];
+
+    function handleMove(index) {
+        if (board[index] !== "" || !isGameActive) return;
+
+        makeMove(index, "x");
+        
+        if (checkWin("x")) {
+            endGame("Player wins!");
+            playerWins++;
+            updateScores();
+        } else if (board.every(cell => cell !== "")) {
+            endGame("It's a draw!");
+            draws++;
+            updateScores();
+        } else {
+            isGameActive = false; // Disable clicks during AI "thought"
+            turnDisplay.innerText = "Turn: AI (O)";
+            hintText.innerText = "AI is thinking...";
+            setTimeout(aiMove, 500);
+        }
+    }
+
+    function aiMove() {
+        // Simple logic: pick a random available spot
+        let available = board.map((val, idx) => val === "" ? idx : null).filter(val => val !== null);
+        let move = available[Math.floor(Math.random() * available.length)];
+        
+        makeMove(move, "o");
+
+        if (checkWin("o")) {
+            endGame("AI wins!");
+            aiWins++;
+            updateScores();
+        } else if (board.every(cell => cell !== "")) {
+            endGame("It's a draw!");
+            draws++;
+            updateScores();
+        } else {
+            isGameActive = true;
+            turnDisplay.innerText = "Turn: Player (X)";
+            hintText.innerText = "Your move!";
+        }
+    }
+
+    function makeMove(index, player) {
+        board[index] = player;
+        cells[index].innerText = player.toUpperCase();
+        cells[index].classList.add(player);
+    }
+
+    function checkWin(player) {
+        return winConditions.some(cond => cond.every(idx => board[idx] === player));
+    }
+
+    function endGame(msg) {
+        isGameActive = false;
+        turnDisplay.innerText = "Game Over";
+        hintText.innerText = msg;
+    }
+
+    function updateScores() {
+        document.getElementById('p-score').innerText = playerWins;
+        document.getElementById('ai-score').innerText = aiWins;
+        document.getElementById('d-score').innerText = draws;
+    }
+
+    function resetGame() {
+        board = ["", "", "", "", "", "", "", "", ""];
+        isGameActive = true;
+        cells.forEach(cell => {
+            cell.innerText = "";
+            cell.classList.remove('x', 'o');
+        });
+        turnDisplay.innerText = "Turn: Player (X)";
+        hintText.innerText = "Your move!";
+    }
+
+    cells.forEach(cell => {
+        cell.addEventListener('click', () => handleMove(cell.dataset.index));
+    });
+</script>
+
+</body>
+</html>
