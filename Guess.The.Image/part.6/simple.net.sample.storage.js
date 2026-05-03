@@ -222,6 +222,11 @@ function saveModel() {
   }));
 }
 
+function getEpochs() {
+  const el = document.getElementById("epochsInput");
+  return Math.max(1, parseInt(el.value) || 1);
+}
+
 function trainOnSamplesOnce() {
   console.log("[EPOCH] training on samples:", samples.length);
 
@@ -248,49 +253,100 @@ function trainOnSamplesOnce() {
   console.log("[EPOCH] done");
 }
 
-function train(label) {
-
+async function train(label) {
   if (pendingSample) {
+
+    const snapshotData = canvas.toDataURL();
+    const snapshotType = currentInputType;
+
+    // 2. Update the UI right now so the user sees it "fly" into the thumb
+    lastImages[label] = { 
+      data: snapshotData, 
+      type: snapshotType 
+    };
+    updateThumbUI(label, lastImages[label]);
+
+    // 3. Prepare for training
+    setUILock(true);
     samples.push({ input: pendingSample, label });
-
-    console.log("[TRAIN] sample added. total samples:", samples.length);
-
     pendingSample = null;
-
     updateSampleStats();
 
-    debugState("after-sample-add");
+    // Optional: Clear the canvas now so the "montage" starts on a fresh slate
+    // or leave it to let the first sample of the montage overwrite it.
+    // clearAll(); 
 
-    trainOnSamplesOnce();
+    const epochs = getEpochs();
+    
+    // 4. THE ANIMATED TRAINING LOOP (The "Deep Thinking" phase)
+    for (let i = 0; i < epochs; i++) {
+      for (let s = 0; s < samples.length; s++) {
+        const sample = samples[s];
+
+        if (s % 10 === 0) {
+          drawSampleToCanvas(sample.input);
+          await new Promise(resolve => setTimeout(resolve, 0));
+        }
+
+        const out = forward(sample.input);
+        for (let j = 0; j < OUTPUTS; j++) {
+          const target = (j === sample.label) ? 1 : 0;
+          const error = target - out[j];
+          B[j] += lr * error;
+          for (let k = 0; k < 784; k++) {
+            W[j][k] += lr * error * sample.input[k];
+          }
+        }
+      }
+    }
+
+    // 5. Finalize
+    saveModel();
+    clearAll(); // Ensure canvas is clean after the flickering stops
+    setUILock(false); 
+
+    // HIGHLIGHT THE RESULT
+    const targetThumb = document.getElementById("thumb" + label);
+    if (targetThumb) {
+      targetThumb.classList.add("thumb-winner");
+      
+      // Remove the highlight after 1.5 seconds
+      setTimeout(() => {
+        targetThumb.classList.remove("thumb-winner");
+      }, 1500);
+    }
 
   } else {
     console.log("[TRAIN] no pending sample added");
   }
+}
 
-  const x = getInputVector();
-  const out = forward(x);
+function setUILock(isLocked) {
+  // 1. List all the buttons and inputs to toggle
+  const elements = [
+    guessBtn, undoBtn, resetModelBtn, resetSampBtn, 
+    canvas, ...digitButtons, 
+    document.getElementById("epochsInput"),
+    document.getElementById("grayBtn"),
+    document.getElementById("contrastUp"),
+    document.getElementById("contrastDn"),
+    document.getElementById("brightUp"),
+    document.getElementById("brightDn")
+  ];
 
-  for (let j = 0; j < OUTPUTS; j++) {
-    const target = (j === label) ? 1 : 0;
-    const error = target - out[j];
-
-    B[j] += lr * error;
-
-    for (let i = 0; i < 784; i++) {
-      W[j][i] += lr * error * x[i];
+  elements.forEach(el => {
+    if (!el) return;
+    if (isLocked) {
+      el.classList.add("disabled");
+      el.disabled = true; // For standard buttons/inputs
+    } else {
+      el.classList.remove("disabled");
+      el.disabled = false;
     }
-  }
+  });
 
-
-  // Capture current drawing and update our "most recent" storage
-  lastImages[label] = {
-    data: canvas.toDataURL(),
-    type: currentInputType // Stores "line" or "pasted"
-  };
-  updateThumbUI(label, lastImages[label]);
-
-  saveModel();
-  clearAll();
+  // Special handling for canvas drawing
+  drawing = false; 
 }
 
 function updateThumbUI(label, thumbObj) {
@@ -338,6 +394,31 @@ function applyFilter(filterFn) {
   
   ctx.putImageData(imgData, 0, 0);
 }
+
+function drawSampleToCanvas(inputVector) {
+  // 1. Create a tiny 28x28 buffer
+  const tempImgData = ctx.createImageData(28, 28);
+  for (let i = 0; i < 784; i++) {
+    const val = inputVector[i] * 255;
+    const idx = i * 4;
+    tempImgData.data[idx] = 0;     // R
+    tempImgData.data[idx+1] = 0;   // G
+    tempImgData.data[idx+2] = 0;   // B
+    tempImgData.data[idx+3] = val; // Alpha (makes it look like ink)
+  }
+
+  // 2. Draw tiny buffer to a hidden temporary canvas to upscale it
+  const tempCanvas = document.createElement('canvas');
+  tempCanvas.width = 28;
+  tempCanvas.height = 28;
+  tempCanvas.getContext('2d').putImageData(tempImgData, 0, 0);
+
+  // 3. Paint it big on the main canvas
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.imageSmoothingEnabled = false; // Keeps that cool pixelated AI look
+  ctx.drawImage(tempCanvas, 0, 0, 280, 280);
+}
+
 
 // --------------------
 // INIT / SETUP (executed code)

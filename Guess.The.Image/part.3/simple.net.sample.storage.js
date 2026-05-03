@@ -12,6 +12,9 @@ const undoBtn = document.getElementById("undoBtn");
 const sampleCountEl = document.getElementById("sampleCount");
 const sampleMemoryEl = document.getElementById("sampleMemory");
 
+canvas.tabIndex = 0;
+
+const LINE_WIDTH= 8;
 const INPUTS = 784;
 const OUTPUTS = 4;
 //const lr = 0.05;
@@ -27,6 +30,9 @@ let digitButtons = [];
 let valueLabels = [];
 
 let drawing = false;
+
+let currentInputType = "line"; // Default to line
+let strokeLength = 0;          // Track how much the user actually drew
 
 // --------------------
 // FUNCTIONS
@@ -69,7 +75,7 @@ function updateSampleStats() {
   sampleMemoryEl.innerText = kb + " KB";
 }
 
-function getInputVector() {
+function getInputVectorFromLineDrawing() {
   const small = document.createElement("canvas");
   small.width = 28;
   small.height = 28;
@@ -82,7 +88,7 @@ function getInputVector() {
   let input = new Array(784);
 
   for (let i = 0; i < 784; i++) {
-    const alpha = img[i * 4 + 3]; 
+    const alpha = img[i * 4 + 3];
     let v = alpha / 255;
     v = v * v;
     if (v < 0.1) v = 0;
@@ -90,6 +96,58 @@ function getInputVector() {
   }
 
   return input;
+}
+
+function getInputVectorFromPastedImage() {
+  const small = document.createElement("canvas");
+  small.width = 28;
+  small.height = 28;
+
+  const sctx = small.getContext("2d");
+  sctx.drawImage(canvas, 0, 0, 28, 28);
+
+  const img = sctx.getImageData(0, 0, 28, 28).data;
+
+  let input = new Array(784);
+
+  for (let i = 0; i < 784; i++) {
+
+    const r = img[i * 4 + 0];
+    const g = img[i * 4 + 1];
+    const b = img[i * 4 + 2];
+
+    // standard grayscale conversion (0-255)
+    const avg = (r + g + b) / 3;
+
+    // Convert to 0.0 - 1.0 range
+    // We invert it (1.0 - value) so that "ink" (darker pixels) 
+    // results in a higher number for the neural network.
+    let v = 1.0 - (avg / 255);
+
+    // Apply your original contrast logic
+    v = v * v;
+    if (v < 0.1) v = 0;
+    
+    input[i] = v;
+  }
+
+  return input;
+}
+
+function getInputVector() {
+  // A "smart" check: If the user just clicked without moving much, 
+  // and we were in line mode, it might be a mistake. 
+  // We only treat it as a line drawing if the strokeLength is significant.
+  if (currentInputType === "line" && strokeLength < 5) {
+    console.log("Input too small, ignoring or defaulting to RGB");
+    return getInputVectorFromPastedImage(); 
+  }
+
+  if (currentInputType === "pasted") {
+    return getInputVectorFromPastedImage();
+  } else {
+    return getInputVectorFromLineDrawing();
+  }
 }
 
 function getActivation(logits) {
@@ -135,6 +193,7 @@ function sigmoid(x) {
 
 function clearAll() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+  strokeLength = 0;
 
   for (let i = 0; i < OUTPUTS; i++) {
     digitButtons[i].style.background = "#f5e6a3";
@@ -245,7 +304,7 @@ for (let i = 0; i < OUTPUTS; i++) {
 // --------------------
 // EVENTS
 // --------------------
-ctx.lineWidth = 8;
+ctx.lineWidth = LINE_WIDTH;
 ctx.lineCap = "round";
 ctx.strokeStyle = "black";
 
@@ -264,6 +323,10 @@ canvas.addEventListener("mouseleave", () => {
 canvas.addEventListener("mousemove", (e) => {
   if (!drawing) return;
 
+  // Every time the mouse moves while held down, we increase the length
+  strokeLength++; 
+  currentInputType = "line"; // Drawing resets the mode to line
+
   const rect = canvas.getBoundingClientRect();
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
@@ -275,13 +338,18 @@ canvas.addEventListener("mousemove", (e) => {
 });
 
 window.addEventListener("paste", (e) => {
-  const items = e.clipboardData.items;
 
+  if (document.activeElement !== canvas) {
+    return; 
+  }
+
+  const items = e.clipboardData.items;
   for (let i = 0; i < items.length; i++) {
     if (items[i].type.indexOf("image") !== -1) {
+      currentInputType = "pasted"; // Lock the mode to pasted
+      strokeLength = 0;            // Reset stroke
       const blob = items[i].getAsFile();
       const img = new Image();
-
       img.onload = function() {
         // Clear current canvas before drawing the pasted image
         clearAll();
