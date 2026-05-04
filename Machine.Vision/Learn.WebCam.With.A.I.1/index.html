@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Device Diagnostics | Camera Probe</title>
+    <style>
+        :root {
+            --bg-color: #1e293b; /* Slate 800 - Professional, not pitch black */
+            --card-bg: #ffffff;
+            --text-main: #f8fafc;
+            --text-muted: #64748b;
+            --accent: #3b82f6;
+            --error: #ef4444;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .container {
+            background: var(--card-bg);
+            color: #1e293b;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            width: 100%;
+            max-width: 500px;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 1.25rem;
+            margin-bottom: 1.5rem;
+            color: var(--bg-color);
+            border-bottom: 2px solid #f1f5f9;
+            padding-bottom: 1rem;
+        }
+
+        #status-label {
+            display: block;
+            margin-top: 1rem;
+            padding: 1rem;
+            background: #f1f5f9;
+            border-radius: 4px;
+            font-family: 'Cascadia Code', 'Courier New', monospace;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            text-align: left;
+            min-height: 50px;
+        }
+
+        .error-text { color: var(--error); font-weight: bold; }
+        .success-text { color: #10b981; font-weight: bold; }
+
+        button {
+            background-color: var(--accent);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: opacity 0.2s;
+        }
+
+        button:hover { opacity: 0.9; }
+        
+        /* Loading state style */
+        button:disabled {
+            opacity: 0.5;
+            cursor: wait;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Hardware Diagnostic Tool</h1>
+        <button id="main-btn" onclick="checkCameras()">Detect Webcams</button>
+        <div id="status-label">System idle. Ready to scan...</div>
+    </div>
+
+    <script>
+        async function checkCameras() {
+            const statusLabel = document.getElementById('status-label');
+            const mainBtn = document.getElementById('main-btn');
+            
+            // Visual indication: Disable button and show scanning text
+            mainBtn.disabled = true;
+            statusLabel.innerHTML = "Scanning hardware... Please wait.";
+
+            if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+                statusLabel.innerHTML = "<span class='error-text'>Error:</span> MediaDevices API is not supported.";
+                mainBtn.disabled = false;
+                return;
+            }
+
+            try {
+                // Requesting permission immediately to ensure USB and Integrated cameras are all found
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                stream.getTracks().forEach(track => track.stop());
+
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(device => device.kind === 'videoinput');
+
+                if (videoDevices.length === 0) {
+                    statusLabel.innerHTML = "No webcams detected on this system.";
+                } else {
+                    let report = `<span class='success-text'>Success:</span> Found ${videoDevices.length} camera(s) connected.\n\n`;
+                    
+                    videoDevices.forEach((device, index) => {
+                        const label = device.label || `Camera ${index + 1} (Name hidden by browser)`;
+                        report += `${index + 1}. ${label}\n`;
+                    });
+
+                    // If labels are empty, update button to allow the user to reveal names
+                    if (!videoDevices[0].label) {
+                        report += "\n<small>Device names are hidden. Click above to grant access and reveal labels.</small>";
+                        mainBtn.innerText = "Unlock Device Names";
+                        mainBtn.onclick = requestPermission;
+                    } else {
+                        mainBtn.innerText = "Detect Webcams";
+                        mainBtn.onclick = checkCameras;
+                    }
+
+                    statusLabel.innerHTML = report;
+                }
+            } catch (err) {
+                statusLabel.innerHTML = `<span class='error-text'>Error:</span> ${err.message}`;
+            } finally {
+                // Re-enable button regardless of outcome
+                mainBtn.disabled = false;
+            }
+        }
+
+        async function requestPermission() {
+            const statusLabel = document.getElementById('status-label');
+            const mainBtn = document.getElementById('main-btn');
+            
+            mainBtn.disabled = true;
+            statusLabel.innerHTML = "Requesting system permissions...";
+            
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                stream.getTracks().forEach(track => track.stop()); // Close immediately
+                
+                // Re-run check now that permission is granted
+                await checkCameras();
+            } catch (err) {
+                statusLabel.innerHTML = "<span class='error-text'>Warning:</span> Permission denied. Labels remain hidden.";
+                mainBtn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>

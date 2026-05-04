@@ -16,10 +16,11 @@
     height: 100vh;
   }
 
-  .group {
+.group {
     display: flex;
     gap: 16px;
-  }
+    align-items: flex-start;
+}
 
   .wrap {
     background: #ffffff;
@@ -76,7 +77,7 @@
     width:100px; /* Widened for 4 digits */
   }
 
-  .side {
+.side {
     background: #ffffff;
     padding: 12px;
     border-radius: 12px;
@@ -84,10 +85,12 @@
     display: flex;
     align-items: center;
     justify-content: center;
-  }
+    height: 615px; /* Added this to match Area 1 and 2 */
+    box-sizing: border-box;
+}
 
   svg text {
-    font-size: 14px;
+    font-size: 20px;
     fill: #0f172a;
   }
 
@@ -100,8 +103,9 @@
     padding: 20px;
     border-radius: 12px;
     box-shadow: 0 10px 30px rgba(0,0,0,0.15);
-    height: 500px; /* Match canvas height */
-  }
+    height: 615px; /* Changed from 500px to 615px */
+    box-sizing: border-box; 
+}
 
   .meter-container {
     display: flex;
@@ -133,7 +137,20 @@
   /* Loss is inverted: high is red (top), low is green (bottom) */
   .loss-fill { background: linear-gradient(to top, #22c55e, #ef4444); }
 
-  .label-text { font-size: 12px; font-weight: bold; writing-mode: vertical-rl; transform: rotate(180deg); }
+  .label-text { font-size: 14px; font-weight: bold; writing-mode: vertical-rl; transform: rotate(180deg); }
+
+.rst-btn {
+    margin-top: 10px;
+    padding: 6px;
+    background: #ef4444;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 12px;
+  }
+  .rst-btn:hover { background: #dc2626; }
 
 </style>
 </head>
@@ -165,6 +182,7 @@
             Passes:
             <input id="passesInput" type="number" min="1" max="9999" step="1" value="20">
           </label>
+          <button class="rst-btn" onclick="resetModelOnly()">Rst Mdl</button>
         </div>
       </div>
 
@@ -177,7 +195,7 @@
     <div class="meter-track">
       <div id="fillAcc" class="meter-fill acc-fill" style="height: 0%"></div>
     </div>
-    <div id="statAcc" style="font-size:14px">0%</div>
+    <div id="statAcc" style="font-size:18px">0%</div>
   </div>
 
   <div class="meter-container">
@@ -185,7 +203,7 @@
     <div class="meter-track">
       <div id="fillLoss" class="meter-fill loss-fill" style="height: 0%"></div>
     </div>
-    <div id="statLoss" style="font-size:14px">0.00</div>
+    <div id="statLoss" style="font-size:18px">0.00</div>
   </div>
 </div>
 
@@ -219,10 +237,10 @@
       <text id="valX3" x="10" y="190">0</text>
       <text id="valX4" x="10" y="240">0</text>
 
-      <text id="valW1" x="95" y="80">w1</text>
-      <text id="valW2" x="95" y="100">w2</text>
-      <text id="valW3" x="95" y="120">w3</text>
-      <text id="valW4" x="95" y="140">w4</text>
+      <text id="valW1" x="95" y="95">w1</text>
+      <text id="valW2" x="95" y="130">w2</text>
+      <text id="valW3" x="95" y="170">w3</text>
+      <text id="valW4" x="95" y="205">w4</text>
 
       <text id="valB" x="165" y="220">b</text>
 
@@ -244,17 +262,15 @@ document.getElementById("passesInput").value = 20;
 
 let points = [];
 
-let w1 = Math.random()*2 - 1;
-let w2 = Math.random()*2 - 1;
-let w3 = Math.random()*2 - 1;
-let w4 = Math.random()*2 - 1;
-let b  = Math.random()*2 - 1;
+// Change your initial declarations to 0 if you want to start from zero
+let w1 = 0, w2 = 0, w3 = 0, w4 = 0, b = 0;
 
-const originalW1 = w1;
-const originalW2 = w2;
-const originalW3 = w3;
-const originalW4 = w4;
-const originalB  = b;
+// Update your constants as well so Undo/Reset knows what "fresh" looks like
+const originalW1 = 0;
+const originalW2 = 0;
+const originalW3 = 0;
+const originalW4 = 0;
+const originalB  = 0;
 
 let linearLearningRate = 0.3;
 let sigmoidLearningRate = 0.05;
@@ -269,6 +285,18 @@ let currentPointIdx = 0;
 
 let stablePasses = 0;
 const requiredStable = 3;
+
+function resetModelOnly() {
+  // Set weights and bias back to zero
+  w1 = 0; w2 = 0; w3 = 0; w4 = 0; b = 0;
+  
+  // Reset learning rates to base
+  linearLearningRate = baseLinearLR;
+  sigmoidLearningRate = baseSigmoidLR;
+  
+  // Kick off training with the existing points
+  startTraining();
+}
 
 function getPasses(){
   const el = document.getElementById("passesInput");

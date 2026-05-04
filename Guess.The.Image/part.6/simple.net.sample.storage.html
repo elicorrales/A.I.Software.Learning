@@ -30,6 +30,7 @@ canvas {
   width: 280px;
   height: 280px;
   cursor: crosshair;
+  transition: background-color 0.2s ease;
 }
 
 /* middle column */
@@ -96,6 +97,29 @@ canvas {
   cursor: pointer;
 }
 
+/* In simple.net.sample.storage.html */
+.digit {
+  width: 60px;
+  height: 32px;
+  background: #f5e6a3;
+  border: none;
+  font-size: 14px;
+  cursor: pointer;
+  /* NEW: Smoothly transition both background and text color */
+  transition: background 0.3s ease, color 0.3s ease; 
+}
+
+.digit:hover {
+  cursor: pointer;
+  /* Optional: slightly lighten on hover so it feels interactive 
+     even when the model is confident (black) */
+  filter: brightness(1.2); 
+}
+
+.digit:active {
+  transform: scale(0.95);
+}
+
 .value {
   width: 60px;
   font-size: 12px;
@@ -130,7 +154,7 @@ canvas {
   max-width: 900px;
 }
 
-/* Gives a subtle glow when you click the canvas, 
+/* Gives a subtle glow when you click the canvas,
    letting you know CTRL+V will work */
 canvas:focus {
   outline: none;
@@ -181,6 +205,41 @@ canvas:focus {
   z-index: 10;
 }
 
+/* Update or add this in your <style> section */
+.guess:hover {
+  background: #ffca28; /* Slightly darker yellow */
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.guess:active {
+  background: #fbc02d;
+  transform: translateY(2px); /* Moves down slightly when clicked */
+  box-shadow: none;
+}
+
+.undo:active, .reset-model:active, .reset-samples:active, .tool-btn:active, .adj-btn:active {
+  background: #bdbdbd;
+  transform: translateY(1px);
+}
+
+#clearThumbsBtn:hover {
+  background: #fff5f5;
+  border-color: #ef4444;
+}
+
+#clearThumbsBtn:active {
+  background: #fee2e2;
+  transform: scale(0.9);
+}
+
+/* Add this to handle all digit buttons */
+.digit:hover {
+  cursor: pointer;
+}
+
+.digit:active {
+  transform: scale(0.95);  /* Slight shrink effect */
+}
 </style>
 </head>
 
@@ -191,7 +250,7 @@ canvas:focus {
   <div class="wrapper">
   <div class="tools" style="display: flex; flex-direction: column; gap: 15px; align-items: center;">
       <button class="tool-btn" id="grayBtn" title="Grayscale">🌓</button>
-    
+
       <div class="tool-group">
         <label>Contrast</label>
         <div class="inputRow">
@@ -210,6 +269,24 @@ canvas:focus {
     </div>
 
     <canvas id="canvas" width="280" height="280"></canvas>
+    
+<div class="stats-box" style="display: flex; gap: 15px; align-items: flex-end; padding: 10px; border-radius: 10px; background: #fffdf0; border: 1px solid #f2d27a;">
+  <div class="meter-container" style="display: flex; flex-direction: column; align-items: center; height: 260px; width: 30px;">
+    <div style="font-size: 9px; font-weight: bold; writing-mode: vertical-rl; transform: rotate(180deg);">ACCURACY</div>
+    <div class="meter-track" style="flex-grow: 1; width: 10px; background: #e2e8f0; border-radius: 5px; position: relative; overflow: hidden; margin: 5px 0;">
+      <div id="fillAcc" style="position: absolute; bottom: 0; width: 100%; height: 0%; background: linear-gradient(to top, #ef4444, #22c55e); transition: height 0.3s;"></div>
+    </div>
+    <div id="statAcc" style="font-size:10px; font-weight: bold;">0%</div>
+  </div>
+
+  <div class="meter-container" style="display: flex; flex-direction: column; align-items: center; height: 260px; width: 30px;">
+    <div style="font-size: 9px; font-weight: bold; writing-mode: vertical-rl; transform: rotate(180deg);">LOSS</div>
+    <div class="meter-track" style="flex-grow: 1; width: 10px; background: #e2e8f0; border-radius: 5px; position: relative; overflow: hidden; margin: 5px 0;">
+      <div id="fillLoss" style="position: absolute; bottom: 0; width: 100%; height: 0%; background: linear-gradient(to top, #22c55e, #ef4444); transition: height 0.3s;"></div>
+    </div>
+    <div id="statLoss" style="font-size:10px; font-weight: bold;">0.00</div>
+  </div>
+</div>
 
     <div class="middle">
       <div style="font-size: 12px; text-align: left; margin-bottom: 10px;">
@@ -244,6 +321,10 @@ canvas:focus {
       <div class="row"><button class="digit" id="d1">car</button><span class="value" id="v1"></span></div>
       <div class="row"><button class="digit" id="d2">tree</button><span class="value" id="v2"></span></div>
       <div class="row"><button class="digit" id="d3">dog</button><span class="value" id="v3"></span></div>
+      <div class="row"><button class="digit" id="d4">cat</button><span class="value" id="v4"></span></div>
+      <div class="row"><button class="digit" id="d5">bird</button><span class="value" id="v5"></span></div>
+      <p>
+      <button class="undo" id="runSamplesBtn" style="width: 100%; margin-top: 10px; background: #9ae6b4;">Run Samples Only</button>
     </div>
 
   </div>
@@ -270,6 +351,14 @@ canvas:focus {
     <div class="thumb-box" style="display: flex; flex-direction: column; align-items: center;">
       <canvas id="thumb3" width="28" height="28" style="background: #ffffff; border: 2px solid #f2d27a; width: 56px; height: 56px;"></canvas>
       <div style="font-size: 11px; margin-top: 4px; font-weight: bold;">dog</div>
+    </div>
+    <div class="thumb-box" style="display: flex; flex-direction: column; align-items: center;">
+      <canvas id="thumb4" width="28" height="28" style="background: #ffffff; border: 2px solid #f2d27a; width: 56px;  height: 56px;"></canvas>
+      <div style="font-size: 11px; margin-top: 4px; font-weight: bold;">cat</div>
+    </div>
+    <div class="thumb-box" style="display: flex; flex-direction: column; align-items: center;">
+      <canvas id="thumb5" width="28" height="28" style="background: #ffffff; border: 2px solid #f2d27a; width: 56px; height: 56px;"></canvas>
+      <div style="font-size: 11px; margin-top: 4px; font-weight: bold;">bird</div>
     </div>
   </div>
 

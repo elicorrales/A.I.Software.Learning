@@ -15,17 +15,25 @@ const sampleMemoryEl = document.getElementById("sampleMemory");
 const resetModelBtn = document.getElementById("resetModelBtn");
 const resetSampBtn = document.getElementById("resetSampBtn");
 
+const runSamplesBtn = document.getElementById("runSamplesBtn");
+
 canvas.tabIndex = 0;
 
 const LINE_WIDTH= 8;
 const INPUTS = 784;
-const OUTPUTS = 4;
-//const lr = 0.05;
-const lr = 0.005;
+const OUTPUTS = 6;
+//const lr = 0.005;
+//const lr = 0.001;
+const baseLR = 0.001;
+const weightDecay = 0;// 0.00001; // Adjust this: higher = harder to learn, lower = easier
+let currentLR = baseLR;
+const lrDecayRate = 0.95;   // Very slow LR decay per epoch
+
+
 
 let samples = [];
 let pendingSample = null;
-let lastImages = { 0: null, 1: null, 2: null, 3: null };
+let lastImages = { 0: null, 1: null, 2: null, 3: null, 4: null, 5: null };
 
 let W = [];
 let B = [];
@@ -65,7 +73,7 @@ function loadModel() {
   }
   if (data.lastImages) {
     lastImages = data.lastImages;
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < OUTPUTS; i++) {
       if (lastImages[i]) {
         // Pass the whole object {data, type}
         updateThumbUI(i, lastImages[i]);
@@ -133,14 +141,14 @@ function getInputVectorFromPastedImage() {
     const avg = (r + g + b) / 3;
 
     // Convert to 0.0 - 1.0 range
-    // We invert it (1.0 - value) so that "ink" (darker pixels) 
+    // We invert it (1.0 - value) so that "ink" (darker pixels)
     // results in a higher number for the neural network.
     let v = 1.0 - (avg / 255);
 
     // Apply your original contrast logic
     v = v * v;
     if (v < 0.1) v = 0;
-    
+
     input[i] = v;
   }
 
@@ -148,12 +156,12 @@ function getInputVectorFromPastedImage() {
 }
 
 function getInputVector() {
-  // A "smart" check: If the user just clicked without moving much, 
-  // and we were in line mode, it might be a mistake. 
+  // A "smart" check: If the user just clicked without moving much,
+  // and we were in line mode, it might be a mistake.
   // We only treat it as a line drawing if the strokeLength is significant.
   if (currentInputType === "line" && strokeLength < 5) {
     console.log("Input too small, ignoring or defaulting to RGB");
-    return getInputVectorFromPastedImage(); 
+    return getInputVectorFromPastedImage();
   }
 
   if (currentInputType === "pasted") {
@@ -210,6 +218,7 @@ function clearAll() {
 
   for (let i = 0; i < OUTPUTS; i++) {
     digitButtons[i].style.background = "#f5e6a3";
+    digitButtons[i].style.color = "black";
     valueLabels[i].innerText = "";
   }
 }
@@ -227,6 +236,7 @@ function getEpochs() {
   return Math.max(1, parseInt(el.value) || 1);
 }
 
+/*
 function trainOnSamplesOnce() {
   console.log("[EPOCH] training on samples:", samples.length);
 
@@ -252,6 +262,112 @@ function trainOnSamplesOnce() {
 
   console.log("[EPOCH] done");
 }
+*/
+
+function captureThumbState(label) {
+  const snapshotData = canvas.toDataURL();
+  const snapshotType = currentInputType;
+
+  // Store the image and type for later restoration
+  lastImages[label] = {
+    data: snapshotData,
+    type: snapshotType
+  };
+
+  // Physically update the thumbnail canvas in the UI
+  updateThumbUI(label, lastImages[label]);
+}
+
+function runTrainingStep(sample) {
+  const out = forward(sample.input);
+  
+  for (let j = 0; j < OUTPUTS; j++) {
+    const target = (j === sample.label) ? 1 : 0;
+    const error = target - out[j];
+
+    // Update Bias with decaying learning rate
+    B[j] += currentLR * error;
+
+    for (let k = 0; k < 784; k++) {
+      const inputVal = sample.input[k];
+
+      if (inputVal > 0.1) {
+        // ACTIVE ZONE: 
+        // Strengthen the connection using the current learning rate
+        W[j][k] += currentLR * error * inputVal;
+      } else {
+        // INACTIVE ZONE: 
+        // Slowly evaporate weights that aren't being used by this shape.
+        // This is the "Selective Weight Decay"
+        W[j][k] *= (1 - weightDecay);
+      }
+    }
+  }
+}
+
+function showResultFeedback(winningIndex, actualLabel) {
+  const targetThumb = document.getElementById("thumb" + winningIndex);
+  if (!targetThumb) return;
+
+  if (winningIndex !== actualLabel) {
+    // Model is WRONG - Red highlight
+    targetThumb.style.borderColor = "red";
+    targetThumb.style.boxShadow = "0 0 15px red";
+  } else {
+    // Model is RIGHT - Green pulse (using your existing CSS class)
+    targetThumb.classList.add("thumb-winner");
+  }
+
+  // Cleanup after 1.5 seconds
+  setTimeout(() => {
+    targetThumb.classList.remove("thumb-winner");
+    targetThumb.style.borderColor = "";
+    targetThumb.style.boxShadow = "";
+  }, 1500);
+}
+
+async function animateTrainingProgress(input) {
+  drawSampleToCanvas(input);
+  updateStatsMeters();
+  // Giving the browser a 0ms timeout forces a UI repaint
+  await new Promise(resolve => setTimeout(resolve, 0));
+}
+
+async function finalizeTraining(actualLabel) {
+    saveModel();
+    // 1. Force one final stats update after the last weight change
+    updateStatsMeters(); 
+    
+    setUILock(false);
+
+    // 2. Clear canvas and show feedback
+    const lastInput = samples[samples.length - 1].input;
+    const finalOut = forward(lastInput);
+    const winningIndex = finalOut.indexOf(Math.max(...finalOut));
+    
+    showResultFeedback(winningIndex, actualLabel);
+    clearAll(); 
+}
+
+async function animatedTrainingLoop() {
+  const epochs = getEpochs();
+
+  // Optional: reset to base at start of train session if you want 
+  // "fresh" speed every time you click a button.
+  currentLR = baseLR;
+
+  for (let i = 0; i < epochs; i++) {
+    for (let s = 0; s < samples.length; s++) {
+      const sample = samples[s];
+      if (s % 10 === 0) {
+        await animateTrainingProgress(sample.input);
+      }
+      runTrainingStep(sample);
+    }
+    // Decay the learning rate after each epoch
+    currentLR *= lrDecayRate;
+  }
+}
 
 async function train(label) {
   if (pendingSample) {
@@ -259,12 +375,7 @@ async function train(label) {
     const snapshotData = canvas.toDataURL();
     const snapshotType = currentInputType;
 
-    // 2. Update the UI right now so the user sees it "fly" into the thumb
-    lastImages[label] = { 
-      data: snapshotData, 
-      type: snapshotType 
-    };
-    updateThumbUI(label, lastImages[label]);
+    captureThumbState(label);
 
     // 3. Prepare for training
     setUILock(true);
@@ -274,47 +385,14 @@ async function train(label) {
 
     // Optional: Clear the canvas now so the "montage" starts on a fresh slate
     // or leave it to let the first sample of the montage overwrite it.
-    // clearAll(); 
+    // clearAll();
 
     const epochs = getEpochs();
-    
-    // 4. THE ANIMATED TRAINING LOOP (The "Deep Thinking" phase)
-    for (let i = 0; i < epochs; i++) {
-      for (let s = 0; s < samples.length; s++) {
-        const sample = samples[s];
 
-        if (s % 10 === 0) {
-          drawSampleToCanvas(sample.input);
-          await new Promise(resolve => setTimeout(resolve, 0));
-        }
-
-        const out = forward(sample.input);
-        for (let j = 0; j < OUTPUTS; j++) {
-          const target = (j === sample.label) ? 1 : 0;
-          const error = target - out[j];
-          B[j] += lr * error;
-          for (let k = 0; k < 784; k++) {
-            W[j][k] += lr * error * sample.input[k];
-          }
-        }
-      }
-    }
+    await animatedTrainingLoop();
 
     // 5. Finalize
-    saveModel();
-    clearAll(); // Ensure canvas is clean after the flickering stops
-    setUILock(false); 
-
-    // HIGHLIGHT THE RESULT
-    const targetThumb = document.getElementById("thumb" + label);
-    if (targetThumb) {
-      targetThumb.classList.add("thumb-winner");
-      
-      // Remove the highlight after 1.5 seconds
-      setTimeout(() => {
-        targetThumb.classList.remove("thumb-winner");
-      }, 1500);
-    }
+    finalizeTraining(label);
 
   } else {
     console.log("[TRAIN] no pending sample added");
@@ -324,8 +402,8 @@ async function train(label) {
 function setUILock(isLocked) {
   // 1. List all the buttons and inputs to toggle
   const elements = [
-    guessBtn, undoBtn, resetModelBtn, resetSampBtn, 
-    canvas, ...digitButtons, 
+    guessBtn, undoBtn, resetModelBtn, resetSampBtn, runSamplesBtn,
+    canvas, ...digitButtons,
     document.getElementById("epochsInput"),
     document.getElementById("grayBtn"),
     document.getElementById("contrastUp"),
@@ -346,7 +424,7 @@ function setUILock(isLocked) {
   });
 
   // Special handling for canvas drawing
-  drawing = false; 
+  drawing = false;
 }
 
 function updateThumbUI(label, thumbObj) {
@@ -355,7 +433,7 @@ function updateThumbUI(label, thumbObj) {
 
   const tctx = thumbCanvas.getContext("2d");
   const img = new Image();
-  
+
   img.onload = () => {
     tctx.clearRect(0, 0, 28, 28);
     tctx.drawImage(img, 0, 0, 28, 28);
@@ -367,16 +445,16 @@ function updateThumbUI(label, thumbObj) {
   thumbCanvas.onclick = () => {
     const restoreImg = new Image();
     restoreImg.onload = () => {
-      clearAll(); 
+      clearAll();
       ctx.drawImage(restoreImg, 0, 0);
 
       // RESTORE THE FLAG
       currentInputType = thumbObj.type;
-      
-      // If it was a line, set strokeLength to a high number 
+
+      // If it was a line, set strokeLength to a high number
       // so getInputVector() doesn't fall back to RGB logic
-      strokeLength = (thumbObj.type === "line") ? 100 : 0; 
-      
+      strokeLength = (thumbObj.type === "line") ? 100 : 0;
+
       console.log(`Restored as: ${currentInputType}`);
     };
     restoreImg.src = thumbObj.data;
@@ -387,11 +465,11 @@ function updateThumbUI(label, thumbObj) {
 function applyFilter(filterFn) {
   const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const data = imgData.data;
-  
+
   for (let i = 0; i < data.length; i += 4) {
     filterFn(data, i);
   }
-  
+
   ctx.putImageData(imgData, 0, 0);
 }
 
@@ -419,13 +497,54 @@ function drawSampleToCanvas(inputVector) {
   ctx.drawImage(tempCanvas, 0, 0, 280, 280);
 }
 
+function updateStatsMeters() {
+  if (samples.length === 0) return;
+
+  let correctCount = 0;
+  let totalLoss = 0;
+  const eps = 1e-7;
+
+  samples.forEach(s => {
+    const out = forward(s.input);
+    
+    // Find model's top guess
+    let winIdx = 0;
+    let maxVal = -Infinity;
+    for (let i = 0; i < out.length; i++) {
+      if (out[i] > maxVal) {
+        maxVal = out[i];
+        winIdx = i;
+      }
+    }
+
+    if (winIdx === s.label) correctCount++;
+
+    // Categorical Cross-Entropy-ish Loss for the target class
+    let pClamped = Math.min(1 - eps, Math.max(eps, out[s.label]));
+    totalLoss += -Math.log(pClamped);
+  });
+
+  const accuracy = correctCount / samples.length;
+  const avgLoss = totalLoss / samples.length;
+
+  // Update DOM
+  document.getElementById("statAcc").textContent = (accuracy * 100).toFixed(0) + "%";
+  document.getElementById("fillAcc").style.height = (accuracy * 100) + "%";
+
+  document.getElementById("statLoss").textContent = avgLoss.toFixed(2);
+  // Scale loss for the bar: 0 loss = 100% full, 2.0 loss = empty
+  const lossHeight = Math.max(0, (1 - (avgLoss / 2)) * 100);
+  document.getElementById("fillLoss").style.height = lossHeight + "%";
+}
+
+
 
 // --------------------
 // INIT / SETUP (executed code)
 // --------------------
 for (let j = 0; j < OUTPUTS; j++) {
   B[j] = 0;
-  W[j] = new Array(INPUTS).fill(0).map(() => (Math.random() - 0.5) * 0.01);
+  W[j] = new Array(INPUTS).fill(0); // Standard zero initialization
 }
 
 console.log("INIT B:", B);
@@ -467,7 +586,7 @@ canvas.addEventListener("mousemove", (e) => {
   if (!drawing) return;
 
   // Every time the mouse moves while held down, we increase the length
-  strokeLength++; 
+  strokeLength++;
   currentInputType = "line"; // Drawing resets the mode to line
 
   const rect = canvas.getBoundingClientRect();
@@ -480,10 +599,55 @@ canvas.addEventListener("mousemove", (e) => {
   ctx.moveTo(x, y);
 });
 
+// --- DRAG AND DROP HANDLERS ---
+
+// Prevent default behavior (preventing the browser from just opening the image file)
+canvas.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  canvas.style.backgroundColor = "#e0e0e0"; // Optional visual cue
+});
+
+canvas.addEventListener("dragleave", () => {
+  canvas.style.backgroundColor = ""; // Reset visual cue
+});
+
+canvas.addEventListener("drop", (e) => {
+  e.preventDefault();
+  canvas.style.backgroundColor = "";
+
+  const files = e.dataTransfer.files;
+  if (files.length > 0) {
+    const file = files[0];
+    
+    // Check if the dropped file is actually an image
+    if (file.type.startsWith("image/")) {
+      currentInputType = "pasted"; // Use same mode as pasted images
+      strokeLength = 0;
+
+      const img = new Image();
+      const reader = new FileReader();
+
+      reader.onload = (event) => {
+        img.onload = function() {
+          clearAll();
+          // Draw image scaled to fit the 280x280 canvas
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          console.log("Image dropped and loaded.");
+        };
+        img.src = event.target.result;
+      };
+
+      reader.readAsDataURL(file);
+    }
+  }
+});
+
+
+
 window.addEventListener("paste", (e) => {
 
   if (document.activeElement !== canvas) {
-    return; 
+    return;
   }
 
   const items = e.clipboardData.items;
@@ -512,18 +676,18 @@ guessBtn.onclick = () => {
 
   const out = forward(x);
 
-  console.log("[GUESS] stored pendingSample");
-
   for (let i = 0; i < OUTPUTS; i++) {
     const val = out[i];
 
     valueLabels[i].innerText = val.toFixed(2);
 
-    let s = val;
-
-    const shade = Math.floor(255 - (s * 255));
+    const shade = Math.floor(255 - (val * 255));
 
     digitButtons[i].style.background = `rgb(${shade},${shade},${shade})`;
+
+    digitButtons[i].style.color = (shade < 128) ? "white" : "black";
+    
+    digitButtons[i].style.transition = "background 0.3s ease, color 0.3s ease";
   }
 };
 
@@ -533,51 +697,66 @@ undoBtn.onclick = () => {
 
 
 resetModelBtn.onclick = () => {
-  // 1. Re-initialize Weights (W) and Biases (B)
-  for (let j = 0; j < OUTPUTS; j++) {
-    B[j] = 0;
-    // Fill W with small random values again
-    W[j] = new Array(INPUTS).fill(0).map(() => (Math.random() - 0.5) * 0.01);
-  }
 
-  // 2. Clear the drawing area and labels
-  clearAll();
+    W = [];
+    B = [];
+    for (let j = 0; j < OUTPUTS; j++) {
+        B[j] = 0;
+        W[j] = new Array(INPUTS).fill(0);
+    }
+    clearAll();
+    // Reset the UI meters manually
+    document.getElementById("statAcc").textContent = "0%";
+    document.getElementById("fillAcc").style.height = "0%";
+    document.getElementById("statLoss").textContent = "0.00";
+    document.getElementById("fillLoss").style.height = "0%";
+    saveModel(); 
 
-  // 3. Update LocalStorage (preserving the 'samples' array)
-  saveModel();
-
-  console.log("Model weights reset. Samples preserved:", samples.length);
 };
 
 resetSampBtn.onclick = () => {
-  // 1. Clear the samples array
-  samples = [];
+    console.log("Resetting Samples...");
+    samples = []; // Clear the global variable
+    updateSampleStats();
+    saveModel(); // Overwrite the JSON in storage with the empty array
+    console.log("Samples Reset and Saved.");
+};
 
-  // 2. Update the UI labels (Samples: 0, Memory: 0 KB)
-  updateSampleStats();
+runSamplesBtn.onclick = async () => {
+  if (samples.length === 0) {
+    console.log("No samples to run.");
+    return;
+  }
 
-  // 3. Save the now-empty samples list to LocalStorage (preserves W and B)
+  // Lock UI to prevent interruptions during the batch run
+  setUILock(true);
+
+  // Run the existing training loop logic
+  await animatedTrainingLoop();
+
+  // Save the state and unlock
   saveModel();
-
-  console.log("All training samples cleared. Model weights preserved.");
+  updateStatsMeters();
+  setUILock(false);
+  clearAll();
+  
+  console.log("Finished running all stored samples.");
 };
 
 document.getElementById("clearThumbsBtn").onclick = () => {
-  // 1. Wipe the storage object
-  lastImages = { 0: null, 1: null, 2: null, 3: null };
-
-  // 2. Clear the visual thumbnail canvases
-  for (let i = 0; i < 4; i++) {
-    const tCanvas = document.getElementById("thumb" + i);
-    if (tCanvas) {
-      const tctx = tCanvas.getContext("2d");
-      tctx.clearRect(0, 0, 28, 28);
-      tCanvas.onclick = null; // Remove the "restore" click event
+    console.log("Resetting Thumbnails...");
+    // Reset the global object
+    lastImages = { 0: null, 1: null, 2: null, 3: null, 4: null, 5: null };
+    
+    for (let i = 0; i < OUTPUTS; i++) {
+        const tCanvas = document.getElementById("thumb" + i);
+        if (tCanvas) {
+            tCanvas.getContext("2d").clearRect(0, 0, 28, 28);
+            tCanvas.onclick = null;
+        }
     }
-  }
-
-  // 3. Update localStorage so they stay gone on refresh
-  saveModel();
+    saveModel();
+    console.log("Thumbnails Reset and Saved.");
 };
 
 // 1. Grayscale

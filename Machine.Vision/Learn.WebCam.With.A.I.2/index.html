@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Device Diagnostics | Camera Probe</title>
+    <style>
+        :root {
+            --bg-color: #1e293b;
+            --card-bg: #ffffff;
+            --text-main: #f8fafc;
+            --text-muted: #64748b;
+            --accent: #3b82f6;
+            --error: #ef4444;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .container {
+            background: var(--card-bg);
+            color: #1e293b;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            width: 100%;
+            max-width: 500px;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 1.25rem;
+            margin-bottom: 1.5rem;
+            color: var(--bg-color);
+            border-bottom: 2px solid #f1f5f9;
+            padding-bottom: 1rem;
+        }
+
+        #status-label {
+            display: block;
+            margin-top: 1rem;
+            padding: 1rem;
+            background: #f1f5f9;
+            border-radius: 4px;
+            font-family: 'Cascadia Code', 'Courier New', monospace;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            text-align: left;
+            min-height: 50px;
+        }
+
+        .error-text { color: var(--error); font-weight: bold; }
+        .success-text { color: #10b981; font-weight: bold; }
+
+        button {
+            background-color: var(--accent);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: opacity 0.2s;
+        }
+
+        button:hover { opacity: 0.9; }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: wait;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- DIAGNOSTIC VIEW -->
+    <div class="container" id="diagnostic-view">
+        <h1>Hardware Diagnostic Tool</h1>
+        <button id="main-btn" onclick="checkCameras()">Detect Webcams</button>
+        <div id="status-label">System idle. Ready to scan...</div>
+    </div>
+
+    <!-- DASHBOARD VIEW -->
+    <div class="container" id="dashboard-view" style="display:none;">
+        <h1>Future Dashboard</h1>
+    </div>
+
+    <script>
+        async function checkCameras() {
+            const statusLabel = document.getElementById('status-label');
+            const mainBtn = document.getElementById('main-btn');
+            
+            mainBtn.disabled = true;
+            statusLabel.innerHTML = "Requesting camera access...";
+
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                statusLabel.innerHTML = "<span class='error-text'>Error:</span> Media access not supported.";
+                mainBtn.disabled = false;
+                return;
+            }
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                stream.getTracks().forEach(track => track.stop());
+
+                statusLabel.innerHTML = "<span class='success-text'>Access Granted:</span> Camera hardware is active and recognized.";
+                
+                // CHANGE: swap button behavior
+                mainBtn.innerText = "Go To Dashboard";
+                mainBtn.onclick = goToDashboard;
+
+            } catch (err) {
+                statusLabel.innerHTML = `<span class='error-text'>Error:</span> ${err.message}`;
+            } finally {
+                mainBtn.disabled = false;
+            }
+        }
+
+        function goToDashboard() {
+            document.getElementById('diagnostic-view').style.display = 'none';
+            document.getElementById('dashboard-view').style.display = 'block';
+        }
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            const statusLabel = document.getElementById('status-label');
+            const mainBtn = document.getElementById('main-btn');
+
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(d => d.kind === 'videoinput');
+
+                if (videoDevices.length === 0) {
+                    statusLabel.innerHTML = "No camera hardware detected.";
+                } else if (videoDevices.every(d => d.label === "")) {
+                    statusLabel.innerHTML = `System ready. ${videoDevices.length} camera(s) detected. Click above to enable access.`;
+                    mainBtn.innerText = "Unlock Cameras";
+                } else {
+                    statusLabel.innerHTML = `${videoDevices.length} camera(s) authorized and ready for use.`;
+                }
+            } catch (err) {
+                statusLabel.innerHTML = "System standby.";
+            }
+        });
+    </script>
+</body>
+</html>
