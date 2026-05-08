@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Device Diagnostics | Camera Probe</title>
+    <style>
+        :root {
+            --bg-color: #1e293b;
+            --card-bg: #ffffff;
+            --text-main: #f8fafc;
+            --text-muted: #64748b;
+            --accent: #3b82f6;
+            --error: #ef4444;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            padding: 0 4rem;
+        }
+
+        .container {
+            background: var(--card-bg);
+            color: #1e293b;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            /*width:75%;*/
+            /*max-width: 900px;*/
+            text-align: center;
+            width: min(95vw, 1400px);
+            max-width: none;
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            margin-bottom: 1.5rem;
+            color: var(--bg-color);
+            border-bottom: 2px solid #f1f5f9;
+            padding-bottom: 1rem;
+        }
+
+        #status-label {
+            display: block;
+            margin-top: 1rem;
+            padding: 1rem;
+            background: #f1f5f9;
+            border-radius: 4px;
+            font-family: 'Cascadia Code', 'Courier New', monospace;
+            font-size: 1.5rem;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            text-align: left;
+            min-height: 50px;
+        }
+
+        .error-text { color: var(--error); font-weight: bold; }
+        .success-text { color: #10b981; font-weight: bold; }
+
+        button {
+            background-color: var(--accent);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 1.5rem;
+            transition: opacity 0.2s;
+        }
+
+        button:hover { opacity: 0.9; }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: wait;
+        }
+
+        .label {
+            margin-top: 1rem;
+            padding: 0.75rem 1.5rem;
+            font-weight: 600;
+            font-size: 1.5rem;
+            color: #1e293b;
+        }
+        #dashboard-view .media-row {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            align-items: flex-start;
+            margin-top: 1rem;
+            flex-wrap: nowrap;
+        }
+
+        .media-box {
+            flex: 1;
+            max-width: none;
+            min-width: 0;
+            aspect-ratio: 4 / 3;
+        }
+
+        .media-box video,
+        .media-box canvas {
+            width: 100%;
+            height: 100%;
+            border-radius: 6px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- DIAGNOSTIC VIEW -->
+    <div class="container" id="diagnostic-view">
+        <h1>Hardware Diagnostic Tool</h1>
+        <button id="main-btn" onclick="checkCameras()">Detect Webcams</button>
+        <div id="status-label">System idle. Ready to scan...</div>
+    </div>
+
+    <!-- DASHBOARD VIEW -->
+    <div class="container" id="dashboard-view" style="display:none;">
+        <h1>Dashboard</h1>
+
+        <div class="media-row">
+
+            <div class="media-box">
+                <video id="cam" autoplay playsinline style="background:#0b1220;"></video>
+                <div class="label">Live</div>
+            </div>
+            <div class="media-box" style="display:flex; flex-direction:column; align-items:center;">
+                <canvas id="snapBackground" style="background:#2b2f3a;"></canvas>
+                <button style="margin-top:1rem;" onclick="takeSnapshot('background')">
+                    Background
+                </button>
+            </div>
+
+            <div class="media-box" style="display:flex; flex-direction:column; align-items:center;">
+                <canvas id="snapFrame" style="background:#2b2f3a;"></canvas>
+                <div class="label">Threshold</div>
+            </div>
+            <div class="media-box" style="display:flex; flex-direction:column; align-items:center;">
+                <canvas id="bkgVsSnapped" style="background:#2b2f3a;"></canvas>
+                <div class="label">Diff 1</div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        const DIFFERENCES = 900000;   //900000
+
+        let activeStream = null;
+        let backgroundPixels = null;
+        const compareCanvas = document.createElement('canvas');
+        const compareCtx = compareCanvas.getContext('2d');
+        let liveCompareRunning = false;
+
+
+        function takeSnapshot(which) {
+          let canvas;
+          if (which === 'background') {
+            canvas = document.getElementById('snapBackground');
+          }
+          else {
+            canvas = document.getElementById('snapFrame');
+          }
+
+          const video = document.getElementById('cam');
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+          if (which === 'background') {
+            backgroundPixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          }
+        }
+
+        function startLiveCompare() {
+          if (liveCompareRunning) return;
+          liveCompareRunning = true;
+
+          const video = document.getElementById('cam');
+          const snapFrame = document.getElementById('snapFrame');
+          const snapFrameCtx = snapFrame.getContext('2d');
+
+          function loop() {
+            if (video.readyState >= 2 && snapFrame.width > 0 && snapFrame.height > 0) {
+              if (compareCanvas.width !== snapFrame.width || compareCanvas.height !== snapFrame.height) {
+                compareCanvas.width = snapFrame.width;
+                compareCanvas.height = snapFrame.height;
+              }
+
+              compareCtx.drawImage(video, 0, 0, compareCanvas.width, compareCanvas.height);
+              const currentPixels = compareCtx.getImageData(0, 0, compareCanvas.width, compareCanvas.height);
+
+              let shouldDraw = !backgroundPixels;
+
+              if (backgroundPixels && backgroundPixels.data.length === currentPixels.data.length) {
+                let diffCount = 0; // NEW
+                const a = currentPixels.data;
+                const b = backgroundPixels.data;
+
+                for (let i = 0; i < a.length; i++) {
+                  if (a[i] !== b[i]) {
+                    diffCount++;
+                    if (diffCount > DIFFERENCES) break; // SMALL THRESHOLD
+                  }
+                }
+                shouldDraw = diffCount > DIFFERENCES; // NEW
+              }
+              else if (backgroundPixels) {
+                shouldDraw = true;
+              }
+
+              if (shouldDraw) {
+                snapFrameCtx.drawImage(video, 0, 0, snapFrame.width, snapFrame.height);
+              } else {
+                snapFrameCtx.clearRect(0, 0, snapFrame.width, snapFrame.height);
+              }
+            }
+
+            requestAnimationFrame(loop);
+          }
+
+          requestAnimationFrame(loop);
+        }
+
+        async function startDashboardCamera() {
+          const video = document.getElementById('cam');
+          if (!activeStream) {
+            activeStream = await navigator.mediaDevices.getUserMedia({ video: true });
+          }
+          video.srcObject = activeStream;
+          video.onloadedmetadata = () => {
+            video.play();
+            requestAnimationFrame(() => {
+              const w = video.videoWidth;
+              const h = video.videoHeight;
+              // force video element size
+              video.width = w;
+              video.height = h;
+              // force canvases + compare buffer to match
+              document.getElementById('snapBackground').width = w;
+              document.getElementById('snapBackground').height = h;
+              document.getElementById('snapFrame').width = w;
+              document.getElementById('snapFrame').height = h;
+              document.getElementById('bkgVsSnapped').width = w;
+              document.getElementById('bkgVsSnapped').height = h;
+              compareCanvas.width = w;
+              compareCanvas.height = h;
+            });
+          };
+        }
+
+
+        async function checkCameras() {
+            const statusLabel = document.getElementById('status-label');
+            const mainBtn = document.getElementById('main-btn');
+
+            mainBtn.disabled = true;
+            statusLabel.innerHTML = "Requesting camera access...";
+
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                statusLabel.innerHTML = "<span class='error-text'>Error:</span> Media access not supported.";
+                mainBtn.disabled = false;
+                return;
+            }
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                activeStream = stream;
+
+                statusLabel.innerHTML = "<span class='success-text'>Access Granted:</span> Camera hardware is active and recognized.";
+
+                // CHANGE: swap button behavior
+                mainBtn.innerText = "Go To Dashboard";
+                mainBtn.onclick = goToDashboard;
+
+            } catch (err) {
+                statusLabel.innerHTML = `<span class='error-text'>Error:</span> ${err.message}`;
+            } finally {
+                mainBtn.disabled = false;
+            }
+        }
+
+        function goToDashboard() {
+          document.getElementById('diagnostic-view').style.display = 'none';
+          document.getElementById('dashboard-view').style.display = 'block';
+          startDashboardCamera();
+          startLiveCompare();
+          requestAnimationFrame(() => {
+            requestAnimationFrame(resizeCanvases);
+          });
+        }
+
+        function resizeCanvases() {
+          const canvas1 = document.getElementById('snapFrame');
+          const canvas2 = document.getElementById('snapBackground');
+          const canvas3 = document.getElementById('bkgVsSnapped');
+          const rect1 = canvas1.getBoundingClientRect();
+          const rect2 = canvas2.getBoundingClientRect();
+          const rect3 = canvas3.getBoundingClientRect();
+          canvas1.width = rect1.width;
+          canvas1.height = rect1.height;
+          canvas1.style.background = "#2b2f3a";
+          canvas2.width = rect2.width;
+          canvas2.height = rect2.height;
+          canvas2.style.background = "#2b2f3a";
+          canvas3.width = rect3.width;
+          canvas3.height = rect3.height;
+          canvas3.style.background = "#2b2f3a";
+
+          backgroundPixels = null;
+
+        }
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            const statusLabel = document.getElementById('status-label');
+            const mainBtn = document.getElementById('main-btn');
+
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(d => d.kind === 'videoinput');
+
+                if (videoDevices.length === 0) {
+                    statusLabel.innerHTML = "No camera hardware detected.";
+                } else if (videoDevices.every(d => d.label === "")) {
+                    statusLabel.innerHTML = `System ready. ${videoDevices.length} camera(s) detected. Click above to enable access.`;
+                    mainBtn.innerText = "Unlock Cameras";
+                } else {
+                    statusLabel.innerHTML = `${videoDevices.length} camera(s) authorized and ready for use.`;
+                }
+            } catch (err) {
+                statusLabel.innerHTML = "System standby.";
+            }
+
+            requestAnimationFrame(() => {
+              requestAnimationFrame(resizeCanvases);
+            });
+
+            window.addEventListener('resize', resizeCanvases);
+        });
+    </script>
+</body>
+</html>

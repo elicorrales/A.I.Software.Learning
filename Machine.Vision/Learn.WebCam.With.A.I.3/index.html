@@ -79,6 +79,29 @@
             opacity: 0.5;
             cursor: wait;
         }
+
+#dashboard-view .media-row {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    align-items: flex-start;
+    margin-top: 1rem;
+    flex-wrap: nowrap; /* IMPORTANT: stop stacking */
+}
+
+.media-box {
+    flex: 1;
+    max-width: 320px;
+    aspect-ratio: 4 / 3;
+}
+
+.media-box video,
+.media-box canvas {
+    width: 100%;
+    height: 100%;
+    border-radius: 6px;
+}
+
     </style>
 </head>
 <body>
@@ -92,10 +115,45 @@
 
     <!-- DASHBOARD VIEW -->
     <div class="container" id="dashboard-view" style="display:none;">
-        <h1>Future Dashboard</h1>
+        <h1>Dashboard</h1>
+
+        <div class="media-row">
+
+            <div class="media-box">
+                <video id="cam" autoplay playsinline style="background:#0b1220;"></video>
+            </div>
+
+            <div class="media-box" style="display:flex; flex-direction:column; align-items:center;">
+                <canvas id="snapshotCanvas" style="background:#2b2f3a;"></canvas>
+
+                <button style="margin-top:1rem;" onclick="takeSnapshot()">
+                    Snapshot
+                </button>
+
+            </div>
+        </div>
     </div>
 
     <script>
+
+        let activeStream = null;
+
+
+        function takeSnapshot() {
+          const video = document.getElementById('cam');
+          const canvas = document.getElementById('snapshotCanvas');
+          const ctx = canvas.getContext('2d');
+
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        }
+
+        async function startDashboardCamera() {
+          const video = document.getElementById('cam');
+          activeStream = await navigator.mediaDevices.getUserMedia({ video: true });
+          video.srcObject = activeStream;
+        }
+
+
         async function checkCameras() {
             const statusLabel = document.getElementById('status-label');
             const mainBtn = document.getElementById('main-btn');
@@ -129,6 +187,18 @@
         function goToDashboard() {
           document.getElementById('diagnostic-view').style.display = 'none';
           document.getElementById('dashboard-view').style.display = 'block';
+          startDashboardCamera();
+          // IMPORTANT: run AFTER layout is visible
+          requestAnimationFrame(resizeCanvas);
+        }
+
+        function resizeCanvas() {
+          const canvas = document.getElementById('snapshotCanvas');
+          const rect = canvas.getBoundingClientRect();
+
+          canvas.width = rect.width;
+          canvas.height = rect.height;
+          canvas.style.background = "#2b2f3a";
         }
 
         window.addEventListener('DOMContentLoaded', async () => {
@@ -150,6 +220,12 @@
             } catch (err) {
                 statusLabel.innerHTML = "System standby.";
             }
+
+            const canvas = document.getElementById('snapshotCanvas');
+
+
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
         });
     </script>
 </body>
