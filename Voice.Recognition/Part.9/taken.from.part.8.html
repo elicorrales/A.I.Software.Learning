@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Live Microphone Meter</title>
+
+<style>
+    * {
+        box-sizing: border-box;
+    }
+
+    body {
+        margin: 0;
+        height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-family: Arial, Helvetica, sans-serif;
+        background:
+            linear-gradient(135deg, #0f172a 0%, #111827 30%, #1e3a8a 70%, #0f766e 100%);
+        overflow: hidden;
+        color: white;
+    }
+
+    .panel {
+        width: 1100px;
+        padding: 30px;
+        border-radius: 24px;
+        background: rgba(255,255,255,0.08);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(255,255,255,0.12);
+        box-shadow:
+            0 0 30px rgba(0,0,0,0.4),
+            0 0 80px rgba(59,130,246,0.15);
+        text-align: center;
+        display: flex;
+        gap: 40px;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+    }
+
+    h1 {
+        margin-top: 0;
+        font-size: 26px;
+        letter-spacing: 1px;
+        position: absolute;
+        top: 20px;
+    }
+
+    .status {
+        position: absolute;
+        top: 60px;
+        font-size: 14px;
+        color: #cbd5e1;
+    }
+
+    .canvas-wrap {
+        width: 600px;
+        height: 360px;
+        border-radius: 24px;
+        background: #000000;
+        border: 1px solid rgba(255,255,255,0.12);
+        overflow: hidden;
+    }
+
+    canvas {
+        width: 600px;
+        height: 360px;
+        display: block;
+    }
+
+    .meter-wrap {
+        width: 90px;
+        height: 360px;
+        padding: 10px;
+        border-radius: 40px;
+        background: rgba(255,255,255,0.08);
+        border: 1px solid rgba(255,255,255,0.12);
+        position: relative;
+        overflow: hidden;
+    }
+
+    .meter {
+        position: absolute;
+        bottom: 10px;
+        left: 10px;
+        width: calc(100% - 20px);
+        height: 0%;
+        border-radius: 30px;
+        background:
+            linear-gradient(
+                to top,
+                #22c55e 0%,
+                #eab308 60%,
+                #ef4444 100%
+            );
+
+        box-shadow:
+            0 0 20px rgba(255,255,255,0.2),
+            0 0 30px rgba(34,197,94,0.3);
+    }
+
+    .meter.maxed {
+        background: #ff0000;
+        box-shadow:
+            0 0 20px rgba(255,255,255,0.4),
+            0 0 40px rgba(255,0,0,0.9);
+    }
+
+    .meter-bottom {
+        position: absolute;
+        bottom: 12px;
+        left: 0;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .label {
+        font-size: 18px;
+        font-weight: bold;
+        color: #f8fafc;
+    }
+
+    #calBtn, .train-btn, #freezeBtn {
+        padding: 6px 10px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 12px;
+        background: #1f2937;
+        color: white;
+        border: 1px solid rgba(255,255,255,0.25);
+    }
+
+    #calBtn:hover, .train-btn:hover, #freezeBtn:hover {
+        background: #374151;
+    }
+
+    #freezeBtn.active {
+        background: #ef4444;
+        box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+    }
+
+    .train-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .train-btn {
+        width: 140px;
+        height: 40px;
+        font-size: 14px;
+        text-align: left;
+    }
+
+    .message-area {
+        position: absolute;
+        bottom: -150px;
+        left: 0;
+        width: 100%;
+        background: rgba(0,0,0,0.3);
+        padding: 15px;
+        border-radius: 12px;
+        font-size: 12px;
+        text-align: left;
+        line-height: 1.4;
+        color: #94a3b8;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 5px 20px;
+    }
+
+    .modal {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.7);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+    }
+
+    .modal-box {
+        width: 320px;
+        padding: 24px;
+        border-radius: 18px;
+        background: #111827;
+        border: 1px solid rgba(255,255,255,0.12);
+        text-align: center;
+    }
+
+    .modal-box p {
+        margin: 0 0 20px;
+        line-height: 1.5;
+        color: #e5e7eb;
+    }
+
+    .modal-box button {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 10px;
+        cursor: pointer;
+        font-size: 16px;
+    }
+
+    .spinner {
+        width: 48px;
+        height: 48px;
+        margin: 0 auto 20px;
+        border: 5px solid rgba(255,255,255,0.2);
+        border-top-color: white;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    audio {
+        display: none;
+    }
+</style>
+</head>
+
+<body>
+
+<div class="panel">
+    <h1>MIC INPUT</h1>
+
+    <div class="status" id="status">
+        Requesting microphone access...
+    </div>
+
+    <div class="canvas-wrap">
+        <canvas id="wave"></canvas>
+    </div>
+
+    <div class="meter-wrap">
+        <div class="meter" id="meter"></div>
+
+        <div class="meter-bottom">
+            <div class="label" id="percent">0%</div>
+            <button id="calBtn">Cal</button>
+        </div>
+    </div>
+
+    <div class="train-stack">
+        <button class="train-btn" id="btn1">1 - this is a test</button>
+        <button class="train-btn" id="btn2">2 - hello</button>
+        <button class="train-btn" id="btn3">3 - goodbye</button>
+        <button class="train-btn" id="btn4">4 - yes</button>
+        <button class="train-btn" id="btn5">5 - no</button>
+        <button class="train-btn" id="btn6">6 - (noise)</button>
+        <button id="freezeBtn">Freeze</button>
+    </div>
+
+    <div class="message-area" id="features">
+        <div>Max Peak: -</div>
+        <div>Total Time: -</div>
+        <div>50% Peak Samples: -</div>
+        <div>Quiet Portions: -</div>
+        <div>Active Samples: -</div>
+        <div>-</div>
+        <div>Zero Crossings: -</div>
+        <div>-</div>
+    </div>
+
+</div>
+
+<div class="modal" id="introModal" style="display:none;">
+    <div class="modal-box">
+        <p>
+            A short configuration test will determine the baseline level
+            of quiet incoming audio.
+            <br><br>
+            Calibration begins when you press OK.
+        </p>
+
+        <button id="okButton">OK</button>
+    </div>
+</div>
+
+<div class="modal" id="loadingModal" style="display:none;">
+    <div class="modal-box">
+        <div class="spinner"></div>
+
+        <p>Please wait...</p>
+    </div>
+</div>
+
+<audio id="audio" autoplay muted></audio>
+
+<script>
+
+//-------------------------------
+// constants, globals, file scope
+//-------------------------------
+
+// NEW: Timing configuration
+const SPEECH_TIMEOUT_MS = 400;   // How long to wait before clearing the screen
+const CANVAS_DURATION_MS = 3000; // Time in ms to reach the right edge
+
+const meter = document.getElementById("meter");
+
+const percent = document.getElementById("percent");
+
+const statusText = document.getElementById("status");
+
+const audio = document.getElementById("audio");
+
+const canvas = document.getElementById("wave");
+
+const ctx = canvas.getContext("2d");
+
+const introModal =
+    document.getElementById("introModal");
+
+const loadingModal =
+    document.getElementById("loadingModal");
+
+const okButton =
+    document.getElementById("okButton");
+
+const calBtn =
+    document.getElementById("calBtn");
+
+const freezeBtn = document.getElementById("freezeBtn");
+const featuresArea = document.getElementById("features");
+
+let analyser;
+
+let dataArray;
+
+let waveArray;
+
+let quietBaseline = 0;
+
+let calibrated = false;
+
+let xPos = 0;
+
+// NEW: Track exactly when a sentence started
+let lastSpeechTime = 0;
+let speechStartTime = 0;
+
+let isFrozen = false;
+let speechBuffer = [];
+let sampleRate = 0;
+let isRecording = false;
+
+
+//-------------------------------
+// canvas setup
+//-------------------------------
+
+canvas.width = 600;
+canvas.height = 360;
+
+ctx.fillStyle = "#000000";
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+
+//-------------------------------
+// function definitions
+//-------------------------------
+
+// Added: Pure raw volume without history or calibration
+function getUncalibratedVolume() {
+
+    analyser.getByteTimeDomainData(dataArray);
+
+    let sumSquares = 0;
+
+    for (let i = 0; i < dataArray.length; i++) {
+
+        const sample =
+            (dataArray[i] - 128) / 128;
+
+        sumSquares += sample * sample;
+    }
+
+    const rms = Math.sqrt(
+        sumSquares / dataArray.length
+    );
+
+    return Math.min(
+        100,
+        Math.round(rms * 300)
+    );
+}
+
+function getVolume() {
+
+    analyser.getByteTimeDomainData(dataArray);
+
+    let sumSquares = 0;
+
+    for (let i = 0; i < dataArray.length; i++) {
+
+        const sample =
+            (dataArray[i] - 128) / 128;
+
+        sumSquares += sample * sample;
+    }
+
+    const rms = Math.sqrt(
+        sumSquares / dataArray.length
+    );
+
+    return Math.min(
+        100,
+        Math.round(rms * 300)
+    );
+}
+
+
+// Refactored: Uses time-based logic to map 3 seconds to canvas width
+function drawWaveform() {
+    if (isFrozen) {
+        requestAnimationFrame(drawWaveform);
+        return;
+    }
+
+    analyser.getByteTimeDomainData(waveArray);
+
+    const rawVolume = getVolume();
+
+    const volume =
+        Math.max(0, rawVolume - quietBaseline);
+
+    const now = performance.now();
+
+    // speech detected
+    if (volume > 0) {
+
+        // Check if this is the start of a new phrase
+        if (now - lastSpeechTime >= SPEECH_TIMEOUT_MS) {
+
+            // Reset start time and clear canvas
+            speechStartTime = now;
+            speechBuffer = [];
+            isRecording = true;
+
+            ctx.fillStyle = "#000000";
+
+            ctx.fillRect(
+                0,
+                0,
+                canvas.width,
+                canvas.height
+            );
+        }
+
+        lastSpeechTime = now;
+    }
+
+    // Determine if we should be drawing based on recent speech
+    const speechActive =
+        now - lastSpeechTime < SPEECH_TIMEOUT_MS;
+
+    if (speechActive) {
+
+        const midY = canvas.height / 2;
+
+        // Capture data into buffer
+        speechBuffer.push(new Uint8Array(waveArray));
+
+        // Calculate horizontal position based on time elapsed since start of phrase
+        // (Elapsed Time / Total Duration) * Canvas Width
+        const elapsed = now - speechStartTime;
+        xPos = (elapsed / CANVAS_DURATION_MS) * canvas.width;
+
+        // Only draw if we haven't exceeded the right edge
+        if (xPos < canvas.width) {
+
+            let v =
+                (waveArray[0] - 128) / 128;
+
+            const y = midY + v * midY;
+
+            ctx.fillStyle = "#ffff00";
+
+            ctx.fillRect(xPos, y, 2, 2);
+        }
+    } else {
+        if (isRecording) {
+            isRecording = false;
+            processSpeechBuffer();
+        }
+    }
+
+    requestAnimationFrame(drawWaveform);
+}
+
+
+function updateMeter() {
+    if (isFrozen) {
+        requestAnimationFrame(updateMeter);
+        return;
+    }
+
+    const rawVolume = getVolume();
+
+    const volume = Math.max(
+        0,
+        rawVolume - quietBaseline
+    );
+
+    meter.style.height = volume + "%";
+
+    percent.textContent = volume + "%";
+
+    if (rawVolume >= 100) {
+
+        meter.classList.add("maxed");
+    }
+    else {
+
+        meter.classList.remove("maxed");
+    }
+
+    requestAnimationFrame(updateMeter);
+}
+
+
+async function calibrateQuietLevel() {
+
+    introModal.style.display = "none";
+
+    loadingModal.style.display = "flex";
+
+    // --- ADD THIS PORTION ---
+    // Wait 500ms to let the sound of the mouse click fade away
+    await new Promise(resolve => setTimeout(resolve, 400));
+    // ------------------------
+
+    const samples = [];
+
+    const start = performance.now();
+
+    while (performance.now() - start < 3000) {
+
+        // Use the raw uncalibrated volume for the baseline test
+        samples.push(getUncalibratedVolume());
+
+        await new Promise(resolve =>
+            setTimeout(resolve, 50)
+        );
+    }
+
+    const total =
+        samples.reduce((a, b) => a + b, 0);
+
+    // this one does AVERAGE noise
+    //quietBaseline = Math.round(total / samples.length);
+
+    //this one does PEAK
+    quietBaseline = Math.max(...samples);
+
+    loadingModal.style.display = "none";
+
+    calibrated = true;
+
+    updateMeter();
+
+    drawWaveform();
+}
+
+
+async function startMic() {
+
+    try {
+
+        const stream =
+            await navigator.mediaDevices.getUserMedia({
+                audio: true
+            });
+
+        statusText.textContent =
+            "Microphone connected";
+
+        audio.srcObject = stream;
+
+        const audioContext = new AudioContext();
+        sampleRate = audioContext.sampleRate;
+
+        const source =
+            audioContext.createMediaStreamSource(stream);
+
+        analyser =
+            audioContext.createAnalyser();
+
+        analyser.fftSize = 256;
+
+        source.connect(analyser);
+
+        dataArray =
+            new Uint8Array(analyser.frequencyBinCount);
+
+        waveArray =
+            new Uint8Array(analyser.fftSize);
+
+        const waitForAudio = () => {
+
+            // Use raw volume to detect if the mic is working at all
+            const volume = getUncalibratedVolume();
+
+            if (volume > 0) {
+
+                introModal.style.display = "flex";
+
+                return;
+            }
+
+            requestAnimationFrame(waitForAudio);
+        };
+
+        waitForAudio();
+    }
+    catch (err) {
+
+        statusText.textContent =
+            "Microphone access denied";
+
+        console.error(err);
+    }
+}
+
+function processSpeechBuffer() {
+    if (speechBuffer.length === 0) return;
+
+    // Flatten buffer to single array of samples (-1.0 to 1.0)
+    let flatSamples = [];
+    for (let chunk of speechBuffer) {
+        for (let i = 0; i < chunk.length; i++) {
+            flatSamples.push((chunk[i] - 128) / 128);
+        }
+    }
+
+    // Trim trailing silence (SPEECH_TIMEOUT_MS worth)
+    const samplesToTrim = Math.floor((SPEECH_TIMEOUT_MS / 1000) * sampleRate);
+    flatSamples = flatSamples.slice(0, Math.max(0, flatSamples.length - samplesToTrim));
+    if (flatSamples.length === 0) return;
+
+    const intervalSize = Math.floor(0.25 * sampleRate);
+    let maxPeak = 0;
+    let crossCount = 0;
+    let highPeakCount = 0;
+    let activeCount = 0;
+    let quietPortions = 0;
+    let inQuiet = false;
+
+    // Calculate Global Max Peak first
+    for (let s of flatSamples) {
+        let abs = Math.abs(s);
+        if (abs > maxPeak) maxPeak = abs;
+    }
+
+    // Analysis loop
+    for (let i = 0; i < flatSamples.length; i++) {
+        let s = flatSamples[i];
+        let abs = Math.abs(s);
+
+        // Zero crossings
+        if (i > 0 && ((flatSamples[i-1] >= 0 && s < 0) || (flatSamples[i-1] <= 0 && s > 0))) {
+            crossCount++;
+        }
+
+        // Peaks
+        if (abs > (maxPeak * 0.5)) highPeakCount++;
+        
+        // Quiet vs Active (using calibration baseline scaled to -1 to 1 range ~ approx)
+        let quietThreshold = quietBaseline / 300; 
+        if (abs > quietThreshold) {
+            activeCount++;
+            inQuiet = false;
+        } else {
+            if (!inQuiet) {
+                quietPortions++;
+                inQuiet = true;
+            }
+        }
+    }
+
+    const totalTime = (flatSamples.length / sampleRate).toFixed(2);
+
+    featuresArea.innerHTML = `
+        <div>Max Peak: ${maxPeak.toFixed(3)}</div>
+        <div>Total Time: ${totalTime}s</div>
+        <div>50% Peak Samples: ${highPeakCount}</div>
+        <div>Quiet Portions: ${quietPortions}</div>
+        <div>Active Samples: ${activeCount}</div>
+        <div>-</div>
+        <div>Zero Crossings: ${crossCount}</div>
+        <div>-</div>
+    `;
+}
+
+
+//-------------------------------
+// event handlers
+//-------------------------------
+
+okButton.addEventListener(
+    "click",
+    calibrateQuietLevel
+);
+
+calBtn.addEventListener(
+    "click",
+    calibrateQuietLevel
+);
+
+freezeBtn.addEventListener("click", () => {
+    isFrozen = !isFrozen;
+    freezeBtn.classList.toggle("active", isFrozen);
+    freezeBtn.textContent = isFrozen ? "Unfreeze" : "Freeze";
+});
+
+
+//-------------------------------
+// execute now
+//-------------------------------
+
+startMic();
+
+</script>
+
+</body>
+</html>
