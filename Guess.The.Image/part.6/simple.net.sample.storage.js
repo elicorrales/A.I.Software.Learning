@@ -236,34 +236,6 @@ function getEpochs() {
   return Math.max(1, parseInt(el.value) || 1);
 }
 
-/*
-function trainOnSamplesOnce() {
-  console.log("[EPOCH] training on samples:", samples.length);
-
-  for (let s = 0; s < samples.length; s++) {
-    const sample = samples[s];
-
-    const x = sample.input;
-    const label = sample.label;
-
-    const out = forward(x);
-
-    for (let j = 0; j < OUTPUTS; j++) {
-      const target = (j === label) ? 1 : 0;
-      const error = target - out[j];
-
-      B[j] += lr * error;
-
-      for (let i = 0; i < 784; i++) {
-        W[j][i] += lr * error * x[i];
-      }
-    }
-  }
-
-  console.log("[EPOCH] done");
-}
-*/
-
 function captureThumbState(label) {
   const snapshotData = canvas.toDataURL();
   const snapshotType = currentInputType;

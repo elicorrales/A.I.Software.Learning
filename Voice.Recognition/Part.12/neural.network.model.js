@@ -11,8 +11,10 @@ let model = {
     epochs: 1,
     learningRate: 0.001, // This is your baseLR
     decayRate: 0.95,     // How much to slow down each epoch
-    weights: [], 
-    biases: []   
+    weights: [],
+    biases: [],
+    latestInputFeatures: null,
+    samplesHistory: []
 };
 
 /**
@@ -26,6 +28,7 @@ function initModel(m, inputs, outputs, passes, lr = 0.001, decay = 0.95) {
     m.epochs = passes;
     m.learningRate = lr;
     m.decayRate = decay;
+    m.samplesHistory = [];
 
     // Initialize biases to zero (one for every output)
     m.biases = new Array(outputs).fill(0);
@@ -62,6 +65,11 @@ function resetWeights(m) {
  * Formula: (Input * Weight) + Bias
  */
 function predict(m, inputFeatures) {
+    if (inputFeatures.length !== m.inputCount) {
+        throw new Error(`Input feature length (${inputFeatures.length}) does not match model inputCount (${m.inputCount})`);
+    }
+    m.latestInputFeatures = inputFeatures;
+
     let results = new Array(m.outputCount).fill(0);
 
     for (let i = 0; i < m.outputCount; i++) {
@@ -79,6 +87,8 @@ function predict(m, inputFeatures) {
 /**
  * 6. The Engine: Update Model (Mathematical Step)
  * Performs a single weight adjustment for ONE sample.
+ * THIS IS NOT CALLED BY THE CALLER (private).
+ * ONLY CALLED BY trainModel
  */
 function updateModel(m, inputFeatures, correctLabelIndex, currentLR) {
     let guesses = predict(m, inputFeatures);
@@ -97,31 +107,42 @@ function updateModel(m, inputFeatures, correctLabelIndex, currentLR) {
 }
 
 /**
- * 7. The Orchestrator: Train Model (Training Loop)
- * Loops through all samples across multiple epochs with LR decay.
+ * 7. The Orchestrator: Train Model
+ * @param {Object} m - The model object
+ * @param {number} correctLabelIndex - The index of the correct button/class
  */
-async function trainModel(m, samples, options = {}) {
+async function trainModel(m, correctLabelIndex, options = {}) {
+    // 1. Safety check: Do we have a recent sound to label?
+    if (m.latestInputFeatures === null) {
+        console.error("Training failed: No recent input features to label. Speak first!");
+        return;
+    }
+
+    // 2. Add the "Truth" to our history
+    // We pair the most recent features with the label the user just provided
+    m.samplesHistory.push({
+        input: [...m.latestInputFeatures],
+        label: correctLabelIndex
+    });
+
     const { onStep = null, onEpoch = null } = options;
-    
-    // Start with the base learning rate
     let currentLR = m.learningRate;
 
+    // 3. The Learning Loop (All samples, including the one we just added)
     for (let p = 0; p < m.epochs; p++) {
-        for (let s = 0; s < samples.length; s++) {
-            const sample = samples[s];
-            
-            // Execute the math engine
+        for (let s = 0; s < m.samplesHistory.length; s++) {
+            const sample = m.samplesHistory[s];
+
+            // Update weights/biases based on this sample
             updateModel(m, sample.input, sample.label, currentLR);
 
-            // Trigger UI callback if provided (every 10 steps)
-            if (onStep && s % 10 === 0) {
-                await onStep(sample.input);
-            }
+            if (onStep && s % 10 === 0) await onStep(sample.input);
         }
 
-        // Apply decay after each epoch
+        // Apply decay
         currentLR *= m.decayRate;
-        
         if (onEpoch) onEpoch(p + 1);
     }
+
+    console.log(`Training complete. History size: ${m.samplesHistory.length} samples.`);
 }
