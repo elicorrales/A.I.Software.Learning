@@ -1,0 +1,1085 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Live Microphone Meter</title>
+
+<style>
+    * {
+        box-sizing: border-box;
+    }
+
+    body {
+        margin: 0;
+        height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-family: Arial, Helvetica, sans-serif;
+        background:
+            linear-gradient(135deg, #0f172a 0%, #111827 30%, #1e3a8a 70%, #0f766e 100%);
+        overflow: hidden;
+        color: white;
+    }
+
+.panel {
+    width: 1100px;
+    padding: 30px;
+    border-radius: 24px;
+    background: rgba(255,255,255,0.08);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.12);
+    box-shadow:
+        0 0 30px rgba(0,0,0,0.4),
+        0 0 80px rgba(59,130,246,0.15);
+
+    display: flex;
+    flex-direction: column;   /* KEY CHANGE */
+    gap: 20px;
+
+    position: relative;
+}
+
+    h1 {
+        margin-top: 0;
+        font-size: 26px;
+        letter-spacing: 1px;
+        position: absolute;
+        top: 20px;
+    }
+
+    .status {
+        position: absolute;
+        top: 60px;
+        font-size: 14px;
+        color: #cbd5e1;
+    }
+
+    .canvas-wrap {
+        width: 600px;
+        height: 360px;
+        border-radius: 24px;
+        background: #000000;
+        border: 1px solid rgba(255,255,255,0.12);
+        overflow: hidden;
+    }
+
+    canvas {
+        width: 600px;
+        height: 360px;
+        display: block;
+    }
+
+    .meter-wrap {
+        width: 90px;
+        height: 360px;
+        padding: 10px;
+        border-radius: 40px;
+        background: rgba(255,255,255,0.08);
+        border: 1px solid rgba(255,255,255,0.12);
+        position: relative;
+        overflow: hidden;
+    }
+
+    .meter {
+        position: absolute;
+        bottom: 10px;
+        left: 10px;
+        width: calc(100% - 20px);
+        height: 0%;
+        border-radius: 30px;
+        background:
+            linear-gradient(
+                to top,
+                #22c55e 0%,
+                #eab308 60%,
+                #ef4444 100%
+            );
+
+        box-shadow:
+            0 0 20px rgba(255,255,255,0.2),
+            0 0 30px rgba(34,197,94,0.3);
+    }
+
+    .meter.maxed {
+        background: #ff0000;
+        box-shadow:
+            0 0 20px rgba(255,255,255,0.4),
+            0 0 40px rgba(255,0,0,0.9);
+    }
+
+    .meter-bottom {
+        position: absolute;
+        bottom: 12px;
+        left: 0;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .label {
+        font-size: 18px;
+        font-weight: bold;
+        color: #f8fafc;
+    }
+
+    #calBtn, #freezeBtn {
+        padding: 6px 10px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 12px;
+        background: #1f2937;
+        color: white;
+        border: 1px solid rgba(255,255,255,0.25);
+    }
+
+    #calBtn:hover, .train-btn:hover, #freezeBtn:hover {
+        background: #374151;
+    }
+
+    #freezeBtn.active {
+        background: #ef4444;
+        box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+    }
+
+    .train-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+/* 1. Base style for training buttons (white bg, black text) */
+.train-btn {
+    width: 140px;
+    height: 40px;
+    font-size: 14px;
+    text-align: left;
+    background: #ffffff; /* Starting state */
+    color: #000000;      /* Starting state */
+    border: 1px solid #94a3b8;
+    transition: background 0.3s, color 0.3s, transform 0.1s;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+/* 2. Click animation (Shrink effect) */
+.train-btn:active {
+    transform: scale(0.94);
+}
+
+/* 3. Prediction Intensity Levels (Shadings)
+   Proceeds from White -> Grey -> Black.
+   Contrast is maintained by switching text to white at level 3.
+*/
+
+/* 0-10% (Default - White) */
+.pred-0 { background: #ffffff; color: #000000; }
+
+/* 11-30% (Light Grey) */
+.pred-1 { background: #e2e8f0; color: #000000; }
+
+/* 31-50% (Medium Grey) */
+.pred-2 { background: #94a3b8; color: #000000; }
+
+/* 51-70% (Dark Grey - Switch text to White for contrast) */
+.pred-3 { background: #475569; color: #ffffff; }
+
+/* 71-90% (Near Black) */
+.pred-4 { background: #1e293b; color: #ffffff; }
+
+/* 91-100% (Solid Black) */
+.pred-5 { background: #000000; color: #ffffff; border-color: #60a5fa; }
+
+.message-area {
+    margin-top: 20px;
+    width: 820px; /* Reduced from 100% to make room */
+    background: rgba(0,0,0,0.35);
+    padding: 15px;
+    border-radius: 12px;
+    font-size: 16px;
+    line-height: 1.4;
+    color: #94a3b8;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 20px;
+    max-height: 260px;
+    overflow-y: auto;
+}
+
+    .modal {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.7);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+    }
+
+    .modal-box {
+        width: 320px;
+        padding: 24px;
+        border-radius: 18px;
+        background: #111827;
+        border: 1px solid rgba(255,255,255,0.12);
+        text-align: center;
+    }
+
+    .modal-box p {
+        margin: 0 0 20px;
+        line-height: 1.5;
+        color: #e5e7eb;
+    }
+
+    .modal-box button {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 10px;
+        cursor: pointer;
+        font-size: 16px;
+    }
+
+    .spinner {
+        width: 48px;
+        height: 48px;
+        margin: 0 auto 20px;
+        border: 5px solid rgba(255,255,255,0.2);
+        border-top-color: white;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    audio {
+        display: none;
+    }
+.top-row {
+    display: flex;
+    gap: 40px;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Container for the new Radio Buttons */
+.controls-sidebar {
+    margin-top: 20px;
+    width: 260px;
+    padding: 15px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.control-group-title {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #60a5fa;
+    margin-bottom: 4px;
+}
+
+.radio-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    font-size: 14px;
+    color: #e2e8f0;
+    padding: 8px;
+    border-radius: 6px;
+    transition: background 0.2s;
+}
+
+.radio-option:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.radio-option input {
+    cursor: pointer;
+    accent-color: #60a5fa; /* Modern blue checkbox color */
+}
+
+/* Wrapper to hold Message Area and Sidebar side-by-side */
+.bottom-row {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+}
+</style>
+</head>
+
+<body>
+
+<div class="panel">
+    <h1>MIC INPUT</h1>
+
+    <div class="status" id="status">
+        Requesting microphone access...
+    </div>
+
+<div class="top-row">
+    <div class="canvas-wrap">
+        <canvas id="wave"></canvas>
+    </div>
+
+    <div class="meter-wrap">
+        <div class="meter" id="meter"></div>
+
+        <div class="meter-bottom">
+            <div class="label" id="percent">0%</div>
+            <button id="calBtn">Cal</button>
+        </div>
+    </div>
+
+    <div class="train-stack">
+        <button class="train-btn" id="btn1">1 - this is a test</button>
+        <button class="train-btn" id="btn2">2 - how are you</button>
+        <button class="train-btn" id="btn3">3 - yes</button>
+        <button class="train-btn" id="btn4">4 - i am fine</button>
+        <button class="train-btn" id="btn5">5 - i see you</button>
+        <button class="train-btn" id="btn6">6 - no</button>
+        <button class="train-btn" id="btn7">7 - this works</button>
+        <button class="train-btn" id="btn8">8 - maybe</button>
+        <button class="train-btn" id="btn9">9 - (other)</button>
+        <button id="freezeBtn">Freeze</button>
+    </div>
+</div>
+  <div class="bottom-row">
+    <div class="message-area" id="features">
+        <div>Max Peak: -</div>
+        <div>Total Time: -</div>
+        <div>50% Peak Samples: -</div>
+        <div>Quiet Portions: -</div>
+        <div>Active Samples: -</div>
+        <div>-</div>
+        <div>Zero Crossings: -</div>
+        <div>-</div>
+    </div>
+
+    <div class="controls-sidebar">
+        <div class="control-group-title">Model Mode</div>
+
+        <label class="radio-option">
+            <input type="radio" name="modelMode" value="linear" checked>
+            Linear
+        </label>
+
+        <label class="radio-option">
+            <input type="radio" name="modelMode" value="sigmoid">
+            Sigmoid
+        </label>
+
+        <label class="radio-option">
+            <input type="radio" name="modelMode" value="softmax">
+            Softmax
+        </label>
+    </div>
+  </div>
+
+</div>
+
+<div class="modal" id="introModal" style="display:none;">
+    <div class="modal-box">
+        <p>
+            A short configuration test will determine the baseline level
+            of quiet incoming audio.
+            <br><br>
+            Calibration begins when you press OK.
+        </p>
+
+        <button id="okButton">OK</button>
+    </div>
+</div>
+
+<div class="modal" id="loadingModal" style="display:none;">
+    <div class="modal-box">
+        <div class="spinner"></div>
+
+        <p>Please wait...</p>
+    </div>
+</div>
+
+<audio id="audio" autoplay muted></audio>
+
+<script src="neural.network.model.js"></script>
+<script>
+
+//-------------------------------
+// constants, globals, file scope
+//-------------------------------
+
+// NEW: Timing configuration
+const SPEECH_TIMEOUT_MS = 400;   // How long to wait before clearing the screen
+const CANVAS_DURATION_MS = 3000; // Time in ms to reach the right edge
+
+const meter = document.getElementById("meter");
+
+const percent = document.getElementById("percent");
+
+const statusText = document.getElementById("status");
+
+const audio = document.getElementById("audio");
+
+const canvas = document.getElementById("wave");
+
+const ctx = canvas.getContext("2d");
+
+const introModal =
+    document.getElementById("introModal");
+
+const loadingModal =
+    document.getElementById("loadingModal");
+
+const okButton =
+    document.getElementById("okButton");
+
+const calBtn =
+    document.getElementById("calBtn");
+
+const trainButtons = document.querySelectorAll('.train-btn');
+
+const freezeBtn = document.getElementById("freezeBtn");
+const featuresArea = document.getElementById("features");
+
+let analyser;
+
+let dataArray;
+
+let waveArray;
+
+let quietBaseline = 0;
+
+let calibrated = false;
+
+let xPos = 0;
+
+// NEW: Track exactly when a sentence started
+let lastSpeechTime = 0;
+let speechStartTime = 0;
+
+let isFrozen = false;
+let speechBuffer = [];
+let sampleRate = 0;
+let isRecording = false;
+
+
+let latestInputFeatures = null;
+let isTraining = false;
+
+const INITIAL_PASSES = 400;
+
+//-------------------------------
+// canvas setup
+//-------------------------------
+
+canvas.width = 600;
+canvas.height = 360;
+
+ctx.fillStyle = "#000000";
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+
+//-------------------------------
+// function definitions
+//-------------------------------
+
+// Added: Pure raw volume without history or calibration
+function getUncalibratedVolume() {
+
+    analyser.getByteTimeDomainData(dataArray);
+
+    let sumSquares = 0;
+
+    for (let i = 0; i < dataArray.length; i++) {
+
+        const sample =
+            (dataArray[i] - 128) / 128;
+
+        sumSquares += sample * sample;
+    }
+
+    const rms = Math.sqrt(
+        sumSquares / dataArray.length
+    );
+
+    return Math.min(
+        100,
+        Math.round(rms * 300)
+    );
+}
+
+function getVolume() {
+
+    analyser.getByteTimeDomainData(dataArray);
+
+    let sumSquares = 0;
+
+    for (let i = 0; i < dataArray.length; i++) {
+
+        const sample =
+            (dataArray[i] - 128) / 128;
+
+        sumSquares += sample * sample;
+    }
+
+    const rms = Math.sqrt(
+        sumSquares / dataArray.length
+    );
+
+    return Math.min(
+        100,
+        Math.round(rms * 300)
+    );
+}
+
+
+// Refactored: Uses time-based logic to map 3 seconds to canvas width
+function drawWaveform() {
+    if (isFrozen || isTraining) {
+        requestAnimationFrame(drawWaveform);
+        return;
+    }
+
+    analyser.getByteTimeDomainData(waveArray);
+
+    const rawVolume = getVolume();
+
+    const volume =
+        Math.max(0, rawVolume - quietBaseline);
+
+    const now = performance.now();
+
+    // speech detected
+    if (volume > 0) {
+
+        // Check if this is the start of a new phrase
+        if (now - lastSpeechTime >= SPEECH_TIMEOUT_MS) {
+
+            // Reset start time and clear canvas
+            speechStartTime = now;
+            speechBuffer = [];
+            isRecording = true;
+
+            ctx.fillStyle = "#000000";
+
+            ctx.fillRect(
+                0,
+                0,
+                canvas.width,
+                canvas.height
+            );
+        }
+
+        lastSpeechTime = now;
+    }
+
+    // Determine if we should be drawing based on recent speech
+    const speechActive =
+        now - lastSpeechTime < SPEECH_TIMEOUT_MS;
+
+    if (speechActive) {
+
+        const midY = canvas.height / 2;
+
+        // Capture data into buffer
+        speechBuffer.push(new Uint8Array(waveArray));
+
+        // Calculate horizontal position based on time elapsed since start of phrase
+        // (Elapsed Time / Total Duration) * Canvas Width
+        const elapsed = now - speechStartTime;
+        xPos = (elapsed / CANVAS_DURATION_MS) * canvas.width;
+
+        // Only draw if we haven't exceeded the right edge
+        if (xPos < canvas.width) {
+
+            let v =
+                (waveArray[0] - 128) / 128;
+
+            const y = midY + v * midY;
+
+            ctx.fillStyle = "#ffff00";
+
+            ctx.fillRect(xPos, y, 2, 2);
+        }
+    } else {
+        if (isRecording) {
+            isRecording = false;
+            processSpeechBuffer();
+        }
+    }
+
+    requestAnimationFrame(drawWaveform);
+}
+
+
+function updateMeter() {
+    if (isFrozen || isTraining) {
+        requestAnimationFrame(updateMeter);
+        return;
+    }
+
+    const rawVolume = getVolume();
+
+    const volume = Math.max(
+        0,
+        rawVolume - quietBaseline
+    );
+
+    meter.style.height = volume + "%";
+
+    percent.textContent = volume + "%";
+
+    if (rawVolume >= 100) {
+
+        meter.classList.add("maxed");
+    }
+    else {
+
+        meter.classList.remove("maxed");
+    }
+
+    requestAnimationFrame(updateMeter);
+}
+
+
+async function calibrateQuietLevel() {
+
+    introModal.style.display = "none";
+
+    loadingModal.querySelector('p').textContent = "Calibrating baseline...";
+    loadingModal.style.display = "flex";
+
+    // --- ADD THIS PORTION ---
+    // Wait 500ms to let the sound of the mouse click fade away
+    await new Promise(resolve => setTimeout(resolve, 400));
+    // ------------------------
+
+    const samples = [];
+
+    const start = performance.now();
+
+    while (performance.now() - start < 3000) {
+
+        // Use the raw uncalibrated volume for the baseline test
+        samples.push(getUncalibratedVolume());
+
+        await new Promise(resolve =>
+            setTimeout(resolve, 50)
+        );
+    }
+
+    const total =
+        samples.reduce((a, b) => a + b, 0);
+
+
+    //this one does PEAK
+    quietBaseline = Math.max(...samples);
+
+    loadingModal.style.display = "none";
+
+    calibrated = true;
+
+    updateMeter();
+
+    drawWaveform();
+}
+
+
+async function startMic() {
+
+    try {
+
+        const stream =
+            await navigator.mediaDevices.getUserMedia({
+                audio: true
+            });
+
+        statusText.textContent =
+            "Microphone connected";
+
+        audio.srcObject = stream;
+
+        const audioContext = new AudioContext();
+        sampleRate = audioContext.sampleRate;
+
+        const source =
+            audioContext.createMediaStreamSource(stream);
+
+        analyser =
+            audioContext.createAnalyser();
+
+        analyser.fftSize = 512;
+
+        source.connect(analyser);
+
+        dataArray =
+            new Uint8Array(analyser.frequencyBinCount);
+
+        waveArray =
+            new Uint8Array(analyser.fftSize);
+
+        // Determine dynamic counts for initialization
+        const outputCount = document.querySelectorAll('.train-btn').length;
+        const inputCount = 134;
+
+        // 1. ATTEMPT TO LOAD PERSISTED DATA
+        // This function will return true if data exists AND matches 134x9 shape.
+        const loaded = loadPersistedModel(model, inputCount, outputCount);
+
+        if (loaded) {
+            console.log("Persistence: Model restored from storage.");
+            statusText.textContent = `Restored model with ${model.samplesHistory.length} samples.`;
+            
+            // 2. SYNC THE UI RADIOS
+            // Ensure the "Model Mode" radio buttons match the loaded activation (linear/sigmoid/softmax)
+            const savedMode = model.activation;
+            const radioToSelect = document.querySelector(`input[name="modelMode"][value="${savedMode}"]`);
+            if (radioToSelect) radioToSelect.checked = true;
+
+        } else {
+            // 3. FALLBACK TO INIT
+            // If no save exists (or it's the wrong shape), we start fresh.
+            console.log("Persistence: No compatible save found. Initializing fresh.");
+            
+            // Note: We don't need resetModel() here because 'model' is 
+            // empty at page load, so isInitialized is already false.
+            initModel(model, inputCount, outputCount, INITIAL_PASSES);
+        }
+
+        const waitForAudio = () => {
+
+            // Use raw volume to detect if the mic is working at all
+            const volume = getUncalibratedVolume();
+
+            if (volume > 0) {
+
+                introModal.style.display = "flex";
+
+                return;
+            }
+
+            requestAnimationFrame(waitForAudio);
+        };
+
+        waitForAudio();
+    }
+    catch (err) {
+
+        statusText.textContent =
+            "Microphone access denied";
+
+        console.error(err);
+    }
+}
+
+function updateFeatureDisplay(totalLength, quietMoments, intervalResults) {
+    // UI Header
+    let html = `<div>total length: ${totalLength}s</div>`;
+    html += `<div>quiet moments: ${quietMoments}</div>`;
+
+    // Visual Composition: 2x2 layout per interval [cite: 137, 138]
+    intervalResults.forEach((r, i) => {
+        const n = i + 1;
+        html += `
+            <div style="grid-column: span 2; margin-top:8px; color:#60a5fa; font-weight:bold;">
+                Interval #${n}
+            </div>
+            <div>max peak: ${r.maxPeak.toFixed(4)}</div>
+            <div>>50% peak: ${r.count50}</div>
+            <div>>40% peak: ${r.count40}</div>
+            <div>>30% peak: ${r.count30}</div>
+            <div>>20% peak: ${r.count20}</div>
+            <div>>10% peak: ${r.count10}</div>
+            <div>>8% peak: ${r.count8}</div>
+            <div>>5% peak: ${r.count5}</div>
+            <div>>3% peak: ${r.count3}</div>
+            <div>>quiet level: ${r.countAboveQuiet}</div>
+            <div>zero crossings: ${r.zeroCrossings}</div>
+        `;
+    });
+
+    featuresArea.innerHTML = html;
+    featuresArea.scrollTop = 0;
+}
+
+function processSpeechBuffer() {
+
+    if (speechBuffer.length === 0) return;
+
+    // 1. Flatten buffer
+    let samples = [];
+    for (let chunk of speechBuffer) {
+        for (let i = 0; i < chunk.length; i++) {
+            samples.push((chunk[i] - 128) / 128);
+        }
+    }
+
+    // 2. Trim trailing silence (the silence that occurs during the timeout period)
+    const samplesToTrim = Math.floor((SPEECH_TIMEOUT_MS / 1000) * sampleRate);
+    samples = samples.slice(0, Math.max(0, samples.length - samplesToTrim));
+    if (samples.length === 0) return;
+
+    const quietThreshold = quietBaseline / 300;
+
+    // CHANGE: Make interval size relative to the actual speech length
+    // This ensures all 12 intervals are filled regardless of how fast you talk.
+    const intervalSize = Math.floor(samples.length / 12);
+
+    // Calculate total time based on performance markers
+    const totalLength = ((performance.now() - speechStartTime - SPEECH_TIMEOUT_MS) / 1000).toFixed(3);
+
+    // 3. Global Feature: Quiet Moments
+    let quietMoments = 0;
+    let isQuiet = false;
+    for (let s of samples) {
+        if (Math.abs(s) <= quietThreshold) {
+            if (!isQuiet) {
+                quietMoments++;
+                isQuiet = true;
+            }
+        } else {
+            isQuiet = false;
+        }
+    }
+
+    // 4. Interval Features (12 intervals)
+    const intervalResults = [];
+    for (let i = 0; i < 12; i++) {
+        const start = i * intervalSize;
+        // For the last interval, we take everything left to avoid rounding gaps
+        const end = (i === 11) ? samples.length : start + intervalSize;
+        const window = samples.slice(start, end);
+
+        let maxPeakValue = 0;
+        let count50 = 0;
+        let count40 = 0;
+        let count30 = 0;
+        let count20 = 0;
+        let count10 = 0;
+        let count8  = 0;
+        let count5  = 0;
+        let count3  = 0;
+        let countAboveQuiet = 0;
+        let zeroCrossings = 0;
+
+        if (window.length > 0) {
+            let maxAbs = 0;
+            for (let j = 0; j < window.length; j++) {
+                const s = window[j];
+                const absS = Math.abs(s);
+
+                if (absS > maxAbs) {
+                    maxAbs = absS;
+                    maxPeakValue = s;
+                }
+                if (absS > 0.5) count50++;
+                if (absS > 0.4) count40++;
+                if (absS > 0.3) count30++;
+                if (absS > 0.2) count20++;
+                if (absS > 0.1) count10++;
+                if (absS > 0.08) count8++;
+                if (absS > 0.05) count5++;
+                if (absS > 0.03) count3++;
+                if (absS > quietThreshold) countAboveQuiet++;
+                if (j > 0 && ((window[j - 1] >= 0 && s < 0) || (window[j - 1] < 0 && s >= 0))) {
+                    zeroCrossings++;
+                }
+            }
+        }
+
+        intervalResults.push({
+            maxPeak: maxPeakValue,
+            count50,
+            count40,
+            count30,
+            count20,
+            count10,
+            count8,
+            count5,
+            count3,
+            countAboveQuiet,
+            zeroCrossings
+        });
+    }
+
+    // 5. Construct the flat array for the neural network
+    latestInputFeatures = [
+        parseFloat(totalLength),
+        quietMoments / 10,
+        ...intervalResults.flatMap(r => {
+            const d = 1000;
+
+const windowLen = intervalSize || 1;
+
+    // NEW: Calculate density (0.0 to 1.0)
+    const zcDensity = r.zeroCrossings / windowLen;
+    
+    // NEW: S-Score (High frequency relative to peak)
+    // If zcDensity is high (> 0.2) and maxPeak is relatively low, this number blows up.
+    const sScore = zcDensity > 0.15 ? zcDensity * 5 : 0;
+
+            return [
+            r.maxPeak,
+            r.count50 / d,
+            r.count40 / d,
+            r.count30 / d,
+            r.count20 / d,
+            r.count10 / d,
+            sScore, //r.count8 / d,
+            r.count5 / d,
+            r.count3 / d,
+            r.countAboveQuiet / d,
+            r.zeroCrossings / 100
+            ];
+        })
+    ];
+
+    if (!isFrozen) {
+        statusText.textContent = "Capture Ready - Hit 'Freeze' to Predict/Train";
+    }
+
+    // Update UI display
+    updateFeatureDisplay(totalLength, quietMoments, intervalResults);
+}
+
+/**
+ * 4. Update button shading based on prediction values (0.0 to 1.0)
+ */
+function updatePredictionButtons(scores) {
+    trainButtons.forEach((btn, i) => {
+        const score = scores[i] || 0;
+
+        // Remove existing pred- classes
+        btn.classList.remove('pred-0', 'pred-1', 'pred-2', 'pred-3', 'pred-4', 'pred-5');
+
+        // Apply class based on score threshold
+        if (score <= 0.10) btn.classList.add('pred-0');      // 0-10%
+        else if (score <= 0.30) btn.classList.add('pred-1'); // 11-30%
+        else if (score <= 0.50) btn.classList.add('pred-2'); // 31-50%
+        else if (score <= 0.70) btn.classList.add('pred-3'); // 51-70%
+        else if (score <= 0.90) btn.classList.add('pred-4'); // 71-90%
+        else btn.classList.add('pred-5');                    // 91-100%
+
+        console.log(`Button ${i} Score: ${(score * 100).toFixed(1)}% -> Class applied.`);
+    });
+}
+
+function unfreezeUI() {
+    isFrozen = false;
+    freezeBtn.classList.remove("active");
+    freezeBtn.textContent = "Freeze";
+    console.log("UI Unfrozen: Returning to live listening.");
+}
+
+//-------------------------------
+// event handlers
+//-------------------------------
+
+trainButtons.forEach((button, index) => {
+    button.addEventListener('click', () => {
+        if (!isFrozen || !latestInputFeatures) {
+            console.warn(`Training ignored: UI not frozen or no audio captured yet.`);
+            statusText.textContent = "Capture audio and hit Freeze first!";
+            return;
+        }
+
+        const correctIndex = index;
+
+        // 1. Show the busy spinner modal immediately
+        loadingModal.querySelector('p').textContent = "Training Neural Network..."; // <--- ADD THIS LINE
+        loadingModal.style.display = "flex";
+
+
+        setTimeout(() => {
+
+            trainModel(model, correctIndex);
+
+            // Re-predict immediately to show updated scores
+            const result = predict(model, latestInputFeatures);
+            const newScores = result.output;
+
+            updatePredictionButtons(newScores);
+            unfreezeUI();
+
+            // 3. Hide the busy spinner modal
+            loadingModal.style.display = "none";
+
+            statusText.textContent = `Trained "${button.textContent.trim()}". Prediction updated.`;
+        }, 50); // A 50ms delay is enough for the UI to "paint" the modal
+    });
+});
+
+okButton.addEventListener(
+    "click",
+    calibrateQuietLevel
+);
+
+calBtn.addEventListener(
+    "click",
+    calibrateQuietLevel
+);
+
+freezeBtn.addEventListener("click", () => {
+    isFrozen = !isFrozen;
+    freezeBtn.classList.toggle("active", isFrozen);
+    freezeBtn.textContent = isFrozen ? "Unfreeze" : "Freeze";
+
+    if (isFrozen) {
+        if (latestInputFeatures) {
+            // 1. Get the predictions
+            const result = predict(model, latestInputFeatures);
+            const scores = result.output; // Extract the actual array of squashed values
+            const topGuessIndex = scores.indexOf(Math.max(...scores));
+
+            // 2. Update the status text
+            statusText.textContent = `Prediction: Button ${topGuessIndex + 1}`;
+
+            // 3. Update the button colors (Keep this so they shade on Freeze)
+            updatePredictionButtons(scores);
+
+            console.log("Model Prediction on Freeze:", scores);
+        } else {
+            statusText.textContent = "Nothing captured to predict yet.";
+        }
+    } else {
+        // LIVE MODE RESUMED
+        statusText.textContent = "Live - Listening...";
+
+        // I removed the updatePredictionButtons(zeroScores) call from here
+        // so the colors do not clear out when you unfreeze.
+    }
+});
+
+// Listeners for Model Mode Radio Buttons
+document.querySelectorAll('input[name="modelMode"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+        const selectedMode = e.target.value;
+        console.log("Model Mode Changed to:", selectedMode);
+
+        // Use the public helper from neural.network.model.js
+        setModelActivation(model, selectedMode);
+
+        console.log("Model Mode Changed to:", selectedMode);
+    });
+});
+//-------------------------------
+// execute now
+//-------------------------------
+
+startMic();
+
+</script>
+
+</body>
+</html>
