@@ -18,6 +18,20 @@
             margin-bottom: 20px;
         }
 
+        #controls {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        #controls button {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 6px;
+            background: #444;
+            color: white;
+            cursor: pointer;
+        }
+
         #voiceGrid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -25,6 +39,7 @@
         }
 
         .voice-card {
+            position: relative;
             background: white;
             border-radius: 10px;
             padding: 16px;
@@ -34,9 +49,28 @@
             gap: 10px;
         }
 
+        .remove-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 28px;
+            height: 28px;
+            border: none;
+            border-radius: 50%;
+            background: #d9534f;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .remove-btn:hover {
+            background: #b52b27;
+        }
+
         .voice-name {
             font-size: 1.1rem;
             font-weight: bold;
+            padding-right: 40px;
         }
 
         .voice-info {
@@ -45,7 +79,7 @@
             line-height: 1.4;
         }
 
-        .voice-card button {
+        .speak-btn {
             padding: 10px;
             border: none;
             border-radius: 6px;
@@ -55,7 +89,7 @@
             font-size: 1rem;
         }
 
-        .voice-card button:hover {
+        .speak-btn:hover {
             background: #0056b3;
         }
 
@@ -70,6 +104,10 @@
 
     <h1>Available Voices</h1>
 
+    <div id="controls">
+        <button id="resetBtn">Restore Hidden Voices</button>
+    </div>
+
     <div id="voiceGrid"></div>
 
     <div id="status">Loading voices...</div>
@@ -78,6 +116,28 @@
         const synth = window.speechSynthesis;
         const voiceGrid = document.getElementById("voiceGrid");
         const status = document.getElementById("status");
+        const resetBtn = document.getElementById("resetBtn");
+
+        const STORAGE_KEY = "hiddenVoices";
+
+        function getHiddenVoices() {
+            return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+        }
+
+        function saveHiddenVoices(hidden) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(hidden));
+        }
+
+        function hideVoice(voiceName) {
+            const hidden = getHiddenVoices();
+
+            if (!hidden.includes(voiceName)) {
+                hidden.push(voiceName);
+                saveHiddenVoices(hidden);
+            }
+
+            renderVoices();
+        }
 
         function speakVoice(voice) {
             synth.cancel();
@@ -87,7 +147,7 @@
             );
 
             utterance.voice = voice;
-            utterance.lang = "en-US";
+            //utterance.lang = voice.lang;
 
             utterance.onstart = () => {
                 status.innerText = `Speaking: ${voice.name}`;
@@ -102,17 +162,45 @@
 
         function renderVoices() {
             const voices = synth.getVoices();
+            const hiddenVoices = getHiddenVoices();
 
             voiceGrid.innerHTML = "";
 
-            if (!voices.length) {
-                status.innerText = "No voices available.";
+const visibleVoices = voices.filter((voice) => {
+    const name = voice.name.toLowerCase();
+
+    const isEnglish =
+        voice.lang.toLowerCase().startsWith("en");
+
+    const unwanted =
+        name.includes("female") ||
+        name.includes("robot")  ||
+        name.includes("robosoft") ||
+        name.includes("whisper") ||
+                name.includes("caribbean");
+    return (
+        isEnglish &&
+        !unwanted &&
+        !hiddenVoices.includes(voice.name)
+    );
+});
+
+            if (!visibleVoices.length) {
+                status.innerText = "No visible voices.";
                 return;
             }
 
-            voices.forEach((voice) => {
+            visibleVoices.forEach((voice) => {
                 const card = document.createElement("div");
                 card.className = "voice-card";
+
+                const removeBtn = document.createElement("button");
+                removeBtn.className = "remove-btn";
+                removeBtn.textContent = "×";
+
+                removeBtn.addEventListener("click", () => {
+                    hideVoice(voice.name);
+                });
 
                 const name = document.createElement("div");
                 name.className = "voice-name";
@@ -128,9 +216,14 @@
                 `;
 
                 const button = document.createElement("button");
+                button.className = "speak-btn";
                 button.textContent = "Speak";
-                button.addEventListener("click", () => speakVoice(voice));
 
+                button.addEventListener("click", () => {
+                    speakVoice(voice);
+                });
+
+                card.appendChild(removeBtn);
                 card.appendChild(name);
                 card.appendChild(info);
                 card.appendChild(button);
@@ -138,13 +231,17 @@
                 voiceGrid.appendChild(card);
             });
 
-            status.innerText = `${voices.length} voices loaded.`;
+            status.innerText =
+                `${visibleVoices.length} visible voices (${voices.length} total).`;
         }
 
-        // Some browsers load voices async
+        resetBtn.addEventListener("click", () => {
+            localStorage.removeItem(STORAGE_KEY);
+            renderVoices();
+        });
+
         speechSynthesis.onvoiceschanged = renderVoices;
 
-        // Initial attempt
         renderVoices();
     </script>
 

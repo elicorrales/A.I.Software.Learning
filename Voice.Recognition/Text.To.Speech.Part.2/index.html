@@ -343,15 +343,15 @@
     </div>
 
     <div class="train-stack">
-        <button class="train-btn" id="btn1">1 - this is a test</button>
-        <button class="train-btn" id="btn2">2 - how are you</button>
-        <button class="train-btn" id="btn3">3 - yes</button>
-        <button class="train-btn" id="btn4">4 - i am fine</button>
-        <button class="train-btn" id="btn5">5 - i see you</button>
-        <button class="train-btn" id="btn6">6 - no</button>
-        <button class="train-btn" id="btn7">7 - this works</button>
-        <button class="train-btn" id="btn8">8 - maybe</button>
-        <button class="train-btn" id="btn9">9 - (other)</button>
+<button class="train-btn" id="btn1" data-phrase="this is a test">1 - this is a test</button>
+<button class="train-btn" id="btn2" data-phrase="how are you">2 - how are you</button>
+<button class="train-btn" id="btn3" data-phrase="yes">3 - yes</button>
+<button class="train-btn" id="btn4" data-phrase="i am fine">4 - i am fine</button>
+<button class="train-btn" id="btn5" data-phrase="i see you">5 - i see you</button>
+<button class="train-btn" id="btn6" data-phrase="no">6 - no</button>
+<button class="train-btn" id="btn7" data-phrase="this works">7 - this works</button>
+<button class="train-btn" id="btn8" data-phrase="maybe">8 - maybe</button>
+<button class="train-btn" id="btn9" data-phrase="other">9 - (other)</button>
         <button id="freezeBtn">Freeze</button>
     </div>
 </div>
@@ -412,6 +412,7 @@
 
 <audio id="audio" autoplay muted></audio>
 
+<script src="text-to-speech.js"></script>
 <script src="neural.network.model.js"></script>
 <script src="microphone.and.speech.functions.js"></script>
 <script>
@@ -630,6 +631,7 @@ async function calibrateQuietLevelUI() {
 
 function loadOrInitModel(inputCount, outputCount) {
 
+    try {
 
         // 1. ATTEMPT TO LOAD PERSISTED DATA
         // This function will return true if data exists AND matches 134x9 shape.
@@ -638,14 +640,18 @@ function loadOrInitModel(inputCount, outputCount) {
         if (loaded) {
             console.log("Persistence: Model restored from storage.");
             statusText.textContent = `Restored model with ${model.samplesHistory.length} samples.`;
-            
+
             // 2. SYNC THE UI RADIOS
             // Ensure the "Model Mode" radio buttons match the loaded activation (linear/sigmoid/softmax)
             const savedMode = model.activation;
             const radioToSelect = document.querySelector(`input[name="modelMode"][value="${savedMode}"]`);
-            if (radioToSelect) radioToSelect.checked = true;
+
+            if (radioToSelect) {
+                radioToSelect.checked = true;
+            }
 
         } else {
+
             // 3. FALLBACK TO INIT
             // If no save exists (or it's the wrong shape), we start fresh.
             console.log("Persistence: No compatible save found. Initializing fresh.");
@@ -653,7 +659,17 @@ function loadOrInitModel(inputCount, outputCount) {
             // Note: We don't need resetModel() here because 'model' is 
             // empty at page load, so isInitialized is already false.
             initModel(model, inputCount, outputCount, INITIAL_PASSES);
+
+            statusText.textContent = "New model initialized.";
         }
+
+    } catch (err) {
+
+        console.error("Model startup error:", err);
+
+        statusText.textContent =
+            `Model Error: ${err.message}`;
+    }
 }
 
 
@@ -928,32 +944,66 @@ function unfreezeUI() {
     console.log("UI Unfrozen: Returning to live listening.");
 }
 
+function safePredict() {
+
+    if (isTraining) {
+        return null;
+    }
+
+    return predict(model, latestInputFeatures);
+}
 //-------------------------------
 // event handlers
 //-------------------------------
 
 trainButtons.forEach((button, index) => {
-button.addEventListener('click', async () => {
-    if (!isFrozen || !latestInputFeatures) return;
+    button.addEventListener('click', async () => {
+        // 1. Guard against double-clicks or training while already training
+        if (!isFrozen || !latestInputFeatures || isTraining) return;
 
-    loadingModal.querySelector('p').textContent = "Training Neural Network...";
-    loadingModal.style.display = "flex";
+        // NEW: Ensure we aren't mid-prediction before starting training
+        // This gives the model a 200ms window to finish any pending 'predict' calls
+        isTraining = true; 
+        
+        loadingModal.querySelector('p').textContent = "Training Neural Network...";
+        loadingModal.style.display = "flex";
 
-    // force paint (important)
-    await new Promise(requestAnimationFrame);
-    await new Promise(requestAnimationFrame);
+        // force paint and wait for any microtasks to clear
+        await new Promise(requestAnimationFrame);
+        await new Promise(requestAnimationFrame);
+        // INCREASED: slightly longer delay to ensure the 'Freeze' prediction is 100% finished
+        await new Promise(resolve => setTimeout(resolve, 250)); 
 
-    try {
-        await trainModel(model, index); // only works properly if truly async
-    } finally {
-        const result = predict(model, latestInputFeatures);
-        updatePredictionButtons(result.output);
+        try {
+            // 2. Execute training
+            await trainModel(model, index); 
+            
+            // Give the CPU a tiny moment to breathe after heavy math
+            await new Promise(resolve => setTimeout(resolve, 100)); 
 
-        unfreezeUI();
+            // 3. Predict AFTER training is confirmed finished
+            const result = safePredict();
+            if (result && result.output) {
+                updatePredictionButtons(result.output);
+            }
 
-        loadingModal.style.display = "none";
-    }
-});
+            const stats = evaluateAccuracy(model);
+            statusText.textContent = `Accuracy: ${stats.accuracy.toFixed(1)}% (${stats.samples} samples)`;
+
+        } catch (err) {
+            console.error("Training failed:", err);
+            // Specifically handle the "Busy" error by suggesting a retry
+            if (err.message.includes("busy")) {
+                statusText.textContent = "Model was busy. Please try clicking again.";
+            } else {
+                statusText.textContent = "Training Error: " + err.message;
+            }
+        } finally {
+            isTraining = false;
+            unfreezeUI();
+            loadingModal.style.display = "none";
+        }
+    });
 });
 
 okButton.addEventListener(
@@ -967,24 +1017,43 @@ calBtn.addEventListener(
 );
 
 freezeBtn.addEventListener("click", () => {
+    if (isTraining) {
+        console.warn("Training in progress.");
+        return;
+    }
     isFrozen = !isFrozen;
     freezeBtn.classList.toggle("active", isFrozen);
     freezeBtn.textContent = isFrozen ? "Unfreeze" : "Freeze";
 
     if (isFrozen) {
         if (latestInputFeatures) {
-            // 1. Get the predictions
-            const result = predict(model, latestInputFeatures);
-            const scores = result.output; // Extract the actual array of squashed values
-            const topGuessIndex = scores.indexOf(Math.max(...scores));
 
-            // 2. Update the status text
-            statusText.textContent = `Prediction: Button ${topGuessIndex + 1}`;
+            try {
 
-            // 3. Update the button colors (Keep this so they shade on Freeze)
-            updatePredictionButtons(scores);
+                // 1. Get the predictions
+                const result = predict(model, latestInputFeatures);
+                const scores = result.output; // Extract the actual array of squashed values
+                const topGuessIndex = scores.indexOf(Math.max(...scores));
 
-            console.log("Model Prediction on Freeze:", scores);
+                const predictedButton = trainButtons[topGuessIndex];
+                const phrase = predictedButton.dataset.phrase;
+
+                speak(phrase);
+
+                // 2. Update the status text
+                statusText.textContent = `Prediction: Button ${topGuessIndex + 1}`;
+
+                // 3. Update the button colors (Keep this so they shade on Freeze)
+                updatePredictionButtons(scores);
+
+                console.log("Model Prediction on Freeze:", scores);
+
+            } catch (err) {
+
+                console.error("Prediction error:", err);
+                statusText.textContent = `Prediction Error: ${err.message}`;
+            }
+
         } else {
             statusText.textContent = "Nothing captured to predict yet.";
         }
@@ -1000,13 +1069,31 @@ freezeBtn.addEventListener("click", () => {
 // Listeners for Model Mode Radio Buttons
 document.querySelectorAll('input[name="modelMode"]').forEach(radio => {
     radio.addEventListener('change', (e) => {
+
+        if (isTraining) {
+            console.warn("Cannot change mode during training.");
+            return;
+        }
+
         const selectedMode = e.target.value;
-        console.log("Model Mode Changed to:", selectedMode);
 
-        // Use the public helper from neural.network.model.js
-        setModelActivation(model, selectedMode);
+        try {
 
-        console.log("Model Mode Changed to:", selectedMode);
+            // Use the public helper from neural.network.model.js
+            setModelActivation(model, selectedMode);
+
+            console.log("Model Mode Changed to:", selectedMode);
+
+            statusText.textContent =
+                `Model mode changed to: ${selectedMode}`;
+
+        } catch (err) {
+
+            console.error("Activation change error:", err);
+
+            statusText.textContent =
+                `Activation Error: ${err.message}`;
+        }
     });
 });
 //-------------------------------

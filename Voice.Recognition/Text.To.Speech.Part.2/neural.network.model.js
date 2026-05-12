@@ -24,14 +24,15 @@ let model = {
     inputCount: 0,
     outputCount: 0,
     epochs: 1,
-    learningRate: LINEAR_LR, // This is your baseLR
-    decayRate: 0.95,     // How much to slow down each epoch
-    activation: 'linear', // Added: 'linear', 'sigmoid', or 'softmax'
+    learningRate: LINEAR_LR,
+    decayRate: 0.95,
+    activation: 'linear',
     weights: [],
     biases: [],
     latestInputFeatures: null,
     samplesHistory: [],
-    isInitialized: false // NEW: The source of truth for the model state
+    isInitialized: false,
+    isBusy: false,
 };
 
 /**
@@ -40,7 +41,8 @@ let model = {
  * call uses the new logic (linear, sigmoid, or softmax).
  */
 function setModelActivation(m, mode) {
-
+    if (m.isBusy) throw new Error("Model is busy, try again");
+    m.isBusy = true;
     if (validModes.hasOwnProperty(mode)) {
         m.activation = mode;
 
@@ -52,6 +54,7 @@ function setModelActivation(m, mode) {
     } else {
         console.error(`Invalid activation mode: ${mode}. Use: ${Object.keys(validModes).join(', ')}`);
     }
+    m.isBusy = false;
 }
 
 /**
@@ -59,12 +62,15 @@ function setModelActivation(m, mode) {
  * Checks all samples in history and returns the percentage of correct guesses.
  */
 function evaluateAccuracy(m) {
-    if (m.samplesHistory.length === 0) return 0;
+    if (m.isBusy) { throw new Error("Model is busy, try again"); }
+    m.isBusy = true
+
+    if (m.samplesHistory.length === 0) { m.isBusy = false; return 0; }
 
     let correctCount = 0;
 
     m.samplesHistory.forEach(sample => {
-        const { output } = predict(m, sample.input);
+        const { output } = _predict(m, sample.input);
 
         // Find the index of the highest value (the "Winner")
         let winningIndex = output.indexOf(Math.max(...output));
@@ -74,7 +80,11 @@ function evaluateAccuracy(m) {
         }
     });
 
-    return (correctCount / m.samplesHistory.length) * 100;
+    m.isBusy = false;
+    return {
+      accuracy: (correctCount / m.samplesHistory.length) * 100,
+      samples: m.samplesHistory.length
+    }
 }
 
 /**
@@ -83,9 +93,12 @@ function evaluateAccuracy(m) {
  * Use this to start fresh or change the shape of the network.
  */
 function initModel(m, inputs, outputs, passes, lr = null, decay = 0.95, activation = 'linear') {
-   if (m.isInitialized) {
+    if (m.isInitialized) {
         throw new Error("Model is already initialized. You must call resetModel() before initializing a new one.");
     }
+    if (m.isBusy) throw new Error("Model is busy, try again");
+    m.isBusy = true;
+
     m.inputCount = inputs;
     m.outputCount = outputs;
     m.epochs = passes;
@@ -120,6 +133,7 @@ function initModel(m, inputs, outputs, passes, lr = null, decay = 0.95, activati
     }
 
     m.isInitialized = true;
+    m.isBusy = false;
 
     console.log("Model Initialized: " + inputs + " inputs, " + outputs + " outputs, mode: " + activation);
 }
@@ -156,25 +170,36 @@ function applyActivation(logits, mode = 'linear') {
  * 4. Change Training Passes
  * Allows the user to change the number of epochs without losing learned data.
  */
-function setModelPasses(m, passes) { m.epochs = passes; }
+function setModelPasses(m, passes) {
+    if (m.isBusy) throw new Error("Model is busy, try again");
+    m.isBusy = true;
+    m.epochs = passes;
+    m.isBusy = false;
+}
 
 /**
  * 5. Reset Weights
  * Keeps the structure (inputs/outputs) but clears the "memory" back to zero.
  */
 function resetWeights(m) {
+    if (m.isBusy) throw new Error("Model is busy, try again");
+    m.isBusy = true;
+
     for (let i = 0; i < m.outputCount; i++) {
         m.weights[i].fill(0);
     }
     m.biases.fill(0);
+    m.isBusy = false;
 }
+
+
 
 /**
  * 6. Predict (Forward Pass)
  * Calculates raw output values based on current weights.
  * Formula: (Input * Weight) + Bias
  */
-function predict(m, inputFeatures) {
+function _predict(m, inputFeatures) {
     // 1. Ensure model is actually loaded/inited
     if (!m.isInitialized) {
         throw new Error("Model not ready: Call loadPersistedModel or initModel first.");
@@ -188,6 +213,8 @@ function predict(m, inputFeatures) {
     if (inputFeatures.length !== m.inputCount) {
         throw new Error(`Input feature length (${inputFeatures.length}) does not match model inputCount (${m.inputCount})`);
     }
+
+
     m.latestInputFeatures = inputFeatures;
 
     let logits = new Array(m.outputCount).fill(0);
@@ -200,12 +227,27 @@ function predict(m, inputFeatures) {
         }
         logits[i] = sum + m.biases[i];
     }
-
+    
     // Return an object instead of just the activated array
     return {
         logits: logits,
         output: applyActivation(logits, m.activation)
     };
+}
+
+/**
+ * Public Predict
+ * The version used by the UI that respects the "Busy" lock.
+ */
+function predict(m, inputFeatures) {
+    if (m.isBusy) throw new Error("Model is busy, try again");
+    m.isBusy = true;
+    
+    try {
+        return _predict(m, inputFeatures);
+    } finally {
+        m.isBusy = false; // Ensures the lock is released even if _predict fails
+    }
 }
 
 /**
@@ -216,7 +258,7 @@ function predict(m, inputFeatures) {
  */
 function updateModel(m, inputFeatures, correctLabelIndex, currentLR) {
     // Access the .output property from the new predict object
-    let { output } = predict(m, inputFeatures);
+    let { output } = _predict(m, inputFeatures);
 
     let targets = new Array(m.outputCount).fill(0);
     targets[correctLabelIndex] = 1;
@@ -260,7 +302,7 @@ async function trainModel(m, correctLabelIndex, options = {}) {
     }
 
     if (m.latestInputFeatures === null) {
-        console.error("Training failed: No recent input features.");
+        throw new Error("Training failed: No recent input features.");
         return;
     }
 
@@ -271,9 +313,11 @@ async function trainModel(m, correctLabelIndex, options = {}) {
 
     // 1. Safety check: Do we have a recent sound to label?
     if (m.latestInputFeatures === null) {
-        console.error("Training failed: No recent input features to label. Speak first!");
-        return;
+        throw new Error("Training failed: No recent input features to label. Speak first!");
     }
+
+    if (m.isBusy) throw new Error("Model is busy, try again");
+    m.isBusy = true;
 
     // 2. Add the "Truth" to our history
     // We pair the most recent features with the label the user just provided
@@ -311,6 +355,7 @@ async function trainModel(m, correctLabelIndex, options = {}) {
         activation: m.activation
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(savePacket));
+    m.isBusy = false;
     console.log("Model and samples saved to localStorage.");
 }
 
@@ -323,8 +368,12 @@ function loadPersistedModel(m, expectedInputs, expectedOutputs) {
     if (m.isInitialized) {
         throw new Error("Model is already initialized. Cannot load persistence over an active model.");
     }
+
+    if (m.isBusy) throw new Error("Model is busy, try again");
+    m.isBusy = true;
+
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (!saved) return false;
+    if (!saved) { m.isBusy = false; return false; }
 
     try {
         const data = JSON.parse(saved);
@@ -334,6 +383,7 @@ function loadPersistedModel(m, expectedInputs, expectedOutputs) {
         if (data.weights.length !== expectedOutputs ||
             data.weights[0].length !== expectedInputs) {
             console.warn("Persisted model shape mismatch. Ignoring saved data.");
+            m.isBusy = false;
             return false;
         }
 
@@ -347,14 +397,19 @@ function loadPersistedModel(m, expectedInputs, expectedOutputs) {
         m.isInitialized = true;
 
         console.log(`Model Restored: ${m.samplesHistory.length} samples loaded.`);
+        m.isBusy = false;
         return true;
     } catch (e) {
         console.error("Failed to parse persisted model:", e);
+        m.isBusy = false;
         return false;
     }
 }
 
 function resetModel(m) {
+    if (m.isBusy) throw new Error("Model is busy, try again");
+    m.isBusy = true;
+
     m.inputCount = 0;
     m.outputCount = 0;
     m.epochs = 1;
@@ -369,4 +424,5 @@ function resetModel(m) {
 
     localStorage.removeItem(STORAGE_KEY);
     console.log("Model fully reset and localStorage cleared.");
+    m.isBusy = false;
 }
