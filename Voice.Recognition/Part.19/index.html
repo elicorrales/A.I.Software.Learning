@@ -27,6 +27,12 @@
             <button class="cmd-btn cmd-no" id="cmdNo" data-phrase="you pick word.">I Pick</button>
             <button class="cmd-btn cmd-other" id="cmdOther" data-phrase="No one picks.">(other)</button>
         </div>
+        <div class="stats-bar">
+            <div class="stat-pill affirmative">Affirmative: <span id="count-yes">0</span></div>
+            <div class="stat-pill negative">Negative: <span id="count-no">0</span></div>
+            <div class="stat-pill noise">Other/Noise: <span id="count-other">0</span></div>
+            <div class="stat-pill accuracy ">Accuracy: <span id="cmd-accuracy">0</span></div>
+        </div>
     </div>
     <div class="meter-wrap">
         <div class="meter" id="meter"></div>

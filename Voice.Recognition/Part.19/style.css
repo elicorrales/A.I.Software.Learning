@@ -1,0 +1,439 @@
+    * {
+        box-sizing: border-box;
+    }
+
+body {
+    margin: 0;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+
+    padding: 20px;
+    box-sizing: border-box;
+
+    font-family: Arial, Helvetica, sans-serif;
+    background:
+        linear-gradient(135deg, #0f172a 0%, #111827 30%, #1e3a8a 70%, #0f766e 100%);
+
+    overflow: auto;
+
+    color: white;
+}
+
+.panel {
+    width: fit-content;
+    min-width: 1000px;
+    padding: 30px;
+    border-radius: 24px;
+    background: rgba(255,255,255,0.08);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.12);
+    box-shadow:
+        0 0 30px rgba(0,0,0,0.4),
+        0 0 80px rgba(59,130,246,0.15);
+
+    display: flex;
+    flex-direction: column;   /* KEY CHANGE */
+    gap: 20px;
+
+    position: relative;
+}
+
+    h1 {
+        margin-top: 0;
+        font-size: 26px;
+        letter-spacing: 1px;
+        position: absolute;
+        top: 20px;
+    }
+
+    .status {
+        position: absolute;
+        top: 60px;
+        font-size: 14px;
+        color: #cbd5e1;
+    }
+
+    .canvas-wrap {
+        width: 600px;
+        height: 360px;
+        border-radius: 24px;
+        background: #000000;
+        border: 1px solid rgba(255,255,255,0.12);
+        overflow: hidden;
+    }
+
+    canvas {
+        width: 600px;
+        height: 360px;
+        display: block;
+    }
+
+    .meter-wrap {
+        width: 90px;
+        height: 360px;
+        padding: 10px;
+        border-radius: 40px;
+        background: rgba(255,255,255,0.08);
+        border: 1px solid rgba(255,255,255,0.12);
+        position: relative;
+        overflow: hidden;
+    }
+
+    .meter {
+        position: absolute;
+        bottom: 10px;
+        left: 10px;
+        width: calc(100% - 20px);
+        height: 0%;
+        border-radius: 30px;
+        background:
+            linear-gradient(
+                to top,
+                #22c55e 0%,
+                #eab308 60%,
+                #ef4444 100%
+            );
+
+        box-shadow:
+            0 0 20px rgba(255,255,255,0.2),
+            0 0 30px rgba(34,197,94,0.3);
+    }
+
+    .meter.maxed {
+        background: #ff0000;
+        box-shadow:
+            0 0 20px rgba(255,255,255,0.4),
+            0 0 40px rgba(255,0,0,0.9);
+    }
+
+    .meter-bottom {
+        position: absolute;
+        bottom: 12px;
+        left: 0;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .label {
+        font-size: 18px;
+        font-weight: bold;
+        color: #f8fafc;
+    }
+
+    #calBtn, #freezeBtn {
+        padding: 6px 10px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 12px;
+        background: #1f2937;
+        color: white;
+        border: 1px solid rgba(255,255,255,0.25);
+    }
+
+    #calBtn:not(:disabled):hover, 
+    .train-btn:not(:disabled):hover, 
+    #freezeBtn:not(:disabled):hover {
+        background: #374151;
+    }
+
+    #freezeBtn.active {
+        background: #ef4444;
+        box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+    }
+
+    .train-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+/* 1. Base style for training buttons (white bg, black text) */
+.train-btn {
+    width: 140px;
+    height: 40px;
+    font-size: 14px;
+    text-align: left;
+    background: #ffffff; /* Starting state */
+    color: #000000;      /* Starting state */
+    border: 1px solid #94a3b8;
+    transition: background 0.3s, color 0.3s, transform 0.1s;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+/* 2. Click animation (Shrink effect) */
+.train-btn:not(:disabled):active {
+    transform: scale(0.94);
+}
+
+/* 3. Prediction Intensity Levels (Shadings)
+   Proceeds from White -> Grey -> Black.
+   Contrast is maintained by switching text to white at level 3.
+*/
+
+/* 0-10% (Default - White) */
+.pred-0 { background: #ffffff; color: #000000; }
+
+/* 11-30% (Light Grey) */
+.pred-1 { background: #e2e8f0; color: #000000; }
+
+/* 31-50% (Medium Grey) */
+.pred-2 { background: #94a3b8; color: #000000; }
+
+/* 51-70% (Dark Grey - Switch text to White for contrast) */
+.pred-3 { background: #475569; color: #ffffff; }
+
+/* 71-90% (Near Black) */
+.pred-4 { background: #1e293b; color: #ffffff; }
+
+/* 91-100% (Solid Black) */
+.pred-5 { background: #000000; color: #ffffff; border-color: #60a5fa; }
+
+.message-area {
+    margin-top: 20px;
+    width: 820px; /* Reduced from 100% to make room */
+    background: rgba(0,0,0,0.35);
+    padding: 15px;
+    border-radius: 12px;
+    font-size: 16px;
+    line-height: 1.4;
+    color: #94a3b8;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 20px;
+    max-height: 260px;
+    overflow-y: auto;
+}
+
+    .modal {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.7);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+    }
+
+    .modal-box {
+        width: 320px;
+        padding: 24px;
+        border-radius: 18px;
+        background: #111827;
+        border: 1px solid rgba(255,255,255,0.12);
+        text-align: center;
+    }
+
+    .modal-box p {
+        margin: 0 0 20px;
+        line-height: 1.5;
+        color: #e5e7eb;
+    }
+
+    .modal-box button {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 10px;
+        cursor: pointer;
+        font-size: 16px;
+    }
+
+    .spinner {
+        width: 48px;
+        height: 48px;
+        margin: 0 auto 20px;
+        border: 5px solid rgba(255,255,255,0.2);
+        border-top-color: white;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    audio {
+        display: none;
+    }
+.top-row {
+    display: flex;
+    gap: 25px;
+    align-items: flex-start;
+    justify-content: flex-start;
+}
+
+/* Container for the new Radio Buttons */
+.controls-sidebar {
+    margin-top: 20px;
+    width: 260px;
+    padding: 15px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.control-group-title {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #60a5fa;
+    margin-bottom: 4px;
+}
+
+.radio-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    font-size: 14px;
+    color: #e2e8f0;
+    padding: 8px;
+    border-radius: 6px;
+    transition: background 0.2s;
+}
+
+/* Only show hover if we aren't in a state where clicks are ignored */
+.radio-option:not(:disabled):hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.radio-option input {
+    cursor: pointer;
+    accent-color: #60a5fa; /* Modern blue checkbox color */
+}
+
+/* Wrapper to hold Message Area and Sidebar side-by-side */
+.bottom-row {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+}
+
+
+/* Container to stack canvas and buttons vertically */
+.canvas-and-commands {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+}
+
+/* Horizontal bar for Yes/No/Other */
+.command-bar {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+    width: 100%;
+}
+
+/* Base Command Button Style */
+.cmd-btn {
+    width: 120px;
+    height: 45px;
+    font-size: 16px;
+    font-weight: bold;
+    border-radius: 10px;
+    cursor: pointer;
+    background: #ffffff;
+    color: #000000;
+    border: 2px solid rgba(255,255,255,0.2);
+    transition: all 0.3s ease;
+}
+
+/* Prediction scaling for YES (Green) */
+.cmd-yes.pred-0 { background: #ffffff; }
+.cmd-yes.pred-1 { background: #dcfce7; }
+.cmd-yes.pred-2 { background: #86efac; }
+.cmd-yes.pred-3 { background: #22c55e; color: white; }
+.cmd-yes.pred-4 { background: #166534; color: white; }
+.cmd-yes.pred-5 { background: #052e16; color: white; border-color: #4ade80; }
+
+/* Prediction scaling for NO (Red) */
+.cmd-no.pred-0 { background: #ffffff; }
+.cmd-no.pred-1 { background: #fee2e2; }
+.cmd-no.pred-2 { background: #fca5a5; }
+.cmd-no.pred-3 { background: #ef4444; color: white; }
+.cmd-no.pred-4 { background: #991b1b; color: white; }
+.cmd-no.pred-5 { background: #450a0a; color: white; border-color: #f87171; }
+
+/* OTHER uses your existing grey/black scale logic from .train-btn */
+.cmd-other.pred-0 { background: #ffffff; color: #000000; }
+.cmd-other.pred-1 { background: #e2e8f0; color: #000000; }
+.cmd-other.pred-2 { background: #94a3b8; color: #000000; }
+.cmd-other.pred-3 { background: #475569; color: #ffffff; }
+.cmd-other.pred-4 { background: #1e293b; color: #ffffff; }
+.cmd-other.pred-5 { background: #000000; color: #ffffff; border-color: #60a5fa; }
+
+
+/* Add hover effect to match training buttons */
+.cmd-btn:not(:disabled):hover {
+    background: #374151;
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.5);
+}
+
+.train-btn:not(:disabled):active {
+    transform: scale(0.94);
+}
+
+.cmd-btn:not(:disabled):active {
+    transform: scale(0.94);
+}
+
+/* Add to style.css if not present */
+.cmd-btn:disabled, .train-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+    filter: grayscale(1);
+}
+
+/* style.css */
+.stats-bar {
+    display: flex;
+    gap: 10px;
+    margin-top: 5px;
+    justify-content: center;
+}
+
+.stat-pill {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: bold;
+    min-width: 100px;
+    text-align: center;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+/* black text / greenish bk */
+.stat-pill.affirmative {
+    background: #86efac;
+    color: #000000;
+}
+
+/* black text / reddish bk */
+.stat-pill.negative {
+    background: #fca5a5;
+    color: #000000;
+}
+
+/* white text / dk gry bk */
+.stat-pill.noise {
+    background: #334155;
+    color: #ffffff;
+}
+
+.stat-pill.accuracy {
+    background: #ffffff;
+    color: #000000;
+}
