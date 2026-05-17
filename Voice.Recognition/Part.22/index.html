@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Live Microphone Meter</title>
+<link rel="stylesheet" href="style.css">
+
+</head>
+
+<body>
+
+<div class="panel">
+    <h1>MIC INPUT</h1>
+
+    <div class="status" id="status">
+        Requesting microphone access...
+    </div>
+
+<div class="top-row">
+    <div class="canvas-and-commands">
+        <div class="canvas-wrap">
+            <canvas id="wave"></canvas>
+        </div>
+        <div class="command-bar">
+            <button class="cmd-btn cmd-yes" id="cmdYes" data-phrase="i pick word.">You Pick</button>
+            <button class="cmd-btn cmd-no" id="cmdNo" data-phrase="you pick word.">I Pick</button>
+            <button class="cmd-btn cmd-other" id="cmdOther" data-phrase="No one picks.">(other)</button>
+        </div>
+        <div class="stats-bar">
+            <div class="stat-pill affirmative">Yes Counts: <span id="count-yes">0</span></div>
+            <div class="stat-pill negative">No Counts: <span id="count-no">0</span></div>
+            <div class="stat-pill noise">Other Counts: <span id="count-other">0</span></div>
+            <div class="stat-pill accuracy">Accuracy: <span id="cmd-accuracy">0%</span></div>
+            <div class="stat-pill accuracy">Balance Score: <span id="cmd-balance">0%</span></div>
+        </div>
+        <div class="stats-bar" style="margin-top: 8px;">
+            <div class="stat-pill affirmative">Dist (Yes): <span id="dist-yes">-</span></div>
+            <div class="stat-pill negative">Dist (No): <span id="dist-no">-</span></div>
+            <div class="stat-pill noise">Dist (Other): <span id="dist-other">-</span></div>
+            <div class="stat-pill accuracy">Streak: <span id="cmd-streak">0</span></div>
+        </div>
+    </div>
+    <div class="meter-wrap">
+        <div class="meter" id="meter"></div>
+
+        <div class="meter-bottom">
+            <div class="label" id="percent">0%</div>
+            <button id="calBtn">Cal</button>
+        </div>
+    </div>
+
+<div style="display:flex; gap:16px;">
+
+    <!-- LEFT COLUMN -->
+    <div class="train-stack">
+        <button class="train-btn" id="btn1" data-phrase="did you say, emergency.">1 - Emergency</button>
+        <button class="train-btn" id="btn2" data-phrase="did you say, lights off.">2 - Lights Off</button>
+        <button class="train-btn" id="btn3" data-phrase="did you say, this is a test.">3 - This is a test</button>
+        <button class="train-btn" id="btn4" data-phrase="did you say, how are  you.">4 - How are you</button>
+        <button class="train-btn" id="btn5" data-phrase="did you say, i am fine.">5 - I am fine</button>
+        <button class="train-btn" id="btn6" data-phrase="did you say, i see you.">6 - I see you</button>
+        <button class="train-btn" id="btn7" data-phrase="did you say, this works.">7 - this works</button>
+        <button class="train-btn" id="btn8" data-phrase="did you say, maybe.">8 - maybe</button>
+        <button class="train-btn" id="btn9" data-phrase="was that noise.">9 - (other)</button>
+
+        <button id="freezeBtn">Freeze</button>
+    </div>
+
+    <!-- RIGHT COLUMN -->
+    <div class="train-stack">
+        <button class="train-btn" id="btn10" data-phrase="did you say, go.">10 - go</button>
+        <button class="train-btn" id="btn11" data-phrase="did you say, stop.">11 - stop</button>
+        <button class="train-btn" id="btn12" data-phrase="did you say, next.">12 - next</button>
+        <button class="train-btn" id="btn13" data-phrase="did you say, one.">13 - one</button>
+        <button class="train-btn" id="btn14" data-phrase="did you say, two.">14 - two</button>
+        <button class="train-btn" id="btn15" data-phrase="did you say, three.">15 - three</button>
+        <button class="train-btn" id="btn16" data-phrase="did you say, four.">16 - four</button>
+        <button class="train-btn" id="btn17" data-phrase="did you say, five.">17 - five</button>
+        <button class="train-btn" id="btn18" data-phrase="did you say, six.">18 - six</button>
+    </div>
+
+</div>
+</div>
+  <div class="bottom-row">
+    <div class="message-area" id="features">
+        <div>Max Peak: -</div>
+        <div>Total Time: -</div>
+        <div>50% Peak Samples: -</div>
+        <div>Quiet Portions: -</div>
+        <div>Active Samples: -</div>
+        <div>-</div>
+        <div>Zero Crossings: -</div>
+        <div>-</div>
+    </div>
+
+    <div class="controls-sidebar">
+        <div class="control-group-title">Model Mode</div>
+
+        <label class="radio-option">
+            <input type="radio" name="modelMode" value="linear" checked>
+            Linear
+        </label>
+
+        <label class="radio-option">
+            <input type="radio" name="modelMode" value="sigmoid">
+            Sigmoid
+        </label>
+
+        <label class="radio-option">
+            <input type="radio" name="modelMode" value="softmax">
+            Softmax
+        </label>
+    </div>
+  </div>
+
+</div>
+
+<div class="modal" id="introModal" style="display:none;">
+    <div class="modal-box">
+        <p>
+            A short configuration test will determine the baseline level
+            of quiet incoming audio.
+            <br><br>
+            Calibration begins when you press OK.
+        </p>
+
+        <button id="okButton">OK</button>
+    </div>
+</div>
+
+<div class="modal" id="loadingModal" style="display:none;">
+    <div class="modal-box">
+        <div class="spinner"></div>
+
+        <p>Please wait...</p>
+    </div>
+</div>
+
+<audio id="audio" autoplay muted></audio>
+
+<script src="text-to-speech.js"></script>
+<script src="neural.network.model.js"></script>
+<script src="microphone.and.speech.functions.js"></script>
+<script src="index.js"></script>
+
+</body>
+</html>
