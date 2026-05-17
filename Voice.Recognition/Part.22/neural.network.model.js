@@ -34,6 +34,9 @@ function createModel(modelName = "default") {
         samplesHistory: [],
         isInitialized: false,
         isBusy: false,
+        lastPrediction: null,
+        liveCorrectPredictions: 0,
+        liveTotalPredictions: 0
     };
 }
 
@@ -73,6 +76,8 @@ function currentStats(m) {
     // Initialize the results object
     const stats = {
         accuracy: 0,
+        liveAccuracy: m.liveTotalPredictions > 0 ? (m.liveCorrectPredictions / m.liveTotalPredictions) * 100 : 0,
+        liveTotalPredictions: m.liveTotalPredictions,
         totalSamples: totalSamples,
         activationMode: m.activation,
         // This will store counts like { "0": 5, "1": 12 }
@@ -319,7 +324,13 @@ function predict(m, inputFeatures) {
     
     try {
         const prediction = _predict(m, inputFeatures);
-        
+
+        const winningIndex = prediction.output.indexOf(Math.max(...prediction.output));
+
+        m.lastPrediction = {
+            predictedLabel: winningIndex,
+        };
+
         // Calculate raw real-time acoustic distances across existing target clusters
         const distances = {};
         for (let i = 0; i < m.outputCount; i++) {
@@ -401,6 +412,21 @@ async function trainModel(m, correctLabelIndex, options = {}) {
 
     if (m.isBusy) throw new Error("Model is busy, try again");
     m.isBusy = true;
+
+    // --- NEW: LOG LIVE ACCURACY METRICS BEFORE WEIGHT ADJUSTMENTS ---
+    if (m.lastPrediction) {
+        m.liveTotalPredictions++;
+
+        if (m.lastPrediction.predictedLabel === correctLabelIndex) {
+            m.liveCorrectPredictions++;
+        }
+
+        // CRITICAL CAVEAT FIX: Clear it out immediately! 
+        // This ensures this specific prediction is never accidentally counted twice 
+        // if trainModel() is programmatically called again for the same cycle.
+        m.lastPrediction = null;
+    }
+    // ----------------------------------------------------------------
 
     // 2. Add the "Truth" to our history
     // We pair the most recent features with the label the user just provided
@@ -502,6 +528,9 @@ function resetModel(m) {
     m.biases = [];
     m.latestInputFeatures = null;
     m.samplesHistory = [];
+    m.lastPrediction = null;
+    m.liveCorrectPredictions = 0;
+    m.liveTotalPredictions = 0;
 
     m.isInitialized = false; // UNLOCK THE MODEL
 

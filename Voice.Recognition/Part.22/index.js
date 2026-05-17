@@ -368,12 +368,20 @@ function updateCommandStatsUI() {
     document.getElementById('count-other').textContent = stats.samplesPerOutput[2];
     document.getElementById('cmd-accuracy').textContent = `${stats.accuracy.toFixed(1)}%`;
     
-    // NEW: Calculate balance percentage and update pill
+    // --- NEW: Map Live Performance Tracker to Your HTML Pills ---
+    const liveTotal = stats.liveTotalPredictions || 0;
+    const liveAccu = stats.liveAccuracy || 0;
+
+    document.getElementById('cmd-live-total').textContent = liveTotal;
+    document.getElementById('cmd-live-accuracy').textContent = `${liveAccu.toFixed(1)}%`;
+    // -------------------------------------------------------------
+
     const balanceRatio = calculateBalanceScore(stats);
     document.getElementById('cmd-balance').textContent = `${(balanceRatio * 100).toFixed(0)}%`;
     
-    // NEW: Keep streak score visible on historical syncs
+
     document.getElementById('cmd-streak').textContent = consecutiveCorrectCommands;
+
 }
 
 
