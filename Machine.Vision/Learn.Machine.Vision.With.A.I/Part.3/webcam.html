@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Device Diagnostics | Camera Probe</title>
+    <link rel="stylesheet" href="webcam.css"> 
+</head>
+<body>
+
+    <div class="container" id="diagnostic-view">
+        <h1>Hardware Diagnostic Tool</h1>
+        <button id="main-btn" onclick="checkCameras()">Detect Webcams</button>
+        <div id="status-label">System idle. Ready to scan...</div>
+    </div>
+
+    <div class="container" id="dashboard-view" style="display:none;">
+        <h1>Dashboard</h1>
+
+        <video id="cam" autoplay playsinline style="display: none; background:#0b1220;"></video>
+
+        <div class="dashboard-grid">
+            
+            <div class="left-column">
+                <div class="media-box">
+                    <canvas id="snapBackground"></canvas>
+                    <div class="btn-split-row">
+                        <button onclick="takeSnapshot('background')">Background</button>
+                        <button class="btn-secondary" onclick="clearBackground()">Clear</button>
+                    </div>
+                </div>
+
+                <div class="media-box" style="margin-top: 0.5rem;">
+                    <canvas id="bkg2VsSnapped"></canvas>
+                    <div class="label">Natural Isolated Color Diff</div>
+                </div>
+            </div>
+
+            <div class="middle-column">
+                <div class="panel-section-title">System Metrics</div>
+                <div class="pill-box">
+                    <div class="diag-pill active">Stream: Active</div>
+                    <div class="diag-pill">Matrix: Sync Ready</div>
+                    <div class="diag-pill">Buffer: Direct</div>
+                    <div class="diag-pill">FPS: 60hz</div>
+                </div>
+
+                <div class="panel-section-title">Hardware Overrides</div>
+                <div class="control-group">
+                    <button class="btn-secondary" onclick="console.log('Fake Action: Calibration Triggered')">Calibrate Sensors</button>
+                    <button class="btn-secondary" onclick="console.log('Fake Action: Zero Gains')">Reset Gains</button>
+                </div>
+
+                <div class="panel-section-title">Signal Extraction</div>
+                <div class="pill-box">
+                    <div class="diag-pill">Threshold Trigger: Off</div>
+                    <div class="diag-pill">Delta Weight: 0.00%</div>
+                </div>
+            </div>
+
+            <div class="right-column">
+                <div class="panel-section-title" style="border-bottom-color: #cbd5e1; text-align: center;">Train Labels</div>
+                <button class="label-btn" onclick="handleLabelClick('razor')">-- razor</button>
+                <button class="label-btn" onclick="handleLabelClick('pen')">-- pen</button>
+                <button class="label-btn" onclick="handleLabelClick('eye drops')">-- eye drops</button>
+                <button class="label-btn" onclick="handleLabelClick('scissors')">-- scissors</button>
+                <button class="label-btn" onclick="handleLabelClick('tic tacs')">-- tic tacs</button>
+                <button class="label-btn" onclick="handleLabelClick('background')">-- background</button>
+            </div>
+
+        </div>
+    </div>
+
+    <script src="neural.network.model.js"></script>
+    <script src="webcam.js"></script>
+</body>
+</html>

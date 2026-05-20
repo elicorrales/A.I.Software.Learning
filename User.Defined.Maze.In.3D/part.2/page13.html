@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Hallway Canvas</title>
+    <style>
+        /* Remove default margins and prevent scrollbars */
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        /* Set up a vertical flex container */
+        .container {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Canvas fills all available space, is white, and allowed to shrink */
+        canvas {
+            flex-grow: 1;
+            flex-shrink: 1;
+            min-height: 0; /* CRITICAL: Allows flexbox to shrink canvas below its internal height */
+            width: 100%;
+            background-color: #ffffff;
+            display: block;
+        }
+
+        /* Input bar spans the full width, border removed to prevent window overflow */
+        input[type="text"] {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 12px;
+            font-size: 20px;
+            border: none;
+            outline: none;
+            background-color: #f5f5f5; /* Slight tint so the input box is still visible against the white canvas */
+            flex-shrink: 0; /* Prevents the input bar from getting squished */
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container" id="mainContainer">
+        <canvas id="myCanvas"></canvas>
+        <input type="text" id="myInput" placeholder="Type something here...">
+    </div>
+
+<script>
+        const canvas = document.getElementById('myCanvas');
+        const container = document.getElementById('mainContainer');
+        const ctx = canvas.getContext('2d');
+
+        // Track the continuous forward movement offset
+        let forwardOffset = 0;
+        let speed = 0.008; // Adjust this value to control how fast you move forward
+        let isMovingForward = false;
+
+        function drawHallway() {
+            const w = canvas.width;
+            const h = canvas.height;
+
+            // Clear canvas to clean white
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, w, h);
+
+            // Center point of perspective (vanishing point)
+            const cx = w / 2;
+            const cy = h / 2;
+
+            // 3. Exactly 6 static wall markers to contain exactly 5 pairs of doors down the hallway
+            const baseDistances = [1.1, 1.6, 2.4, 3.8, 6.5, 12.0];
+            const minZ = 0.5; // The camera stopping line at the last door frame
+
+            // Use the dynamic 6th marker positions to compute the dimensions of the closing back wall
+            const wallZ = baseDistances[baseDistances.length - 1] - forwardOffset;
+            const wallScale = wallZ > 0 ? 1 / wallZ : 0;
+            const x1 = cx - (cx * wallScale);
+            const x2 = cx + ((w - cx) * wallScale);
+            const y1 = cy - (cy * wallScale);
+            const y2 = cy + ((h - cy) * wallScale);
+
+            // Fill Floor (Medium Gray)
+            ctx.fillStyle = '#888888';
+            ctx.beginPath();
+            ctx.moveTo(0, h);
+            ctx.lineTo(x1, y2);
+            ctx.lineTo(x2, y2);
+            ctx.lineTo(w, h);
+            ctx.closePath();
+            ctx.fill();
+
+            // Fill Left Wall (Light Gray)
+            ctx.fillStyle = '#e0e0e0';
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(x1, y1);
+            ctx.lineTo(x1, y2);
+            ctx.lineTo(0, h);
+            ctx.closePath();
+            ctx.fill();
+
+            // Fill Right Wall (Light Gray)
+            ctx.fillStyle = '#e0e0e0';
+            ctx.beginPath();
+            ctx.moveTo(w, 0);
+            ctx.lineTo(x2, y1);
+            ctx.lineTo(x2, y2);
+            ctx.lineTo(w, h);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.strokeStyle = '#333333';
+            ctx.lineWidth = 2;
+
+            // 1. Draw the 4 main perspective depth lines (corners of the hallway)
+            ctx.beginPath();
+            ctx.moveTo(0, 0);   ctx.lineTo(x1, y1); // Top-left
+            ctx.moveTo(w, 0);   ctx.lineTo(x2, y1); // Top-right
+            ctx.moveTo(0, h);   ctx.lineTo(x1, y2); // Bottom-left
+            ctx.moveTo(w, h);   ctx.lineTo(x2, y2); // Bottom-right
+            ctx.stroke();
+
+            // 2. Draw the rectangle for the back wall
+            if (wallZ > 0) {
+                ctx.fillStyle = '#a0522d';
+                ctx.fillRect(x1, y1, x2 - x1, y2 - y1);
+                ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+            }
+
+            baseDistances.forEach((baseZ, index) => {
+                // Subtract offset to move forward. No wrapping math is applied.
+                const z = baseZ - forwardOffset;
+
+                // Do not draw segments if they have completely passed behind the viewer
+                if (z <= 0) return;
+
+                const scale = 1 / z;
+
+                const segX1 = cx - (cx * scale);
+                const segX2 = cx + ((w - cx) * scale);
+                const segY1 = cy - (cy * scale);
+                const segY2 = cy + ((h - cy) * scale);
+
+                ctx.beginPath();
+                // Left vertical wall line
+                ctx.moveTo(segX1, segY1);
+                ctx.lineTo(segX1, segY2);
+
+                // Right vertical wall line
+                ctx.moveTo(segX2, segY1);
+                ctx.lineTo(segX2, segY2);
+
+                // Floor horizontal line connecting them
+                ctx.lineTo(segX1, segY2);
+
+                // Ceiling horizontal line connecting them
+                ctx.moveTo(segX1, segY1);
+                ctx.lineTo(segX2, segY1);
+
+                ctx.stroke();
+
+                // Draw simple outline doors to the interior side of both left and right wall segment lines
+                if (index < baseDistances.length - 1) {
+                    const nextZ = baseDistances[index + 1] - forwardOffset;
+                    if (nextZ <= 0) return;
+
+                    const nextScale = 1 / nextZ;
+                    const nextSegX1 = cx - (cx * nextScale);
+                    const nextSegX2 = cx + ((w - cx) * nextScale);
+                    const nextSegY1 = cy - (cy * nextScale);
+                    const nextSegY2 = cy + ((h - cy) * nextScale);
+
+                    // Interpolation ratio for the door width (0.4 means 40% of the way to next line)
+                    const t = 0.4;
+
+                    // Left door horizontal boundaries
+                    const leftDoorWidthX = segX1 + (nextSegX1 - segX1) * t;
+                    // Right door horizontal boundaries (mirrors towards the vanishing center)
+                    const rightDoorWidthX = segX2 + (nextSegX2 - segX2) * t;
+
+                    // Height calculations keeping tops below the ceiling
+                    const wallHeight = segY2 - segY1;
+                    const doorTopY1 = segY2 - (wallHeight * 0.75);
+                    const doorTopY2 = nextSegY2 - ((nextSegY2 - nextSegY1) * 0.75);
+
+                    // Find the exact floor intersection point at the door's width
+                    const doorBottomY2 = segY2 + (nextSegY2 - segY2) * t;
+
+                    // Only draw doors if perspective calculations flow front-to-back
+                    if (segX1 < nextSegX1) {
+                        // --- LEFT DOOR ---
+                        ctx.fillStyle = '#556b2f';
+                        ctx.beginPath();
+                        ctx.moveTo(segX1, segY2);               // Door bottom left at wall vertical line
+                        ctx.lineTo(segX1, doorTopY1);            // Up to door top left
+                        ctx.lineTo(leftDoorWidthX, doorTopY2);   // Across top matching perspective slant
+                        ctx.lineTo(leftDoorWidthX, doorBottomY2); // Down to meet the slanted floor line perfectly
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.stroke();
+
+                        // --- RIGHT DOOR (MIRRORED) ---
+                        ctx.fillStyle = '#a0522d';
+                        ctx.beginPath();
+                        ctx.moveTo(segX2, segY2);                // Door bottom right at wall vertical line
+                        ctx.lineTo(segX2, doorTopY1);            // Up to door top right
+                        ctx.lineTo(rightDoorWidthX, doorTopY2);  // Across top matching perspective slant
+                        ctx.lineTo(rightDoorWidthX, doorBottomY2); // Down to meet the slanted floor line perfectly
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.stroke();
+                    }
+                }
+            });
+        }
+
+        // Standard game animation frame loop to handle rendering continuously
+        function animationLoop() {
+            // Check if the final door line (index 4 of our array) has reached our close-up threshold
+            const finalDoorZ = 6.5 - forwardOffset;
+
+            if (finalDoorZ <= 0.5) {
+                speed = 0; // Freeze movement completely once the 5th pair of doors is reached
+            }
+
+            if (isMovingForward) {
+                forwardOffset += speed;
+            }
+
+            drawHallway();
+            requestAnimationFrame(animationLoop);
+        }
+
+        function resizeCanvas() {
+            // Read layout sizing from the layout container to prevent internal resolution canvas loops
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight - document.getElementById('myInput').offsetHeight;
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowUp') {
+                isMovingForward = true;
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowUp') {
+                isMovingForward = false;
+            }
+        });
+
+        window.addEventListener('load', () => {
+            resizeCanvas();
+            animationLoop(); // Starts the continuous forward engine once assets render initially
+        });
+        window.addEventListener('resize', resizeCanvas);
+</script>
+</body>
+</html>
