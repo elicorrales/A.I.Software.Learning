@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Hallway Canvas</title>
+    <link rel="stylesheet" href="main.css"> 
+</head>
+<body>
+
+    <div class="container" id="mainContainer">
+        <div class="minimap-overlay" id="minimapOverlay" tabindex="0">
+            <canvas id="minimapCanvas"></canvas>
+        </div>
+
+        <canvas id="myCanvas"></canvas>
+        
+        <div class="controls-container">
+            <input type="text" id="myInput" placeholder="Type something here... Use Left/Right arrows to turn.">
+            <button class="menu-btn" id="menuToggleBtn" title="Toggle Bird's Eye View">☰</button>
+        </div>
+    </div>
+
+<script src="world-grid-view-functions.js"></script>
+<script src="hallway-perspective-renderer.js"></script>
+<script src="main.js"></script>
+</body>
+</html>
