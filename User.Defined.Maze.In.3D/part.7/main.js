@@ -200,7 +200,13 @@ function playerForwardMovement(e) {
       const roundedOffset = Math.round(user.forwardOffset * 100) / 100;
       const nodeIndex = doorNodes.findIndex(v => Math.abs(v - roundedOffset) < 0.05);
 
-      if (nodeIndex !== -1 && state.activeHallway.doorOpenStatus[nodeIndex] > 0.95) {
+      if (nodeIndex !== -1) {
+        // FIRST RULE: If facing a door node and it's closed/not fully open, flash and block
+        if (state.activeHallway.doorOpenStatus[nodeIndex] <= 0.95) {
+          user.flashFrames = 5;
+          if (e && typeof e.preventDefault === 'function') e.preventDefault();
+          return;
+        }
         
         // 1. Find the current hallway's relative index in the world array
         const currentHallwayIdx = WorldGrid.mainHallways.findIndex(h => h.id === state.activeHallway.id);
