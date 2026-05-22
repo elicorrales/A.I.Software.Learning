@@ -94,8 +94,8 @@ function createInterconnectingHallway() {
 
   WorldGrid.interconnectingHallways.push({
     fromHallwayIndex: currentHallwayIdx,
-    toHallwayIndex: targetHallwayIdx, 
-    doorIndex: currentDoorIdx,        
+    toHallwayIndex: targetHallwayIdx,
+    doorIndex: currentDoorIdx,
     direction: user.direction
   });
 }
@@ -135,10 +135,8 @@ function animationLoop() {
   }
 
   // Inject updated context pointers straight to renderer engines
-  drawHallwayView(ctx, canvas, WorldGrid, state.activeHallway, user);
+  drawPlayerView(ctx, canvas, WorldGrid, state.activeHallway, user);
 
-  // Inject updated context pointers straight to renderer engines
-  //drawHallwayView(ctx, canvas, WorldGrid, state.activeHallway, user);
 
   // --- FLASH OVERLAY SYSTEM RENDERER ---
   if (user.flashFrames > 0) {
@@ -185,8 +183,24 @@ function playerForwardMovement(e) {
         return;
       }
 
-      user.interconnectingProgress += user.speed;
-      // Max boundary threshold hand-off (Phase 'e') will be calculated here later
+      // Find active link to check its native layout direction
+      const doorNodes = [0, 2, 4, 6, 8];
+      const doorDataIdx = doorNodes.indexOf(user.nodeIndex);
+      const currentHallwayIdx = WorldGrid.mainHallways.findIndex(h => h.id === state.activeHallway.id);
+      const activeLink = WorldGrid.interconnectingHallways.find(conn =>
+        conn.fromHallwayIndex === currentHallwayIdx && conn.doorIndex === doorDataIdx
+      );
+
+      // If looking backward from the link's forward vector, walk backward numerically
+      const multiplier = (activeLink && user.direction !== activeLink.direction) ? -1 : 1;
+      user.interconnectingProgress += user.speed * multiplier;
+
+      // Check exit boundaries
+      if (user.interconnectingProgress <= 0.0) {
+        user.movementMode = 'transition';
+        user.transitionProgress = 0.4;
+        user.interconnectingProgress = 0.0;
+      }
       return;
     }
 
@@ -214,13 +228,13 @@ function playerForwardMovement(e) {
           if (e && typeof e.preventDefault === 'function') e.preventDefault();
           return;
         }
-        
+
         // 1. Find the current hallway's relative index in the world array
         const currentHallwayIdx = WorldGrid.mainHallways.findIndex(h => h.id === state.activeHallway.id);
-        
+
         // 2. Identify if this door leads outside the universe boundaries (Red X)
         const isWorldBoundaryVoid = (user.direction === 3 && currentHallwayIdx === 0) || (user.direction === 1 && currentHallwayIdx === 6);
-        
+
         if (isWorldBoundaryVoid) {
           user.flashFrames = 5; // Re-instate visual screen flash feedback for illegal moves
           if (e && typeof e.preventDefault === 'function') e.preventDefault();
@@ -246,14 +260,12 @@ function playerForwardMovement(e) {
         return;
       }
     }
-    
+
     // Situation D: Standard forward movement down main corridor (Facing Direction 0 or 2)
     if (user.movementMode === 'normal' && state.activeHallway) {
       if (e && typeof e.preventDefault === 'function') e.preventDefault();
 
-      const speedModifier = user.isShiftPressed
-        ? user.speed * 3
-        : user.speed;
+      const speedModifier = user.isShiftPressed ? user.speed * 3 : user.speed;
 
       // Forward movement based on facing direction
       if (user.direction === 0) user.forwardOffset += speedModifier;
@@ -262,10 +274,7 @@ function playerForwardMovement(e) {
       // Clamp to hallway boundaries
       user.forwardOffset = Math.max(
         state.activeHallway.nodes[0],
-        Math.min(
-          state.activeHallway.nodes[state.activeHallway.nodes.length - 1],
-          user.forwardOffset
-        )
+        Math.min(state.activeHallway.nodes[state.activeHallway.nodes.length - 1], user.forwardOffset)
       );
     }
 }
@@ -280,7 +289,19 @@ function playerBackwardMovement(e) {
         return;
       }
 
-      user.interconnectingProgress -= user.speed;
+      // Find active link to check its native layout direction
+      const doorNodes = [0, 2, 4, 6, 8];
+      const doorDataIdx = doorNodes.indexOf(user.nodeIndex);
+      const currentHallwayIdx = WorldGrid.mainHallways.findIndex(h => h.id === state.activeHallway.id);
+      const activeLink = WorldGrid.interconnectingHallways.find(conn =>
+        conn.fromHallwayIndex === currentHallwayIdx && conn.doorIndex === doorDataIdx
+      );
+
+      // If looking backward, hitting ArrowDown moves you deeper towards the destination channel
+      const multiplier = (activeLink && user.direction !== activeLink.direction) ? -1 : 1;
+      user.interconnectingProgress -= user.speed * multiplier;
+
+      // Handle fallback transition bounds
       if (user.interconnectingProgress <= 0.0) {
         // Fall back into the doorway transition space
         user.movementMode = 'transition';
@@ -307,9 +328,7 @@ function playerBackwardMovement(e) {
     if (user.movementMode === 'normal' && state.activeHallway) {
       e.preventDefault();
 
-      const speedModifier = user.isShiftPressed
-        ? user.speed * 3
-        : user.speed;
+      const speedModifier = user.isShiftPressed ? user.speed * 3 : user.speed;
 
       // Backward movement based on facing direction
       if (user.direction === 0) user.forwardOffset -= speedModifier;
@@ -318,10 +337,7 @@ function playerBackwardMovement(e) {
       // Clamp to hallway boundaries
       user.forwardOffset = Math.max(
         state.activeHallway.nodes[0],
-        Math.min(
-          state.activeHallway.nodes[state.activeHallway.nodes.length - 1],
-          user.forwardOffset
-        )
+        Math.min(state.activeHallway.nodes[state.activeHallway.nodes.length - 1], user.forwardOffset)
       );
     }
 }
@@ -387,11 +403,11 @@ window.addEventListener('keydown', (e) => {
    // --- ARROW LEFT (ROTATE LEFT) ---
    else if (e.key === 'ArrowLeft') {
     playerRotateLeftMovement(e);
-  } 
+  }
     // --- ARROW RIGHT (ROTATE RIGHT) ---
   else if (e.key === 'ArrowRight') {
     playerRotateRightMovement(e);
-  } 
+  }
 
   else if (e.key === ' ' || e.key === 'Spacebar') {
     if (state.activeHallway && (user.direction === 1 || user.direction === 3)) {
@@ -433,7 +449,7 @@ minimapOverlay.addEventListener('mousedown', (e) => {
   const rect = minimapOverlay.getBoundingClientRect();
   elementStartX = rect.left;
   elementStartY = rect.top;
-  
+
   e.preventDefault();
 });
 

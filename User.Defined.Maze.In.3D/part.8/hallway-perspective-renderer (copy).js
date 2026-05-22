@@ -4,33 +4,6 @@
  */
 
 // =========================================================================
-// INTERNAL UTILITY: COORDINATE TRANSLATION ENGINE
-// =========================================================================
-
-/**
- * Translates global world compass integers into a local camera orientation 
- * context depending on the structural layout of the current movement mode.
- * * Returns: 'forward' | 'backward' | 'sideways'
- */
-function getLocalViewOrientation(movementMode, globalDirection) {
-    if (movementMode === 'interconnecting') {
-        // Tunnels run horizontally (East-West) across the screen layout.
-        // Therefore, facing East (1) or West (3) means looking down its long perspective.
-        if (globalDirection === 1 || globalDirection === 3) {
-            return 'forward';
-        } else {
-            return 'sideways';
-        }
-    } else {
-        // Main Hallways run vertically (North-South) across the grid.
-        // Facing North (0) is forward perspective; South (2) is reverse perspective.
-        if (globalDirection === 0) return 'forward';
-        if (globalDirection === 2) return 'backward';
-        return 'sideways';
-    }
-}
-
-// =========================================================================
 // SECTION 1: MAIN HALLWAY RENDERING COMPONENT
 // =========================================================================
 
@@ -291,39 +264,13 @@ function drawInterconnectingPerspective(ctx, canvas, currentUser) {
     ctx.fillStyle = '#111111';
     ctx.fillRect(x1, y1, x2 - x1, y2 - y1);
     ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
-
-    // Far End Wall Background Panel Plate
-    ctx.fillStyle = '#111111';
-    ctx.fillRect(x1, y1, x2 - x1, y2 - y1);
-    ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
-
-    // --- ADDED DETACHED END DOOR ---
-    const wallW = x2 - x1;
-    const wallH = y2 - y1;
-    
-    // Scale the door size relative to the back wall
-    const doorW = wallW * 0.45; 
-    const doorH = wallH * 0.75;
-    
-    // Center it horizontally, align it to the bottom of the wall
-    const doorX = x1 + (wallW - doorW) / 2;
-    const doorY = y2 - doorH;
-
-    // Draw the door frame cavity
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(doorX, doorY, doorW, doorH);
-    ctx.strokeStyle = '#555555';
-    ctx.lineWidth = Math.max(1, scale * 2);
-    ctx.strokeRect(doorX, doorY, doorW, doorH);
 }
 
-/**
- * Visual slice of a flat side wall within an interconnecting tube
- */
 function drawInterconnectingSideView(ctx, canvas) {
     const w = canvas.width;
     const h = canvas.height;
 
+    // Draw solid flat industrial industrial tube cross-section wall
     ctx.fillStyle = '#b0b0b0';
     ctx.fillRect(0, 0, w, h);
 
@@ -349,7 +296,6 @@ function drawTransitionView(ctx, canvas, currentUser) {
     const w = canvas.width;
     const h = canvas.height;
 
-    // 1. Foreground Frame: Calculated exactly as before (continues to expand/zoom)
     let targetDistance = 0.4 - currentUser.transitionProgress;
     if (targetDistance < 0.01) targetDistance = 0.01;
     const zoomFactor = 0.4 / targetDistance;
@@ -359,7 +305,6 @@ function drawTransitionView(ctx, canvas, currentUser) {
     const frameX = (w - frameW) / 2;
     const frameY = (h * 0.15) - ((h * 0.15) * (zoomFactor - 1));
 
-    // Draw background layers outside the door frame cavity
     ctx.fillStyle = '#aaaaaa'; 
     ctx.fillRect(0, 0, w, frameY);
 
@@ -369,45 +314,29 @@ function drawTransitionView(ctx, canvas, currentUser) {
     ctx.fillStyle = '#cccccc'; 
     ctx.fillRect(0, frameY, w, frameH);
 
-    // 2. Parallax Background Tunnel: Computed using a FIXED baseline zoom layout (does not scale)
-    const baseZoom = 1.0; 
-    const backWallW = w * 0.4 * baseZoom * 0.5; // Centers the back wall panel to a smaller scale
-    const backWallH = (h * 0.85 - h * 0.15) * baseZoom * 0.5;
-    const backWallX = (w - backWallW) / 2;
-    const backWallY = (h * 0.5) - (backWallH / 2); // Perfectly centered perspective anchor
-
     ctx.save();
     ctx.beginPath();
     ctx.rect(frameX, frameY, frameW, frameH);
-    ctx.clip(); // Ensure inner lines don't bleed outside the growing threshold frame
+    ctx.clip();
 
-    // Draw stationary dark environment cavity
     ctx.fillStyle = '#222222';
     ctx.fillRect(frameX, frameY, frameW, frameH);
     
-    // 3. Stretched Connecting Perspective Lines
-    // Links corners from the static background wall directly to the zooming foreground frame
     ctx.strokeStyle = '#555555';
-    ctx.lineWidth = 2; // Unscaled, constant line thickness
+    ctx.lineWidth = 2 * zoomFactor;
     ctx.beginPath();
-    // Top-Left corner guide line
-    ctx.moveTo(frameX, frameY); ctx.lineTo(backWallX, backWallY);
-    // Top-Right corner guide line
-    ctx.moveTo(frameX + frameW, frameY); ctx.lineTo(backWallX + backWallW, backWallY);
-    // Bottom-Left corner guide line
-    ctx.moveTo(frameX, frameY + frameH); ctx.lineTo(backWallX, backWallY + backWallH);
-    // Bottom-Right corner guide line
-    ctx.moveTo(frameX + frameW, frameY + frameH); ctx.lineTo(backWallX + backWallW, backWallY + backWallH);
+    ctx.moveTo(frameX, frameY); ctx.lineTo(frameX + frameW * 0.25, frameY + frameH * 0.25);
+    ctx.moveTo(frameX + frameW, frameY); ctx.lineTo(frameX + frameW * 0.75, frameY + frameH * 0.25);
+    ctx.moveTo(frameX, frameY + frameH); ctx.lineTo(frameX + frameW * 0.25, frameY + frameH * 0.75);
+    ctx.moveTo(frameX + frameW, frameY + frameH); ctx.lineTo(frameX + frameW * 0.75, frameY + frameH * 0.75);
     ctx.stroke();
 
-    // 4. Fixed Back Termination Wall Patch
     ctx.fillStyle = '#111111';
-    ctx.fillRect(backWallX, backWallY, backWallW, backWallH);
-    ctx.strokeRect(backWallX, backWallY, backWallW, backWallH);
+    ctx.fillRect(frameX + frameW * 0.25, frameY + frameH * 0.25, frameW * 0.5, frameH * 0.5);
+    ctx.strokeRect(frameX + frameW * 0.25, frameY + frameH * 0.25, frameW * 0.5, frameH * 0.5);
     
     ctx.restore();
 
-    // Foreground door threshold outline (grows thicker along with the opening)
     ctx.strokeStyle = '#333333';
     ctx.lineWidth = Math.max(4, 4 * zoomFactor);
     ctx.strokeRect(frameX, frameY, frameW, frameH);
@@ -418,26 +347,25 @@ function drawTransitionView(ctx, canvas, currentUser) {
 // =========================================================================
 
 function drawNormalView(ctx, canvas, WorldGrid, currentHallway, currentUser) {
-    const view = getLocalViewOrientation('normal', currentUser.direction);
-
-    if (view === 'forward') {
+    if (currentUser.direction === 0) {
+        // Looking Forward
         drawMainHallwayPerspective(ctx, canvas, currentHallway, currentUser.forwardOffset, false);
-    } else if (view === 'backward') {
+    } else if (currentUser.direction === 2) {
+        // Looking Backward
         const inverseOffset = (currentHallway.baseDistances[currentHallway.baseDistances.length - 2] - 0.5) - currentUser.forwardOffset;
         drawMainHallwayPerspective(ctx, canvas, currentHallway, inverseOffset, true);
     } else {
+        // Looking Sideways (Left/Right)
         drawMainHallwaySideView(ctx, canvas, WorldGrid, currentHallway, currentUser.forwardOffset, currentUser.direction);
     }
 }
 
 function drawInterconnectingView(ctx, canvas, currentUser) {
-    const view = getLocalViewOrientation('interconnecting', currentUser.direction);
-
-    if (view === 'forward') {
-        // Looking straight down the long lane layout of the connection tube
+    if (currentUser.direction === 0 || currentUser.direction === 2) {
+        // Looking down the length of the connector tube
         drawInterconnectingPerspective(ctx, canvas, currentUser);
     } else {
-        // Looking flatly at the bounding side walls of the connection tube
+        // Looking directly at the side wall of the connector tube
         drawInterconnectingSideView(ctx, canvas);
     }
 }
