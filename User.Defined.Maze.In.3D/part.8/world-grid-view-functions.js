@@ -114,10 +114,11 @@ function drawBirdseyeView(minimapCtx, minimapCanvas, worldGrid, activeHallway, u
         const doorDataIdx = doorNodes.indexOf(user.nodeIndex);
         const currentHallwayIdx = worldGrid.mainHallways.findIndex(h => h.id === activeHallway.id);
         
+        // FIX: Find the connector by checking if it matches our parent hallway and door column,
+        // ignoring which way the user's vector arrow is currently turned.
         const activeLink = worldGrid.interconnectingHallways.find(conn => 
           conn.fromHallwayIndex === currentHallwayIdx && 
-          conn.doorIndex === doorDataIdx && 
-          conn.direction === user.direction
+          conn.doorIndex === doorDataIdx
         );
 
         if (activeLink) {
