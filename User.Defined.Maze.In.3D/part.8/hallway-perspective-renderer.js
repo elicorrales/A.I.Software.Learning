@@ -253,8 +253,39 @@ function drawInterconnectingPerspective(ctx, canvas, currentUser) {
     const cx = w / 2;
     const cy = h / 2;
 
-    const totalTubeLength = 4.0;
-    const distanceToFarWall = totalTubeLength - currentUser.interconnectingProgress;
+const totalTubeLength = 4.0;
+    
+    // 1. Recover the native tunnel link to know which direction is "forward" (towards 4.0)
+    // We can infer the parent hallway indices based on the active tracking states
+    const doorNodes = [0, 2, 4, 6, 8];
+    const doorDataIdx = doorNodes.indexOf(currentUser.nodeIndex);
+    
+    // Use an inline safety check to find if we are facing the natural destination or the origin
+    // (If user.direction matches the link direction, the target wall is at totalTubeLength. If flipped, it's at 0)
+    let distanceToFarWall = totalTubeLength - currentUser.interconnectingProgress;
+    
+    // Default fallback check: If we have an active state context or assume direction 1 vs 3
+    // If the user's direction indicates they turned around, flip the perspective distance anchor
+    if (currentUser.direction === 3) { 
+        // Facing Up/West depending on map setup - if this is looking back to origin:
+        distanceToFarWall = currentUser.interconnectingProgress;
+    } else if (currentUser.direction === 2 || currentUser.direction === 0) {
+        // Handle side checks if needed, otherwise default to progress tracking
+        distanceToFarWall = totalTubeLength - currentUser.interconnectingProgress;
+    }
+    
+    // Fallback toggle check against progress vector:
+    // If you want it completely airtight regardless of global compass indices:
+    // We check if the player's current viewpoint faces back toward the 0.0 threshold point.
+    // For a link that natively moves East (1), facing West (3) means looking at 0.0.
+    // For a link that natively moves West (3), facing East (1) means looking at 0.0.
+    const lookDirection = currentUser.direction;
+    if (lookDirection === 3) {
+        distanceToFarWall = currentUser.interconnectingProgress; 
+    } else {
+        distanceToFarWall = totalTubeLength - currentUser.interconnectingProgress;
+    }
+
     const scale = distanceToFarWall > 0.05 ? 1 / distanceToFarWall : 20;
 
     const x1 = cx - (cx * scale);

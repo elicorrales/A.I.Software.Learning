@@ -131,6 +131,7 @@ function drawBirdseyeView(minimapCtx, minimapCanvas, worldGrid, activeHallway, u
           const toY = trackSpacingY * (activeLink.toHallwayIndex + 1);
           
           // progress goes from 0.0 to 4.0 total length
+          // SAFELY RETAIN TRACKING CAPS FOR REVERSED MOVEMENT
           const percentDone = Math.min(1.0, Math.max(0.0, user.interconnectingProgress / 4.0));
           mappedUserY = fromY + (toY - fromY) * percentDone;
         }
