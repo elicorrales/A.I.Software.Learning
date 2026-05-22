@@ -429,9 +429,11 @@ minimapOverlay.addEventListener('mousedown', (e) => {
   dragStartX = e.clientX;
   dragStartY = e.clientY;
 
-  const style = window.getComputedStyle(minimapOverlay);
-  elementStartX = parseInt(style.left || "0", 10);
-  elementStartY = parseInt(style.top || "0", 10);
+  // FIX: Get the true post-scale rendering coordinates on screen
+  const rect = minimapOverlay.getBoundingClientRect();
+  elementStartX = rect.left;
+  elementStartY = rect.top;
+  
   e.preventDefault();
 });
 
