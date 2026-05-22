@@ -220,6 +220,19 @@ function playerForwardMovement(e) {
           return; // RULE RE-INSTATED: Direct early return to completely block movement
         }
 
+        // 3. NEW RULE: Even if open and legal, if no interconnecting side hallway has been spawned ('N' key), flash and block
+        const hasInterconnectingHallway = WorldGrid.interconnectingHallways.some(conn =>
+          conn.fromHallwayIndex === currentHallwayIdx &&
+          conn.doorIndex === nodeIndex &&
+          conn.direction === user.direction
+        );
+
+        if (!hasInterconnectingHallway) {
+          user.flashFrames = 5;
+          if (e && typeof e.preventDefault === 'function') e.preventDefault();
+          return;
+        }
+
         // Switch to transition mode and push forward off the center line
         user.movementMode = 'transition';
         user.transitionProgress = user.speed;
