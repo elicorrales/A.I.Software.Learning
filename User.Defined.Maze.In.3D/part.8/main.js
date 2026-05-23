@@ -76,8 +76,7 @@ function createInterconnectingHallway() {
   // Read target exclusively from our structured application state
   if (!state.activeHallway || (user.direction !== 1 && user.direction !== 3)) return;
 
-  const doorNodeIndices = [0, 2, 4, 6, 8];
-  const currentDoorIdx = doorNodeIndices.indexOf(user.nodeIndex);
+  const currentDoorIdx = window.MazeInterface.getCurrentNodeIndex();
   if (currentDoorIdx === -1) return;
 
   const currentHallwayIdx = WorldGrid.mainHallways.findIndex(h => h.id === state.activeHallway.id);
@@ -85,12 +84,8 @@ function createInterconnectingHallway() {
 
   if (targetHallwayIdx < 0 || targetHallwayIdx >= WorldGrid.mainHallways.length) return;
 
-  const alreadyExists = WorldGrid.interconnectingHallways.some(conn =>
-    conn.fromHallwayIndex === currentHallwayIdx &&
-    conn.doorIndex === currentDoorIdx &&
-    conn.direction === user.direction
-  );
-  if (alreadyExists) return;
+  // Leverage the facade to determine if a tunnel already exists here
+  if (window.MazeInterface.hasTunnelAtCurrentNode()) return;
 
   WorldGrid.interconnectingHallways.push({
     fromHallwayIndex: currentHallwayIdx,
@@ -128,56 +123,21 @@ function animationLoop() {
   }
 
   if (state.activeHallway) {
-    for (let i = 0; i < state.activeHallway.doorOpenStatus.length; i++) {
-      const diff = state.activeHallway.doorTargets[i] - state.activeHallway.doorOpenStatus[i];
-      if (Math.abs(diff) > 0.01) {
-        state.activeHallway.doorOpenStatus[i] += Math.sign(diff) * 0.06;
-      } else {
-        state.activeHallway.doorOpenStatus[i] = state.activeHallway.doorTargets[i];
-      }
+    // 1. Animate Main Corridor Doors cleanly using structural indices
+    for (let i = 0; i < 5; i++) {
+      window.MazeInterface.stepAnimation(state.activeHallway, i, 0.06);
     }
+
     // --- ANIMATE ISOLATED TUNNEL DOORS ---
-
-// Update sliding transitions for interconnecting hallways
+    // 2. Animate Interconnecting Tunnel Doors cleanly using string contexts
     WorldGrid.interconnectingHallways.forEach(link => {
-      // 1. Animate Entrance Door
-      if (link.entranceDoorTarget === 1 && link.entranceDoorOpenStatus < 1.0) {
-        link.entranceDoorOpenStatus = Math.min(1.0, link.entranceDoorOpenStatus + 0.05);
-      } else if (link.entranceDoorTarget === 0 && link.entranceDoorOpenStatus > 0.0) {
-        link.entranceDoorOpenStatus = Math.max(0.0, link.entranceDoorOpenStatus - 0.05);
-      }
-
-      // 2. ADD THIS: Animate Exit Door!
-      if (link.exitDoorTarget === 1 && link.exitDoorOpenStatus < 1.0) {
-        link.exitDoorOpenStatus = Math.min(1.0, link.exitDoorOpenStatus + 0.05);
-      } else if (link.exitDoorTarget === 0 && link.exitDoorOpenStatus > 0.0) {
-        link.exitDoorOpenStatus = Math.max(0.0, link.exitDoorOpenStatus - 0.05);
-      }
+      window.MazeInterface.stepAnimation(link, 'entrance', 0.05);
+      window.MazeInterface.stepAnimation(link, 'exit', 0.05);
     });
-/*
-      WorldGrid.interconnectingHallways.forEach(link => {
-        // Animate Entrance Door
-        const entDiff = link.entranceDoorTarget - link.entranceDoorOpenStatus;
-        if (Math.abs(entDiff) > 0.01) {
-          link.entranceDoorOpenStatus += Math.sign(entDiff) * 0.06;
-        } else {
-          link.entranceDoorOpenStatus = link.entranceDoorTarget;
-        }
-
-        // Animate Exit Door
-        const extDiff = link.exitDoorTarget - link.exitDoorOpenStatus;
-        if (Math.abs(extDiff) > 0.01) {
-          link.exitDoorOpenStatus += Math.sign(extDiff) * 0.06;
-        } else {
-          link.exitDoorOpenStatus = link.exitDoorTarget;
-        }
-      });
-*/
   }
 
   // Inject updated context pointers straight to renderer engines
   drawPlayerView(ctx, canvas, WorldGrid, state.activeHallway, user);
-
 
   // --- FLASH OVERLAY SYSTEM RENDERER ---
   if (user.flashFrames > 0) {
@@ -224,21 +184,15 @@ function playerForwardMovement(e) {
         return;
       }
 
-      // Find active link to check its native layout direction
-      const doorNodes = [0, 2, 4, 6, 8];
-      const doorDataIdx = doorNodes.indexOf(user.nodeIndex);
-      const currentHallwayIdx = WorldGrid.mainHallways.findIndex(h => h.id === state.activeHallway.id);
-      const activeLink = WorldGrid.interconnectingHallways.find(conn =>
-        conn.fromHallwayIndex === currentHallwayIdx && conn.doorIndex === doorDataIdx
-      );
+      // Grab the live occupying link directly via the object interface layer
+      const activeLink = window.MazeInterface.findActiveTunnel();
 
       // If looking backward from the link's forward vector, walk backward numerically
       const multiplier = (activeLink && user.direction !== activeLink.direction) ? -1 : 1;
 
-// Calculate next progressive step position
+      // Calculate next progressive step position
       const nextProgress = user.interconnectingProgress + user.speed * multiplier;
 
-// START NEWEST---
       // TARGET ACTION: Check the entry door if moving backward out, or the exit door if moving forward in
       const isMovingTowardsExit = nextProgress > user.interconnectingProgress;
       if (isMovingTowardsExit) {
@@ -254,9 +208,8 @@ function playerForwardMovement(e) {
           return;
         }
       }
-// END NEWEST-------
 
-// --- FIXED BOUNDARY & CLOSED EXIT DOOR BLOCK RULE ---
+      // --- FIXED BOUNDARY & CLOSED EXIT DOOR BLOCK RULE ---
       if (nextProgress >= 3.20) {
         if (activeLink) {
           // Use our standardized helper to get the tunnel's exit door status!
@@ -270,22 +223,6 @@ function playerForwardMovement(e) {
           }
         }
       }
-/*
-      // --- FIXED BOUNDARY & CLOSED EXIT DOOR BLOCK RULE ---
-      // Halts progress at 3.20 (Stroke #80) where the exit door frame actually sits
-      if (nextProgress >= 3.20) {
-        if (activeLink) {
-          const destHallway = WorldGrid.mainHallways[activeLink.toHallwayIndex];
-          // Check if the destination exit door is closed
-          if (destHallway && destHallway.doorOpenStatus[activeLink.doorIndex] <= 0.95) {
-            user.interconnectingProgress = 3.16; // Hold position exactly 1 step (0.04 units) back from the closed door
-            user.flashFrames = 5;                // Visual feedback flash overlay
-            if (e && typeof e.preventDefault === 'function') e.preventDefault();
-            return;
-          }
-        }
-      }
-*/
 
       user.interconnectingProgress = nextProgress;
 
@@ -311,13 +248,11 @@ function playerForwardMovement(e) {
 
     // Situation C: Normal navigation, facing a door node, and trying to step into it
     if (user.movementMode === 'normal' && (user.direction === 1 || user.direction === 3)) {
-      const doorNodes = [0.0, 0.75, 1.95, 3.95, 5.75];
-      const roundedOffset = Math.round(user.forwardOffset * 100) / 100;
-      const nodeIndex = doorNodes.findIndex(v => Math.abs(v - roundedOffset) < 0.05);
+      const nodeIndex = window.MazeInterface.getCurrentNodeIndex();
 
       if (nodeIndex !== -1) {
-        // FIRST RULE: If facing a door node and it's closed/not fully open, flash and block
-        if (state.activeHallway.doorOpenStatus[nodeIndex] <= 0.95) {
+        // Read the current door status seamlessly from the interface facade
+        if (window.MazeInterface.getOpenStatus(state.activeHallway, nodeIndex) <= 0.95) {
           user.flashFrames = 5;
           if (e && typeof e.preventDefault === 'function') e.preventDefault();
           return;
@@ -336,13 +271,7 @@ function playerForwardMovement(e) {
         }
 
         // 3. NEW RULE: Even if open and legal, if no interconnecting side hallway has been spawned ('N' key), flash and block
-        const hasInterconnectingHallway = WorldGrid.interconnectingHallways.some(conn =>
-          conn.fromHallwayIndex === currentHallwayIdx &&
-          conn.doorIndex === nodeIndex &&
-          conn.direction === user.direction
-        );
-
-        if (!hasInterconnectingHallway) {
+        if (!window.MazeInterface.hasTunnelAtCurrentNode()) {
           user.flashFrames = 5;
           if (e && typeof e.preventDefault === 'function') e.preventDefault();
           return;
@@ -384,15 +313,8 @@ function playerBackwardMovement(e) {
       }
 
       // Find active link to check its native layout direction
-      const doorNodes = [0, 2, 4, 6, 8];
-      const doorDataIdx = doorNodes.indexOf(user.nodeIndex);
-      const currentHallwayIdx = WorldGrid.mainHallways.findIndex(h => h.id === state.activeHallway.id);
-
-      // MINIMAL FIX: Search both from and to hallway indices to avoid the backward teleport bug
-      const activeLink = WorldGrid.interconnectingHallways.find(conn =>
-        (conn.fromHallwayIndex === currentHallwayIdx && conn.doorIndex === doorDataIdx) ||
-        (conn.toHallwayIndex === currentHallwayIdx && conn.doorIndex === doorDataIdx)
-      );
+      // Grab the live occupying link directly via the object interface layer
+      const activeLink = window.MazeInterface.findActiveTunnel();
 
       // If looking backward, hitting ArrowDown moves you deeper towards the destination channel
       const multiplier = (activeLink && user.direction !== activeLink.direction) ? -1 : 1;
@@ -400,8 +322,7 @@ function playerBackwardMovement(e) {
       // Calculate next backward step position
       const nextProgress = user.interconnectingProgress - user.speed * multiplier;
 
-//START NEW---
-// --- FIXED BOUNDARY & CLOSED EXIT DOOR BLOCK RULE ---
+      // --- FIXED BOUNDARY & CLOSED EXIT DOOR BLOCK RULE ---
       if (nextProgress >= 3.20 && activeLink) {
         // Use the interface helper to read the tunnel's exit door status!
         const exitDoorStatus = window.MazeInterface.getOpenStatus(activeLink, 'exit');
@@ -413,7 +334,6 @@ function playerBackwardMovement(e) {
           return;
         }
       }
-//END NEW---
 
       user.interconnectingProgress = nextProgress;
 
@@ -457,25 +377,25 @@ function playerBackwardMovement(e) {
 }
 
 function playerRotateLeftMovement(e) {
-    if (user.movementMode === 'transition') return;//user not allowed to turn during transition
+    if (user.movementMode === 'transition') return; // user not allowed to turn during transition
     if (user.movementMode === 'normal' && state.activeHallway) {
       user.nodeIndex = snapToNearestNodeIndex(user.forwardOffset, state.activeHallway);
       user.forwardOffset = state.activeHallway.nodes[user.nodeIndex];
 
-      state.activeHallway.doorOpenStatus = [0, 0, 0, 0, 0];
-      state.activeHallway.doorTargets = [0, 0, 0, 0, 0];
+      // Reset doors on rotation via facade helper
+      window.MazeInterface.resetAllDoors(state.activeHallway);
     }
     user.direction = (user.direction + 3) % 4;
 }
 
 function playerRotateRightMovement(e) {
-    if (user.movementMode === 'transition') return;//user not allowed to turn during transition
+    if (user.movementMode === 'transition') return; // user not allowed to turn during transition
     if (user.movementMode === 'normal' && state.activeHallway) {
       user.nodeIndex = snapToNearestNodeIndex(user.forwardOffset, state.activeHallway);
       user.forwardOffset = state.activeHallway.nodes[user.nodeIndex];
 
-      state.activeHallway.doorOpenStatus = [0, 0, 0, 0, 0];
-      state.activeHallway.doorTargets = [0, 0, 0, 0, 0];
+      // Reset doors on rotation via facade helper
+      window.MazeInterface.resetAllDoors(state.activeHallway);
     }
     user.direction = (user.direction + 1) % 4;
 }
@@ -514,77 +434,40 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'ArrowDown') {
     playerBackwardMovement(e);
   }
-   // --- ARROW LEFT (ROTATE LEFT) ---
-   else if (e.key === 'ArrowLeft') {
+  // --- ARROW LEFT (ROTATE LEFT) ---
+  else if (e.key === 'ArrowLeft') {
     playerRotateLeftMovement(e);
   }
-    // --- ARROW RIGHT (ROTATE RIGHT) ---
+  // --- ARROW RIGHT (ROTATE RIGHT) ---
   else if (e.key === 'ArrowRight') {
     playerRotateRightMovement(e);
   }
 
-else if (e.key === ' ' || e.key === 'Spacebar') {
-  e.preventDefault();
+  // --- SPACEBAR (TOGGLE DOORS VIA INTERFACE FACADE) ---
+  else if (e.key === ' ' || e.key === 'Spacebar') {
+    e.preventDefault();
 
-  if (user.movementMode === 'interconnecting') {
-    const activeLink = window.MazeInterface.findActiveTunnel(); // (Using your existing find loop)
-    if (activeLink) {
-      const positionContext = user.interconnectingProgress >= 1.6 ? 'exit' : 'entrance';
-      window.MazeInterface.toggleTarget(activeLink, positionContext);
-    }
-  } else if (state.activeHallway && (user.direction === 1 || user.direction === 3)) {
-    const nodeIndex = window.MazeInterface.getCurrentNodeIndex(); // (Using your index calculator)
-    if (nodeIndex !== -1) {
-      window.MazeInterface.toggleTarget(state.activeHallway, nodeIndex);
+    if (user.movementMode === 'interconnecting') {
+      const activeLink = window.MazeInterface.findActiveTunnel();
+      if (activeLink) {
+        const positionContext = user.interconnectingProgress >= 1.6 ? 'exit' : 'entrance';
+        window.MazeInterface.toggleTarget(activeLink, positionContext);
+      }
+    } else if (state.activeHallway) {
+      const nodeIndex = window.MazeInterface.getCurrentNodeIndex();
+      if (nodeIndex !== -1 && (user.direction === 1 || user.direction === 3)) {
+        window.MazeInterface.toggleTarget(state.activeHallway, nodeIndex);
+      }
     }
   }
-}
 
-/*
-else if (e.key === ' ' || e.key === 'Spacebar') {
-    if (user.movementMode === 'interconnecting') {
-      // Toggle exit/entrance door targets while inside a tube
-      const doorNodes = [0, 2, 4, 6, 8];
-      const doorDataIdx = doorNodes.indexOf(user.nodeIndex);
-      const currentHallwayIdx = WorldGrid.mainHallways.findIndex(h => h.id === state.activeHallway.id);
-      const activeLink = WorldGrid.interconnectingHallways.find(conn =>
-        (conn.fromHallwayIndex === currentHallwayIdx && conn.doorIndex === doorDataIdx) ||
-        (conn.toHallwayIndex === currentHallwayIdx && conn.doorIndex === doorDataIdx)
-      );
-
-      if (activeLink) {
-        e.preventDefault();
-        // Determine which end of the tube we are closest to
-        const isNearExit = user.interconnectingProgress >= 1.6;
-        const targetHallwayIdx = isNearExit ? activeLink.toHallwayIndex : activeLink.fromHallwayIndex;
-        const targetHallway = WorldGrid.mainHallways[targetHallwayIdx];
-
-        if (targetHallway) {
-          // Toggle door target between 0 (closed) and 1 (open)
-          targetHallway.doorTargets[activeLink.doorIndex] = targetHallway.doorTargets[activeLink.doorIndex] === 0 ? 1 : 0;
-        }
-      }
-    } else if (state.activeHallway && (user.direction === 1 || user.direction === 3)) {
-      // Normal corridor mode door toggling
-      const roundedOffset = Math.round(user.forwardOffset * 100) / 100;
-      const doorNodes = [0.0, 0.75, 1.95, 3.95, 5.75];
-      const nodeIndex = doorNodes.findIndex(v => Math.abs(v - roundedOffset) < 0.05);
-      if (nodeIndex !== -1) {
-        e.preventDefault();
-        state.activeHallway.doorTargets[nodeIndex] = state.activeHallway.doorTargets[nodeIndex] === 0 ? 1 : 0;
-      }
-    }
-   }
-*/
-
-   else if (e.key === 'n' || e.key === 'N') {
+  else if (e.key === 'n' || e.key === 'N') {
     if (state.activeHallway && (user.direction === 1 || user.direction === 3)) {
-      const roundedOffset = Math.round(user.forwardOffset * 100) / 100;
-      const doorNodes = [0.0, 0.75, 1.95, 3.95, 5.75];
-      const nodeIndex = doorNodes.findIndex(v => Math.abs(v - roundedOffset) < 0.05);
+      const nodeIndex = window.MazeInterface.getCurrentNodeIndex();
 
       if (nodeIndex !== -1) {
-        if (state.activeHallway.doorOpenStatus[nodeIndex] > 0.95) {
+        // Use facade to check standard door visibility state cleanly
+        if (window.MazeInterface.getOpenStatus(state.activeHallway, nodeIndex) > 0.95) {
           createInterconnectingHallway();
         }
       }
@@ -633,8 +516,10 @@ window.addEventListener('mouseup', () => {
 window.addEventListener('load', () => {
   resizeCanvas();
   initializeAllMainHallways();
-  // Assign value cleanly directly to the object property tracked by the application singleton
-  state.activeHallway = WorldGrid.mainHallways[0];
+  
+  // Clean initialization passing index boundary logic off to the interface helper
+  window.MazeInterface.setActiveHallwayByIndex(0);
+  
   animationLoop();
 });
 

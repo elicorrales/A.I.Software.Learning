@@ -108,12 +108,130 @@ function findActiveTunnel() {
   );
 }
 
-// Global window exposure updated with the missing callers!
+/**
+ * Unifies transition calculations to incrementally animate doors over time.
+ * Automatically accommodates numeric indices for main hallways or context strings for tunnels.
+ * @param {Object} structure - Either a Main Hallway or an Interconnecting Tunnel.
+ * @param {string|number} context - Numeric index (0-4) or string context ('entrance' / 'exit').
+ * @param {number} rate - Animation frame increments (e.g., 0.05).
+ */
+function stepStructureDoorAnimation(structure, context, rate = 0.05) {
+  if (!structure) return;
+
+  if (isTunnelStructure(structure)) {
+    // Tunnel link calculations
+    if (context === 'exit') {
+      if (structure.exitDoorTarget === 1 && structure.exitDoorOpenStatus < 1.0) {
+        structure.exitDoorOpenStatus = Math.min(1.0, structure.exitDoorOpenStatus + rate);
+      } else if (structure.exitDoorTarget === 0 && structure.exitDoorOpenStatus > 0.0) {
+        structure.exitDoorOpenStatus = Math.max(0.0, structure.exitDoorOpenStatus - rate);
+      }
+    } else { // 'entrance' context
+      if (structure.entranceDoorTarget === 1 && structure.entranceDoorOpenStatus < 1.0) {
+        structure.entranceDoorOpenStatus = Math.min(1.0, structure.entranceDoorOpenStatus + rate);
+      } else if (structure.entranceDoorTarget === 0 && structure.entranceDoorOpenStatus > 0.0) {
+        structure.entranceDoorOpenStatus = Math.max(0.0, structure.entranceDoorOpenStatus - rate);
+      }
+    }
+    return;
+  }
+
+  // Main Hallway array calculations
+  if (structure.doorTargets && structure.doorOpenStatus && structure.doorTargets[context] !== undefined) {
+    const target = structure.doorTargets[context];
+    const current = structure.doorOpenStatus[context];
+
+    if (target === 1 && current < 1.0) {
+      structure.doorOpenStatus[context] = Math.min(1.0, current + rate);
+    } else if (target === 0 && current > 0.0) {
+      structure.doorOpenStatus[context] = Math.max(0.0, current - rate);
+    }
+  }
+}
+
+/**
+ * Checks if an interconnecting tunnel already exists at the player's current location.
+ * Eliminates manual array .some() filtration inside main.js.
+ * @returns {boolean}
+ */
+function hasTunnelAtCurrentNode() {
+  const state = window.My3dMazeAppState;
+  if (!state || !state.activeHallway || !state.user) return false;
+
+  const currentDoorIdx = getCurrentNodeIndex();
+  if (currentDoorIdx === -1) return false;
+
+  const currentHallwayIdx = state.WorldGrid.mainHallways.findIndex(h => h.id === state.activeHallway.id);
+
+  return state.WorldGrid.interconnectingHallways.some(conn =>
+    conn.fromHallwayIndex === currentHallwayIdx &&
+    conn.doorIndex === currentDoorIdx &&
+    conn.direction === state.user.direction
+  );
+}
+
+/**
+ * Normalizes directional orientation context strings ('entrance' vs 'exit') contextually
+ * depending on whether the player entered from the 'from' hallway or the 'to' hallway.
+ * Resolves the "Directional Symmetry" flaw for physics and door checks.
+ * @param {Object} tunnel - The active interconnecting tunnel link object.
+ * @param {string} rawContext - The perspective string from the player's viewpoint ('entrance' or 'exit').
+ * @returns {string} The structurally true property context string ('entrance' or 'exit').
+ */
+function getNormalizedTunnelContext(tunnel, rawContext) {
+  const state = window.My3dMazeAppState;
+  if (!state || !state.activeHallway || !tunnel) return rawContext;
+
+  const currentHallwayIdx = state.WorldGrid.mainHallways.findIndex(h => h.id === state.activeHallway.id);
+
+  // If we are navigating the tunnel from the destination side ('to' side), 
+  // entrance and exit structural properties are inverted relative to our movement direction.
+  if (currentHallwayIdx === tunnel.toHallwayIndex) {
+    return rawContext === 'entrance' ? 'exit' : 'entrance';
+  }
+  return rawContext;
+}
+
+/**
+ * Safely updates the active hallway context tracking state via index parameters,
+ * isolating main.js from direct global object state mutations.
+ * @param {number} hallwayIndex - The index of the hallway in the world registry array.
+ */
+function setActiveHallwayByIndex(hallwayIndex) {
+  const state = window.My3dMazeAppState;
+  if (!state || !state.WorldGrid.mainHallways[hallwayIndex]) return;
+  
+  state.activeHallway = state.WorldGrid.mainHallways[hallwayIndex];
+}
+
+/**
+ * Resets all door open statuses and targets back to zero for a given hallway.
+ * @param {Object} hallway - The active hallway object structure.
+ */
+function resetAllDoors(hallway) {
+  if (!hallway) return;
+  if (hallway.doorOpenStatus) {
+    hallway.doorOpenStatus.fill(0);
+  }
+  if (hallway.doorTargets) {
+    hallway.doorTargets.fill(0);
+  }
+}
+
+
+// Global window exposure updated with the newly established callers!
 window.MazeInterface = {
   isTunnel: isTunnelStructure,
   getOpenStatus: getStructureDoorOpenStatus,
   getTarget: getStructureDoorTarget,
   toggleTarget: toggleStructureDoorTarget,
-  getCurrentNodeIndex: getCurrentNodeIndex, // Now available to Spacebar!
-  findActiveTunnel: findActiveTunnel         // Now available to Spacebar!
+  getCurrentNodeIndex: getCurrentNodeIndex,
+  findActiveTunnel: findActiveTunnel,
+  stepAnimation: stepStructureDoorAnimation,
+  
+  // NEW FACADE METHOD ADDITIONS
+  hasTunnelAtCurrentNode: hasTunnelAtCurrentNode,
+  getNormalizedTunnelContext: getNormalizedTunnelContext,
+  setActiveHallwayByIndex: setActiveHallwayByIndex,
+  resetAllDoors: resetAllDoors
 };
