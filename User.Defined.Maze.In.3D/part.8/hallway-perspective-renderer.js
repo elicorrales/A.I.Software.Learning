@@ -34,6 +34,55 @@ function getLocalViewOrientation(movementMode, globalDirection) {
 // SECTION 1: MAIN HALLWAY RENDERING COMPONENT
 // =========================================================================
 
+function drawMainHallwayLeftAndRightWalls(ctx, x1, y1, x2, y2, w, h) {
+    // Draw Left Wall Mesh
+    ctx.fillStyle = '#e0e0e0';
+    ctx.beginPath();
+    ctx.moveTo(0, 0); ctx.lineTo(x1, y1); ctx.lineTo(x1, y2); ctx.lineTo(0, h);
+    ctx.closePath(); ctx.fill();
+
+    // Draw Right Wall Mesh
+    ctx.fillStyle = '#e0e0e0';
+    ctx.beginPath();
+    ctx.moveTo(w, 0); ctx.lineTo(x2, y1); ctx.lineTo(x2, y2); ctx.lineTo(w, h);
+    ctx.closePath(); ctx.fill();
+
+    // Draw Outline Geometry Structural Guideliners
+    ctx.strokeStyle = '#333333';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, 0); ctx.lineTo(x1, y1);
+    ctx.moveTo(w, 0); ctx.lineTo(x2, y1);
+    ctx.moveTo(0, h); ctx.lineTo(x1, y2);
+    ctx.moveTo(w, h); ctx.lineTo(x2, y2);
+    ctx.stroke();
+}
+
+function drawRecedingPerspectiveDoorPair(ctx, segX1, segY1, segX2, segY2, nextSegX1, nextSegY1, nextSegX2, nextSegY2, doorOpenValue, leftDoorColor, rightDoorColor) {
+    const t = 0.4 * (1 - doorOpenValue);
+    const leftDoorWidthX = segX1 + (nextSegX1 - segX1) * t;
+    const rightDoorWidthX = segX2 + (nextSegX2 - segX2) * t;
+
+    const wallHeight = segY2 - segY1;
+    const doorTopY1 = segY2 - (wallHeight * 0.75);
+    const doorTopY2 = nextSegY2 - ((nextSegY2 - nextSegY1) * 0.75);
+    const doorBottomY2 = segY2 + (nextSegY2 - segY2) * t;
+
+    if (segX1 < nextSegX1) {
+        ctx.fillStyle = leftDoorColor;
+        ctx.beginPath();
+        ctx.moveTo(segX1, segY2); ctx.lineTo(segX1, doorTopY1);
+        ctx.lineTo(leftDoorWidthX, doorTopY2); ctx.lineTo(leftDoorWidthX, doorBottomY2);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+
+        ctx.fillStyle = rightDoorColor;
+        ctx.beginPath();
+        ctx.moveTo(segX2, segY2); ctx.lineTo(segX2, doorTopY1);
+        ctx.lineTo(rightDoorWidthX, doorTopY2); ctx.lineTo(rightDoorWidthX, doorBottomY2);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+}
+
 function drawMainHallwayPerspective(ctx, canvas, hallwayData, offset, isLookingBackward) {
     const w = canvas.width;
     const h = canvas.height;
@@ -59,27 +108,7 @@ function drawMainHallwayPerspective(ctx, canvas, hallwayData, offset, isLookingB
     ctx.moveTo(0, h); ctx.lineTo(x1, y2); ctx.lineTo(x2, y2); ctx.lineTo(w, h);
     ctx.closePath(); ctx.fill();
 
-    // Draw Left Wall Mesh
-    ctx.fillStyle = '#e0e0e0';
-    ctx.beginPath();
-    ctx.moveTo(0, 0); ctx.lineTo(x1, y1); ctx.lineTo(x1, y2); ctx.lineTo(0, h);
-    ctx.closePath(); ctx.fill();
-
-    // Draw Right Wall Mesh
-    ctx.fillStyle = '#e0e0e0';
-    ctx.beginPath();
-    ctx.moveTo(w, 0); ctx.lineTo(x2, y1); ctx.lineTo(x2, y2); ctx.lineTo(w, h);
-    ctx.closePath(); ctx.fill();
-
-    // Draw Outline Geometry Structural Guideliners
-    ctx.strokeStyle = '#333333';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(0, 0); ctx.lineTo(x1, y1);
-    ctx.moveTo(w, 0); ctx.lineTo(x2, y1);
-    ctx.moveTo(0, h); ctx.lineTo(x1, y2);
-    ctx.moveTo(w, h); ctx.lineTo(x2, y2);
-    ctx.stroke();
+    drawMainHallwayLeftAndRightWalls(ctx, x1, y1, x2, y2, w, h);
 
     // Draw Back Termination Wall Patch
     if (backWallZ > 0) {
@@ -127,30 +156,39 @@ function drawMainHallwayPerspective(ctx, canvas, hallwayData, offset, isLookingB
             const doorDataIdx = isLookingBackward ? (hallwayData.baseDistances.length - 2 - index) : index;
             const doorOpenValue = hallwayData.doorOpenStatus[doorDataIdx];
 
-            const t = 0.4 * (1 - doorOpenValue);
-            const leftDoorWidthX = segX1 + (nextSegX1 - segX1) * t;
-            const rightDoorWidthX = segX2 + (nextSegX2 - segX2) * t;
-
-            const wallHeight = segY2 - segY1;
-            const doorTopY1 = segY2 - (wallHeight * 0.75);
-            const doorTopY2 = nextSegY2 - ((nextSegY2 - nextSegY1) * 0.75);
-            const doorBottomY2 = segY2 + (nextSegY2 - segY2) * t;
-
-            if (segX1 < nextSegX1) {
-                ctx.fillStyle = leftDoorColor;
-                ctx.beginPath();
-                ctx.moveTo(segX1, segY2); ctx.lineTo(segX1, doorTopY1);
-                ctx.lineTo(leftDoorWidthX, doorTopY2); ctx.lineTo(leftDoorWidthX, doorBottomY2);
-                ctx.closePath(); ctx.fill(); ctx.stroke();
-
-                ctx.fillStyle = rightDoorColor;
-                ctx.beginPath();
-                ctx.moveTo(segX2, segY2); ctx.lineTo(segX2, doorTopY1);
-                ctx.lineTo(rightDoorWidthX, doorTopY2); ctx.lineTo(rightDoorWidthX, doorBottomY2);
-                ctx.closePath(); ctx.fill(); ctx.stroke();
-            }
+            drawRecedingPerspectiveDoorPair(ctx, segX1, segY1, segX2, segY2, nextSegX1, nextSegY1, nextSegX2, nextSegY2, doorOpenValue, leftDoorColor, rightDoorColor);
         }
     });
+}
+
+function drawSideViewOpenDoorWayStatus(ctx, isWorldBoundaryVoid, connectionExists, frameX, doorY, frameW, doorH) {
+    if (isWorldBoundaryVoid) {
+        ctx.strokeStyle = '#ff0000';
+        ctx.lineWidth = 8;
+        ctx.beginPath();
+        ctx.moveTo(frameX + 20, doorY + 20); ctx.lineTo(frameX + frameW - 20, doorY + doorH - 20);
+        ctx.moveTo(frameX + frameW - 20, doorY + 20); ctx.lineTo(frameX + 20, doorY + doorH - 20);
+        ctx.stroke();
+    } else if (connectionExists) {
+        ctx.fillStyle = '#222222';
+        ctx.fillRect(frameX, doorY, frameW, doorH);
+
+        ctx.strokeStyle = '#555555';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(frameX, doorY); ctx.lineTo(frameX + frameW * 0.25, doorY + doorH * 0.25);
+        ctx.moveTo(frameX + frameW, doorY); ctx.lineTo(frameX + frameW * 0.75, doorY + doorH * 0.25);
+        ctx.moveTo(frameX, doorY + doorH); ctx.lineTo(frameX + frameW * 0.25, doorY + doorH * 0.75);
+        ctx.moveTo(frameX + frameW, doorY + doorH); ctx.lineTo(frameX + frameW * 0.75, doorY + doorH * 0.75);
+        ctx.stroke();
+
+        ctx.fillStyle = '#111111';
+        ctx.fillRect(frameX + frameW * 0.25, doorY + doorH * 0.25, frameW * 0.5, doorH * 0.5);
+        ctx.strokeRect(frameX + frameW * 0.25, doorY + doorH * 0.25, frameW * 0.5, doorH * 0.5);
+    } else {
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(frameX, doorY, frameW, doorH);
+    }
 }
 
 function drawMainHallwaySideView(ctx, canvas, WorldGrid, hallwayData, offset, lookDirection) {
@@ -199,33 +237,7 @@ function drawMainHallwaySideView(ctx, canvas, WorldGrid, hallwayData, offset, lo
         ctx.fillRect(frameX, doorY, frameW, doorH);
 
         if (currentOpenProgress > 0) {
-            if (isWorldBoundaryVoid) {
-                ctx.strokeStyle = '#ff0000';
-                ctx.lineWidth = 8;
-                ctx.beginPath();
-                ctx.moveTo(frameX + 20, doorY + 20); ctx.lineTo(frameX + frameW - 20, doorY + doorH - 20);
-                ctx.moveTo(frameX + frameW - 20, doorY + 20); ctx.lineTo(frameX + 20, doorY + doorH - 20);
-                ctx.stroke();
-            } else if (connectionExists) {
-                ctx.fillStyle = '#222222';
-                ctx.fillRect(frameX, doorY, frameW, doorH);
-
-                ctx.strokeStyle = '#555555';
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.moveTo(frameX, doorY); ctx.lineTo(frameX + frameW * 0.25, doorY + doorH * 0.25);
-                ctx.moveTo(frameX + frameW, doorY); ctx.lineTo(frameX + frameW * 0.75, doorY + doorH * 0.25);
-                ctx.moveTo(frameX, doorY + doorH); ctx.lineTo(frameX + frameW * 0.25, doorY + doorH * 0.75);
-                ctx.moveTo(frameX + frameW, doorY + doorH); ctx.lineTo(frameX + frameW * 0.75, doorY + doorH * 0.75);
-                ctx.stroke();
-
-                ctx.fillStyle = '#111111';
-                ctx.fillRect(frameX + frameW * 0.25, doorY + doorH * 0.25, frameW * 0.5, doorH * 0.5);
-                ctx.strokeRect(frameX + frameW * 0.25, doorY + doorH * 0.25, frameW * 0.5, doorH * 0.5);
-            } else {
-                ctx.fillStyle = '#000000';
-                ctx.fillRect(frameX, doorY, frameW, doorH);
-            }
+            drawSideViewOpenDoorWayStatus(ctx, isWorldBoundaryVoid, connectionExists, frameX, doorY, frameW, doorH);
         }
 
         ctx.strokeStyle = '#333333';
@@ -246,6 +258,43 @@ function drawMainHallwaySideView(ctx, canvas, WorldGrid, hallwayData, offset, lo
 // =========================================================================
 // SECTION 2: INTERCONNECTING TUNNEL RENDERING COMPONENT
 // =========================================================================
+
+function drawFakeCrossHallwayCavityFacade(ctx, doorX, doorY, doorW, doorH, scale) {
+    // 1. Fake Hall Wall Background Color (Light gray hallway wall)
+    ctx.fillStyle = '#e0e0e0';
+    ctx.fillRect(doorX, doorY, doorW, doorH);
+
+    // 2. Fake Horizontal Floor and Ceiling guidelines running sideways
+    const fakeFloorY = doorY + (doorH * 0.85);
+    const fakeCeilingY = doorY + (doorH * 0.15);
+
+    ctx.strokeStyle = '#333333';
+    ctx.lineWidth = Math.max(1, scale * 0.75);
+    ctx.beginPath();
+    ctx.moveTo(doorX, fakeFloorY); ctx.lineTo(doorX + doorW, fakeFloorY);
+    ctx.moveTo(doorX, fakeCeilingY); ctx.lineTo(doorX + doorW, fakeCeilingY);
+    ctx.stroke();
+
+    // Dark grey floor surface fill
+    ctx.fillStyle = '#888888';
+    ctx.fillRect(doorX, fakeFloorY, doorW, doorY + doorH - fakeFloorY);
+
+    // 3. Fake Closed Door on the opposite wall (Centered inside the frame context)
+    const fakeDoorW = doorW * 0.4;
+    const fakeDoorH = fakeFloorY - fakeCeilingY;
+    const fakeDoorX = doorX + (doorW - fakeDoorW) / 2;
+    const fakeDoorY = fakeCeilingY;
+
+    // Dark background door slit
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(fakeDoorX, fakeDoorY, fakeDoorW, fakeDoorH);
+
+    // Solid contrasting color for the opposite closed panel
+    ctx.fillStyle = '#999999'; 
+    ctx.fillRect(fakeDoorX, fakeDoorY, fakeDoorW, fakeDoorH);
+    ctx.strokeRect(fakeDoorX, fakeDoorY, fakeDoorW, fakeDoorH);
+}
+
 function drawInterconnectingPerspective(ctx, canvas, currentUser) {
     const w = canvas.width;
     const h = canvas.height;
@@ -358,39 +407,7 @@ function drawInterconnectingPerspective(ctx, canvas, currentUser) {
 
     // FIX: Pass all 3 parameters correctly matching the facade adapter specification!
     if (activeLink && window.MazeInterface.doesMainHallwayExistAtCoordinates(originatingHallwayIdx, destinationHallwayIdx, targetDoorIndex)) {
-        // 1. Fake Hall Wall Background Color (Light gray hallway wall)
-        ctx.fillStyle = '#e0e0e0';
-        ctx.fillRect(doorX, doorY, doorW, doorH);
-
-        // 2. Fake Horizontal Floor and Ceiling guidelines running sideways
-        const fakeFloorY = doorY + (doorH * 0.85);
-        const fakeCeilingY = doorY + (doorH * 0.15);
-
-        ctx.strokeStyle = '#333333';
-        ctx.lineWidth = Math.max(1, scale * 0.75);
-        ctx.beginPath();
-        ctx.moveTo(doorX, fakeFloorY); ctx.lineTo(doorX + doorW, fakeFloorY);
-        ctx.moveTo(doorX, fakeCeilingY); ctx.lineTo(doorX + doorW, fakeCeilingY);
-        ctx.stroke();
-
-        // Dark grey floor surface fill
-        ctx.fillStyle = '#888888';
-        ctx.fillRect(doorX, fakeFloorY, doorW, doorY + doorH - fakeFloorY);
-
-        // 3. Fake Closed Door on the opposite wall (Centered inside the frame context)
-        const fakeDoorW = doorW * 0.4;
-        const fakeDoorH = fakeFloorY - fakeCeilingY;
-        const fakeDoorX = doorX + (doorW - fakeDoorW) / 2;
-        const fakeDoorY = fakeCeilingY;
-
-        // Dark background door slit
-        ctx.fillStyle = '#000000';
-        ctx.fillRect(fakeDoorX, fakeDoorY, fakeDoorW, fakeDoorH);
-
-        // Solid contrasting color for the opposite closed panel
-        ctx.fillStyle = '#999999'; 
-        ctx.fillRect(fakeDoorX, fakeDoorY, fakeDoorW, fakeDoorH);
-        ctx.strokeRect(fakeDoorX, fakeDoorY, fakeDoorW, fakeDoorH);
+        drawFakeCrossHallwayCavityFacade(ctx, doorX, doorY, doorW, doorH, scale);
     } else {
         // Just fill the canvas door cavity with the far wall background color if no hallway exists
         ctx.fillStyle = '#111111';
