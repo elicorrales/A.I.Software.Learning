@@ -96,7 +96,11 @@ function createInterconnectingHallway() {
     fromHallwayIndex: currentHallwayIdx,
     toHallwayIndex: targetHallwayIdx,
     doorIndex: currentDoorIdx,
-    direction: user.direction
+    direction: user.direction,
+    entranceDoorTarget: 1,      // Starts open because you just walked out of a main hallway door
+    entranceDoorOpenStatus: 1.0,
+    exitDoorTarget: 0,          // Starts closed at the far end of the tube
+    exitDoorOpenStatus: 0.0
   });
 }
 
@@ -132,6 +136,43 @@ function animationLoop() {
         state.activeHallway.doorOpenStatus[i] = state.activeHallway.doorTargets[i];
       }
     }
+    // --- ANIMATE ISOLATED TUNNEL DOORS ---
+
+// Update sliding transitions for interconnecting hallways
+    WorldGrid.interconnectingHallways.forEach(link => {
+      // 1. Animate Entrance Door
+      if (link.entranceDoorTarget === 1 && link.entranceDoorOpenStatus < 1.0) {
+        link.entranceDoorOpenStatus = Math.min(1.0, link.entranceDoorOpenStatus + 0.05);
+      } else if (link.entranceDoorTarget === 0 && link.entranceDoorOpenStatus > 0.0) {
+        link.entranceDoorOpenStatus = Math.max(0.0, link.entranceDoorOpenStatus - 0.05);
+      }
+
+      // 2. ADD THIS: Animate Exit Door!
+      if (link.exitDoorTarget === 1 && link.exitDoorOpenStatus < 1.0) {
+        link.exitDoorOpenStatus = Math.min(1.0, link.exitDoorOpenStatus + 0.05);
+      } else if (link.exitDoorTarget === 0 && link.exitDoorOpenStatus > 0.0) {
+        link.exitDoorOpenStatus = Math.max(0.0, link.exitDoorOpenStatus - 0.05);
+      }
+    });
+/*
+      WorldGrid.interconnectingHallways.forEach(link => {
+        // Animate Entrance Door
+        const entDiff = link.entranceDoorTarget - link.entranceDoorOpenStatus;
+        if (Math.abs(entDiff) > 0.01) {
+          link.entranceDoorOpenStatus += Math.sign(entDiff) * 0.06;
+        } else {
+          link.entranceDoorOpenStatus = link.entranceDoorTarget;
+        }
+
+        // Animate Exit Door
+        const extDiff = link.exitDoorTarget - link.exitDoorOpenStatus;
+        if (Math.abs(extDiff) > 0.01) {
+          link.exitDoorOpenStatus += Math.sign(extDiff) * 0.06;
+        } else {
+          link.exitDoorOpenStatus = link.exitDoorTarget;
+        }
+      });
+*/
   }
 
   // Inject updated context pointers straight to renderer engines
@@ -193,17 +234,43 @@ function playerForwardMovement(e) {
 
       // If looking backward from the link's forward vector, walk backward numerically
       const multiplier = (activeLink && user.direction !== activeLink.direction) ? -1 : 1;
-      
-      // TARGET ACTION: Check if door is open before stepping forward out/in
-      if (state.activeHallway.doorOpenStatus[doorDataIdx] <= 0.95) {
-        user.flashFrames = 5; // Flash here because they hit the closed door while trying to move!
-        if (e && typeof e.preventDefault === 'function') e.preventDefault();
-        return;
-      }
 
-      // Calculate next progressive step position
+// Calculate next progressive step position
       const nextProgress = user.interconnectingProgress + user.speed * multiplier;
 
+// START NEWEST---
+      // TARGET ACTION: Check the entry door if moving backward out, or the exit door if moving forward in
+      const isMovingTowardsExit = nextProgress > user.interconnectingProgress;
+      if (isMovingTowardsExit) {
+        if (activeLink && activeLink.exitDoorOpenStatus <= 0.95 && nextProgress >= 3.20) {
+          user.flashFrames = 5;
+          if (e && typeof e.preventDefault === 'function') e.preventDefault();
+          return;
+        }
+      } else {
+        if (activeLink && activeLink.entranceDoorOpenStatus <= 0.95 && nextProgress <= 0.0) {
+          user.flashFrames = 5;
+          if (e && typeof e.preventDefault === 'function') e.preventDefault();
+          return;
+        }
+      }
+// END NEWEST-------
+
+// --- FIXED BOUNDARY & CLOSED EXIT DOOR BLOCK RULE ---
+      if (nextProgress >= 3.20) {
+        if (activeLink) {
+          // Use our standardized helper to get the tunnel's exit door status!
+          const exitDoorOpenAmt = window.MazeInterface.getOpenStatus(activeLink, 'exit');
+
+          if (exitDoorOpenAmt <= 0.95) {
+            user.interconnectingProgress = 3.16;
+            user.flashFrames = 5;
+            if (e && typeof e.preventDefault === 'function') e.preventDefault();
+            return;
+          }
+        }
+      }
+/*
       // --- FIXED BOUNDARY & CLOSED EXIT DOOR BLOCK RULE ---
       // Halts progress at 3.20 (Stroke #80) where the exit door frame actually sits
       if (nextProgress >= 3.20) {
@@ -218,7 +285,7 @@ function playerForwardMovement(e) {
           }
         }
       }
-
+*/
 
       user.interconnectingProgress = nextProgress;
 
@@ -320,7 +387,7 @@ function playerBackwardMovement(e) {
       const doorNodes = [0, 2, 4, 6, 8];
       const doorDataIdx = doorNodes.indexOf(user.nodeIndex);
       const currentHallwayIdx = WorldGrid.mainHallways.findIndex(h => h.id === state.activeHallway.id);
-      
+
       // MINIMAL FIX: Search both from and to hallway indices to avoid the backward teleport bug
       const activeLink = WorldGrid.interconnectingHallways.find(conn =>
         (conn.fromHallwayIndex === currentHallwayIdx && conn.doorIndex === doorDataIdx) ||
@@ -329,23 +396,24 @@ function playerBackwardMovement(e) {
 
       // If looking backward, hitting ArrowDown moves you deeper towards the destination channel
       const multiplier = (activeLink && user.direction !== activeLink.direction) ? -1 : 1;
-      
+
       // Calculate next backward step position
       const nextProgress = user.interconnectingProgress - user.speed * multiplier;
 
-// --- FIXED BOUNDARY & CLOSED EXIT DOOR BLOCK RULE (BACKWARD) ---
-      // Mirrors the forward function exactly using your true 3.20 physical boundary
-      if (nextProgress >= 3.20) {
-        if (activeLink) {
-          const destHallway = WorldGrid.mainHallways[activeLink.toHallwayIndex];
-          if (destHallway && destHallway.doorOpenStatus[activeLink.doorIndex] <= 0.95) {
-            user.interconnectingProgress = 3.16; // Clean step back from the door frame
-            user.flashFrames = 5;
-            if (e && typeof e.preventDefault === 'function') e.preventDefault();
-            return;
-          }
+//START NEW---
+// --- FIXED BOUNDARY & CLOSED EXIT DOOR BLOCK RULE ---
+      if (nextProgress >= 3.20 && activeLink) {
+        // Use the interface helper to read the tunnel's exit door status!
+        const exitDoorStatus = window.MazeInterface.getOpenStatus(activeLink, 'exit');
+
+        if (exitDoorStatus <= 0.95) {
+          user.interconnectingProgress = 3.16;
+          user.flashFrames = 5;
+          if (e && typeof e.preventDefault === 'function') e.preventDefault();
+          return;
         }
       }
+//END NEW---
 
       user.interconnectingProgress = nextProgress;
 
@@ -455,9 +523,49 @@ window.addEventListener('keydown', (e) => {
     playerRotateRightMovement(e);
   }
 
-  else if (e.key === ' ' || e.key === 'Spacebar') {
-    // FIXED: Cleaned toggle logic. Spacebar toggles doors, no flash warnings here.
-    if (state.activeHallway && (user.direction === 1 || user.direction === 3)) {
+else if (e.key === ' ' || e.key === 'Spacebar') {
+  e.preventDefault();
+
+  if (user.movementMode === 'interconnecting') {
+    const activeLink = window.MazeInterface.findActiveTunnel(); // (Using your existing find loop)
+    if (activeLink) {
+      const positionContext = user.interconnectingProgress >= 1.6 ? 'exit' : 'entrance';
+      window.MazeInterface.toggleTarget(activeLink, positionContext);
+    }
+  } else if (state.activeHallway && (user.direction === 1 || user.direction === 3)) {
+    const nodeIndex = window.MazeInterface.getCurrentNodeIndex(); // (Using your index calculator)
+    if (nodeIndex !== -1) {
+      window.MazeInterface.toggleTarget(state.activeHallway, nodeIndex);
+    }
+  }
+}
+
+/*
+else if (e.key === ' ' || e.key === 'Spacebar') {
+    if (user.movementMode === 'interconnecting') {
+      // Toggle exit/entrance door targets while inside a tube
+      const doorNodes = [0, 2, 4, 6, 8];
+      const doorDataIdx = doorNodes.indexOf(user.nodeIndex);
+      const currentHallwayIdx = WorldGrid.mainHallways.findIndex(h => h.id === state.activeHallway.id);
+      const activeLink = WorldGrid.interconnectingHallways.find(conn =>
+        (conn.fromHallwayIndex === currentHallwayIdx && conn.doorIndex === doorDataIdx) ||
+        (conn.toHallwayIndex === currentHallwayIdx && conn.doorIndex === doorDataIdx)
+      );
+
+      if (activeLink) {
+        e.preventDefault();
+        // Determine which end of the tube we are closest to
+        const isNearExit = user.interconnectingProgress >= 1.6;
+        const targetHallwayIdx = isNearExit ? activeLink.toHallwayIndex : activeLink.fromHallwayIndex;
+        const targetHallway = WorldGrid.mainHallways[targetHallwayIdx];
+
+        if (targetHallway) {
+          // Toggle door target between 0 (closed) and 1 (open)
+          targetHallway.doorTargets[activeLink.doorIndex] = targetHallway.doorTargets[activeLink.doorIndex] === 0 ? 1 : 0;
+        }
+      }
+    } else if (state.activeHallway && (user.direction === 1 || user.direction === 3)) {
+      // Normal corridor mode door toggling
       const roundedOffset = Math.round(user.forwardOffset * 100) / 100;
       const doorNodes = [0.0, 0.75, 1.95, 3.95, 5.75];
       const nodeIndex = doorNodes.findIndex(v => Math.abs(v - roundedOffset) < 0.05);
@@ -466,7 +574,10 @@ window.addEventListener('keydown', (e) => {
         state.activeHallway.doorTargets[nodeIndex] = state.activeHallway.doorTargets[nodeIndex] === 0 ? 1 : 0;
       }
     }
-  } else if (e.key === 'n' || e.key === 'N') {
+   }
+*/
+
+   else if (e.key === 'n' || e.key === 'N') {
     if (state.activeHallway && (user.direction === 1 || user.direction === 3)) {
       const roundedOffset = Math.round(user.forwardOffset * 100) / 100;
       const doorNodes = [0.0, 0.75, 1.95, 3.95, 5.75];

@@ -8,7 +8,7 @@
 // =========================================================================
 
 /**
- * Translates global world compass integers into a local camera orientation 
+ * Translates global world compass integers into a local camera orientation
  * context depending on the structural layout of the current movement mode.
  * * Returns: 'forward' | 'backward' | 'sideways'
  */
@@ -42,7 +42,7 @@ function drawMainHallwayPerspective(ctx, canvas, hallwayData, offset, isLookingB
 
     const backWallZ = hallwayData.baseDistances[hallwayData.baseDistances.length - 1] - offset;
     const backWallScale = backWallZ > 0 ? 1 / backWallZ : 0;
-    
+
     const x1 = cx - (cx * backWallScale);
     const x2 = cx + ((w - cx) * backWallScale);
     const y1 = cy - (cy * backWallScale);
@@ -179,7 +179,7 @@ function drawMainHallwaySideView(ctx, canvas, WorldGrid, hallwayData, offset, lo
 
     if (nodeIndex !== -1) {
         ctx.fillStyle = (lookDirection === 3) ? hallwayData.leftSideDoorColor : hallwayData.rightSideDoorColor;
-        
+
         const currentOpenProgress = hallwayData.doorOpenStatus[nodeIndex];
         const frameW = w * 0.4;
         const doorH = floorLineY - ceilingLineY;
@@ -189,9 +189,9 @@ function drawMainHallwaySideView(ctx, canvas, WorldGrid, hallwayData, offset, lo
         const currentHallwayIdx = WorldGrid.mainHallways.findIndex(h => h.id === hallwayData.id);
         const isWorldBoundaryVoid = (lookDirection === 3 && currentHallwayIdx === 0) || (lookDirection === 1 && currentHallwayIdx === 6);
 
-        const connectionExists = WorldGrid.interconnectingHallways.some(conn => 
-            conn.fromHallwayIndex === currentHallwayIdx && 
-            conn.doorIndex === nodeIndex && 
+        const connectionExists = WorldGrid.interconnectingHallways.some(conn =>
+            conn.fromHallwayIndex === currentHallwayIdx &&
+            conn.doorIndex === nodeIndex &&
             conn.direction === lookDirection
         );
 
@@ -209,7 +209,7 @@ function drawMainHallwaySideView(ctx, canvas, WorldGrid, hallwayData, offset, lo
             } else if (connectionExists) {
                 ctx.fillStyle = '#222222';
                 ctx.fillRect(frameX, doorY, frameW, doorH);
-                
+
                 ctx.strokeStyle = '#555555';
                 ctx.lineWidth = 2;
                 ctx.beginPath();
@@ -246,7 +246,6 @@ function drawMainHallwaySideView(ctx, canvas, WorldGrid, hallwayData, offset, lo
 // =========================================================================
 // SECTION 2: INTERCONNECTING TUNNEL RENDERING COMPONENT
 // =========================================================================
-
 function drawInterconnectingPerspective(ctx, canvas, currentUser) {
     const w = canvas.width;
     const h = canvas.height;
@@ -254,29 +253,22 @@ function drawInterconnectingPerspective(ctx, canvas, currentUser) {
     const cy = h / 2;
 
     const totalTubeLength = 4.0;
-    
+
     // 1. Recover the native tunnel link to know which direction is "forward" (towards 4.0)
-    // We can infer the parent hallway indices based on the active tracking states
     const doorNodes = [0, 2, 4, 6, 8];
     const doorDataIdx = doorNodes.indexOf(currentUser.nodeIndex);
-    
-    // Use an inline safety check to find if we are facing the natural destination or the origin
-    // (If user.direction matches the link direction, the target wall is at totalTubeLength. If flipped, it's at 0)
+
     let distanceToFarWall = totalTubeLength - currentUser.interconnectingProgress;
-    
     const lookDirection = currentUser.direction;
     if (lookDirection === 3) {
-        distanceToFarWall = currentUser.interconnectingProgress; 
+        distanceToFarWall = currentUser.interconnectingProgress;
     } else {
         distanceToFarWall = totalTubeLength - currentUser.interconnectingProgress;
     }
 
     // --- MINIMAL ADJUSTMENT FOR AIRTIGHT PROJECTION STOP ---
-    // Instead of artificial visual subtraction which squishes the physical lines,
-    // we scale the visual projection distance perfectly to hit near-zero (0.05) 
-    // at the moment your physical engine hits its movement boundary threshold.
-    const maxWalkableProgress = 3.6; // Core engine stop boundary (e.g., 4.0 total length minus 0.4 gap)
-    
+    const maxWalkableProgress = 3.6; // Core engine stop boundary
+
     let normalizedProgress = currentUser.interconnectingProgress / maxWalkableProgress;
     if (normalizedProgress > 1) normalizedProgress = 1;
     if (normalizedProgress < 0) normalizedProgress = 0;
@@ -325,6 +317,123 @@ function drawInterconnectingPerspective(ctx, canvas, currentUser) {
     ctx.fillRect(x1, y1, x2 - x1, y2 - y1);
     ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
 
+    // --- FIXED SLIDING DOOR ATTACHMENT ---
+    const wallW = x2 - x1;
+    const wallH = y2 - y1;
+
+    // Scale the door size relative to the back wall
+    const doorW = wallW * 0.45;
+    const doorH = wallH * 0.75;
+
+    // Center it horizontally, align it to the bottom of the wall
+    const doorX = x1 + (wallW - doorW) / 2;
+    const doorY = y2 - doorH;
+
+    // Draw the structural dark door cavity doorway background
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(doorX, doorY, doorW, doorH);
+
+    // Read the active tunnel link state cleanly from our interface adapter layer!
+    const activeLink = window.MazeInterface.findActiveTunnel();
+
+    // Determine context end context to read from ('exit' if looking forward at length 4, else 'entrance')
+    const positionContext = (currentUser.interconnectingProgress >= 1.6) ? 'exit' : 'entrance';
+    const openStatus = activeLink ? window.MazeInterface.getOpenStatus(activeLink, positionContext) : 0.0;
+
+    // Slide the physical door canvas graphics panel rightward inside the frame cavity
+    const currentSlidWidth = doorW * (1 - openStatus);
+
+    if (currentSlidWidth > 0) {
+        // Safe industrial door plate aesthetic color (Distinct from void spaces)
+        ctx.fillStyle = '#777777';
+        ctx.fillRect(doorX, doorY, currentSlidWidth, doorH);
+
+        // Draw door face panel segmentation lines so player can see it sliding
+        ctx.strokeStyle = '#333333';
+        ctx.lineWidth = Math.max(1, scale * 1.5);
+        ctx.strokeRect(doorX, doorY, currentSlidWidth, doorH);
+    }
+
+    // Outer door frame trimming border overlay line
+    ctx.strokeStyle = '#555555';
+    ctx.lineWidth = Math.max(1, scale * 2);
+    ctx.strokeRect(doorX, doorY, doorW, doorH);
+}
+
+/*
+function drawInterconnectingPerspective(ctx, canvas, currentUser) {
+    const w = canvas.width;
+    const h = canvas.height;
+    const cx = w / 2;
+    const cy = h / 2;
+
+    const totalTubeLength = 4.0;
+
+    // 1. Recover the native tunnel link to know which direction is "forward" (towards 4.0)
+    // We can infer the parent hallway indices based on the active tracking states
+    const doorNodes = [0, 2, 4, 6, 8];
+    const doorDataIdx = doorNodes.indexOf(currentUser.nodeIndex);
+
+    // Use an inline safety check to find if we are facing the natural destination or the origin
+    // (If user.direction matches the link direction, the target wall is at totalTubeLength. If flipped, it's at 0)
+    let distanceToFarWall = totalTubeLength - currentUser.interconnectingProgress;
+
+    const lookDirection = currentUser.direction;
+    if (lookDirection === 3) {
+        distanceToFarWall = currentUser.interconnectingProgress;
+    } else {
+        distanceToFarWall = totalTubeLength - currentUser.interconnectingProgress;
+    }
+
+    // --- MINIMAL ADJUSTMENT FOR AIRTIGHT PROJECTION STOP ---
+    // Instead of artificial visual subtraction which squishes the physical lines,
+    // we scale the visual projection distance perfectly to hit near-zero (0.05)
+    // at the moment your physical engine hits its movement boundary threshold.
+    const maxWalkableProgress = 3.6; // Core engine stop boundary (e.g., 4.0 total length minus 0.4 gap)
+
+    let normalizedProgress = currentUser.interconnectingProgress / maxWalkableProgress;
+    if (normalizedProgress > 1) normalizedProgress = 1;
+    if (normalizedProgress < 0) normalizedProgress = 0;
+
+    if (lookDirection === 3) {
+        normalizedProgress = 1 - normalizedProgress;
+    }
+
+    const wallProximityLimit = 0.05; // Visual distance when standing nose-to-door
+    const visualDistance = totalTubeLength - (normalizedProgress * (totalTubeLength - wallProximityLimit));
+    const scale = 1 / visualDistance;
+    // --------------------------------------------------------
+
+    const x1 = cx - (cx * scale);
+    const x2 = cx + ((w - cx) * scale);
+    const y1 = cy - (cy * scale);
+    const y2 = cy + ((h - cy) * scale);
+
+    // Dark industrial floor aesthetic for connection tubes
+    ctx.fillStyle = '#444444';
+    ctx.beginPath();
+    ctx.moveTo(0, h); ctx.lineTo(x1, y2); ctx.lineTo(x2, y2); ctx.lineTo(w, h);
+    ctx.closePath(); ctx.fill();
+
+    // Left and Right tube wall segments
+    ctx.fillStyle = '#b0b0b0';
+    ctx.beginPath();
+    ctx.moveTo(0, 0); ctx.lineTo(x1, y1); ctx.lineTo(x1, y2); ctx.lineTo(0, h);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(w, 0); ctx.lineTo(x2, y1); ctx.lineTo(x2, y2); ctx.lineTo(w, h);
+    ctx.closePath(); ctx.fill();
+
+    // Guidelines
+    ctx.strokeStyle = '#222222';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, 0); ctx.lineTo(x1, y1);
+    ctx.moveTo(w, 0); ctx.lineTo(x2, y1);
+    ctx.moveTo(0, h); ctx.lineTo(x1, y2);
+    ctx.moveTo(w, h); ctx.lineTo(x2, y2);
+    ctx.stroke();
+
     // Far End Wall Background Panel Plate
     ctx.fillStyle = '#111111';
     ctx.fillRect(x1, y1, x2 - x1, y2 - y1);
@@ -333,11 +442,11 @@ function drawInterconnectingPerspective(ctx, canvas, currentUser) {
     // --- ADDED DETACHED END DOOR ---
     const wallW = x2 - x1;
     const wallH = y2 - y1;
-    
+
     // Scale the door size relative to the back wall
-    const doorW = wallW * 0.45; 
+    const doorW = wallW * 0.45;
     const doorH = wallH * 0.75;
-    
+
     // Center it horizontally, align it to the bottom of the wall
     const doorX = x1 + (wallW - doorW) / 2;
     const doorY = y2 - doorH;
@@ -349,6 +458,7 @@ function drawInterconnectingPerspective(ctx, canvas, currentUser) {
     ctx.lineWidth = Math.max(1, scale * 2);
     ctx.strokeRect(doorX, doorY, doorW, doorH);
 }
+*/
 
 /**
  * Visual slice of a flat side wall within an interconnecting tube
@@ -393,17 +503,17 @@ function drawTransitionView(ctx, canvas, currentUser) {
     const frameY = (h * 0.15) - ((h * 0.15) * (zoomFactor - 1));
 
     // Draw background layers outside the door frame cavity
-    ctx.fillStyle = '#aaaaaa'; 
+    ctx.fillStyle = '#aaaaaa';
     ctx.fillRect(0, 0, w, frameY);
 
-    ctx.fillStyle = '#888888'; 
+    ctx.fillStyle = '#888888';
     ctx.fillRect(0, frameY + frameH, w, h - (frameY + frameH));
 
-    ctx.fillStyle = '#cccccc'; 
+    ctx.fillStyle = '#cccccc';
     ctx.fillRect(0, frameY, w, frameH);
 
     // 2. Parallax Background Tunnel: Computed using a FIXED baseline zoom layout (does not scale)
-    const baseZoom = 1.0; 
+    const baseZoom = 1.0;
     const backWallW = w * 0.4 * baseZoom * 0.5; // Centers the back wall panel to a smaller scale
     const backWallH = (h * 0.85 - h * 0.15) * baseZoom * 0.5;
     const backWallX = (w - backWallW) / 2;
@@ -417,7 +527,7 @@ function drawTransitionView(ctx, canvas, currentUser) {
     // Draw stationary dark environment cavity
     ctx.fillStyle = '#222222';
     ctx.fillRect(frameX, frameY, frameW, frameH);
-    
+
     // 3. Stretched Connecting Perspective Lines
     // Links corners from the static background wall directly to the zooming foreground frame
     ctx.strokeStyle = '#555555';
@@ -437,7 +547,7 @@ function drawTransitionView(ctx, canvas, currentUser) {
     ctx.fillStyle = '#111111';
     ctx.fillRect(backWallX, backWallY, backWallW, backWallH);
     ctx.strokeRect(backWallX, backWallY, backWallW, backWallH);
-    
+
     ctx.restore();
 
     // Foreground door threshold outline (grows thicker along with the opening)
