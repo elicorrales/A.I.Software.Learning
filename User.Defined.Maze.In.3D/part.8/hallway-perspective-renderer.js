@@ -329,12 +329,75 @@ function drawInterconnectingPerspective(ctx, canvas, currentUser) {
     const doorX = x1 + (wallW - doorW) / 2;
     const doorY = y2 - doorH;
 
-    // Draw the structural dark door cavity doorway background
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(doorX, doorY, doorW, doorH);
-
     // Read the active tunnel link state cleanly from our interface adapter layer!
     const activeLink = window.MazeInterface.findActiveTunnel();
+
+    let originatingHallwayIdx = -1;
+    let destinationHallwayIdx = -1;
+    let targetDoorIndex = -1;
+
+    if (activeLink) {
+        targetDoorIndex = activeLink.doorIndex;
+        originatingHallwayIdx = activeLink.fromHallwayIndex;
+        destinationHallwayIdx = activeLink.toHallwayIndex;
+        
+        // Dynamic structural check: Determine which side we are looking from
+        const currentHallwayIdx = window.My3dMazeAppState.WorldGrid.mainHallways.findIndex(h => h.id === window.My3dMazeAppState.activeHallway.id);
+        if (currentHallwayIdx === activeLink.toHallwayIndex) {
+            // Player is standing at the 'to' hallway looking backwards toward the 'from' hallway
+            originatingHallwayIdx = activeLink.toHallwayIndex;
+            destinationHallwayIdx = activeLink.fromHallwayIndex;
+        }
+    }
+
+    // Draw the structural doorway background (Fake Perpendicular Main Hallway)
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(doorX, doorY, doorW, doorH);
+    ctx.clip(); // Ensure fake hall lines do not bleed outside the door frame cavity
+
+    // FIX: Pass all 3 parameters correctly matching the facade adapter specification!
+    if (activeLink && window.MazeInterface.doesMainHallwayExistAtCoordinates(originatingHallwayIdx, destinationHallwayIdx, targetDoorIndex)) {
+        // 1. Fake Hall Wall Background Color (Light gray hallway wall)
+        ctx.fillStyle = '#e0e0e0';
+        ctx.fillRect(doorX, doorY, doorW, doorH);
+
+        // 2. Fake Horizontal Floor and Ceiling guidelines running sideways
+        const fakeFloorY = doorY + (doorH * 0.85);
+        const fakeCeilingY = doorY + (doorH * 0.15);
+
+        ctx.strokeStyle = '#333333';
+        ctx.lineWidth = Math.max(1, scale * 0.75);
+        ctx.beginPath();
+        ctx.moveTo(doorX, fakeFloorY); ctx.lineTo(doorX + doorW, fakeFloorY);
+        ctx.moveTo(doorX, fakeCeilingY); ctx.lineTo(doorX + doorW, fakeCeilingY);
+        ctx.stroke();
+
+        // Dark grey floor surface fill
+        ctx.fillStyle = '#888888';
+        ctx.fillRect(doorX, fakeFloorY, doorW, doorY + doorH - fakeFloorY);
+
+        // 3. Fake Closed Door on the opposite wall (Centered inside the frame context)
+        const fakeDoorW = doorW * 0.4;
+        const fakeDoorH = fakeFloorY - fakeCeilingY;
+        const fakeDoorX = doorX + (doorW - fakeDoorW) / 2;
+        const fakeDoorY = fakeCeilingY;
+
+        // Dark background door slit
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(fakeDoorX, fakeDoorY, fakeDoorW, fakeDoorH);
+
+        // Solid contrasting color for the opposite closed panel
+        ctx.fillStyle = '#999999'; 
+        ctx.fillRect(fakeDoorX, fakeDoorY, fakeDoorW, fakeDoorH);
+        ctx.strokeRect(fakeDoorX, fakeDoorY, fakeDoorW, fakeDoorH);
+    } else {
+        // Just fill the canvas door cavity with the far wall background color if no hallway exists
+        ctx.fillStyle = '#111111';
+        ctx.fillRect(doorX, doorY, doorW, doorH);
+    }
+
+    ctx.restore();
 
     // Determine context end context to read from ('exit' if looking forward at length 4, else 'entrance')
     const positionContext = (currentUser.interconnectingProgress >= 1.6) ? 'exit' : 'entrance';
@@ -360,105 +423,7 @@ function drawInterconnectingPerspective(ctx, canvas, currentUser) {
     ctx.strokeRect(doorX, doorY, doorW, doorH);
 }
 
-/*
-function drawInterconnectingPerspective(ctx, canvas, currentUser) {
-    const w = canvas.width;
-    const h = canvas.height;
-    const cx = w / 2;
-    const cy = h / 2;
 
-    const totalTubeLength = 4.0;
-
-    // 1. Recover the native tunnel link to know which direction is "forward" (towards 4.0)
-    // We can infer the parent hallway indices based on the active tracking states
-    const doorNodes = [0, 2, 4, 6, 8];
-    const doorDataIdx = doorNodes.indexOf(currentUser.nodeIndex);
-
-    // Use an inline safety check to find if we are facing the natural destination or the origin
-    // (If user.direction matches the link direction, the target wall is at totalTubeLength. If flipped, it's at 0)
-    let distanceToFarWall = totalTubeLength - currentUser.interconnectingProgress;
-
-    const lookDirection = currentUser.direction;
-    if (lookDirection === 3) {
-        distanceToFarWall = currentUser.interconnectingProgress;
-    } else {
-        distanceToFarWall = totalTubeLength - currentUser.interconnectingProgress;
-    }
-
-    // --- MINIMAL ADJUSTMENT FOR AIRTIGHT PROJECTION STOP ---
-    // Instead of artificial visual subtraction which squishes the physical lines,
-    // we scale the visual projection distance perfectly to hit near-zero (0.05)
-    // at the moment your physical engine hits its movement boundary threshold.
-    const maxWalkableProgress = 3.6; // Core engine stop boundary (e.g., 4.0 total length minus 0.4 gap)
-
-    let normalizedProgress = currentUser.interconnectingProgress / maxWalkableProgress;
-    if (normalizedProgress > 1) normalizedProgress = 1;
-    if (normalizedProgress < 0) normalizedProgress = 0;
-
-    if (lookDirection === 3) {
-        normalizedProgress = 1 - normalizedProgress;
-    }
-
-    const wallProximityLimit = 0.05; // Visual distance when standing nose-to-door
-    const visualDistance = totalTubeLength - (normalizedProgress * (totalTubeLength - wallProximityLimit));
-    const scale = 1 / visualDistance;
-    // --------------------------------------------------------
-
-    const x1 = cx - (cx * scale);
-    const x2 = cx + ((w - cx) * scale);
-    const y1 = cy - (cy * scale);
-    const y2 = cy + ((h - cy) * scale);
-
-    // Dark industrial floor aesthetic for connection tubes
-    ctx.fillStyle = '#444444';
-    ctx.beginPath();
-    ctx.moveTo(0, h); ctx.lineTo(x1, y2); ctx.lineTo(x2, y2); ctx.lineTo(w, h);
-    ctx.closePath(); ctx.fill();
-
-    // Left and Right tube wall segments
-    ctx.fillStyle = '#b0b0b0';
-    ctx.beginPath();
-    ctx.moveTo(0, 0); ctx.lineTo(x1, y1); ctx.lineTo(x1, y2); ctx.lineTo(0, h);
-    ctx.closePath(); ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(w, 0); ctx.lineTo(x2, y1); ctx.lineTo(x2, y2); ctx.lineTo(w, h);
-    ctx.closePath(); ctx.fill();
-
-    // Guidelines
-    ctx.strokeStyle = '#222222';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(0, 0); ctx.lineTo(x1, y1);
-    ctx.moveTo(w, 0); ctx.lineTo(x2, y1);
-    ctx.moveTo(0, h); ctx.lineTo(x1, y2);
-    ctx.moveTo(w, h); ctx.lineTo(x2, y2);
-    ctx.stroke();
-
-    // Far End Wall Background Panel Plate
-    ctx.fillStyle = '#111111';
-    ctx.fillRect(x1, y1, x2 - x1, y2 - y1);
-    ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
-
-    // --- ADDED DETACHED END DOOR ---
-    const wallW = x2 - x1;
-    const wallH = y2 - y1;
-
-    // Scale the door size relative to the back wall
-    const doorW = wallW * 0.45;
-    const doorH = wallH * 0.75;
-
-    // Center it horizontally, align it to the bottom of the wall
-    const doorX = x1 + (wallW - doorW) / 2;
-    const doorY = y2 - doorH;
-
-    // Draw the door frame cavity
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(doorX, doorY, doorW, doorH);
-    ctx.strokeStyle = '#555555';
-    ctx.lineWidth = Math.max(1, scale * 2);
-    ctx.strokeRect(doorX, doorY, doorW, doorH);
-}
-*/
 
 /**
  * Visual slice of a flat side wall within an interconnecting tube

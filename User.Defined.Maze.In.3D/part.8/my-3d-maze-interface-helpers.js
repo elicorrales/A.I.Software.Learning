@@ -218,6 +218,33 @@ function resetAllDoors(hallway) {
   }
 }
 
+/**
+ * Verifies if a main hallway actually exists at the absolute physical grid alignment 
+ * of a specific originating hallway door slot.
+ */
+function doesMainHallwayExistAtCoordinates(originatingHallwayIdx, destinationHallwayIdx, doorIndex) {
+  const state = window.My3dMazeAppState;
+  if (!state || !state.WorldGrid || !state.WorldGrid.mainHallways) return false;
+
+  const originHallway = state.WorldGrid.mainHallways[originatingHallwayIdx];
+  const destHallway = state.WorldGrid.mainHallways[destinationHallwayIdx];
+  if (!originHallway || !destHallway) return false;
+
+  // 1. Calculate the absolute global X position of the originating door from 'S'
+  const globalDoorX = originHallway.startOffsetFromS + doorIndex;
+
+  // 2. Translate that global X position back into the destination hallway's local space
+  const localDestX = globalDoorX - destHallway.startOffsetFromS;
+
+  // 3. To hit an actual door on the destination hallway, localDestX must land 
+  //    perfectly on an integer index from 0 to 4 (matching your UNIFORM_2D_DOORS positions)
+  if (localDestX >= 0 && localDestX <= 4 && Number.isInteger(localDestX)) {
+    return true;
+  }
+
+  return false;
+}
+
 
 // Global window exposure updated with the newly established callers!
 window.MazeInterface = {
@@ -233,5 +260,6 @@ window.MazeInterface = {
   hasTunnelAtCurrentNode: hasTunnelAtCurrentNode,
   getNormalizedTunnelContext: getNormalizedTunnelContext,
   setActiveHallwayByIndex: setActiveHallwayByIndex,
-  resetAllDoors: resetAllDoors
+  resetAllDoors: resetAllDoors,
+  doesMainHallwayExistAtCoordinates: doesMainHallwayExistAtCoordinates,
 };
