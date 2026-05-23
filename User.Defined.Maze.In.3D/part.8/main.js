@@ -193,9 +193,36 @@ function playerForwardMovement(e) {
 
       // If looking backward from the link's forward vector, walk backward numerically
       const multiplier = (activeLink && user.direction !== activeLink.direction) ? -1 : 1;
-      user.interconnectingProgress += user.speed * multiplier;
+      
+      // TARGET ACTION: Check if door is open before stepping forward out/in
+      if (state.activeHallway.doorOpenStatus[doorDataIdx] <= 0.95) {
+        user.flashFrames = 5; // Flash here because they hit the closed door while trying to move!
+        if (e && typeof e.preventDefault === 'function') e.preventDefault();
+        return;
+      }
 
-      // Check exit boundaries
+      // Calculate next progressive step position
+      const nextProgress = user.interconnectingProgress + user.speed * multiplier;
+
+      // --- FIXED BOUNDARY & CLOSED EXIT DOOR BLOCK RULE ---
+      // Halts progress at 3.20 (Stroke #80) where the exit door frame actually sits
+      if (nextProgress >= 3.20) {
+        if (activeLink) {
+          const destHallway = WorldGrid.mainHallways[activeLink.toHallwayIndex];
+          // Check if the destination exit door is closed
+          if (destHallway && destHallway.doorOpenStatus[activeLink.doorIndex] <= 0.95) {
+            user.interconnectingProgress = 3.16; // Hold position exactly 1 step (0.04 units) back from the closed door
+            user.flashFrames = 5;                // Visual feedback flash overlay
+            if (e && typeof e.preventDefault === 'function') e.preventDefault();
+            return;
+          }
+        }
+      }
+
+
+      user.interconnectingProgress = nextProgress;
+
+      // Check exit boundaries if open
       if (user.interconnectingProgress <= 0.0) {
         user.movementMode = 'transition';
         user.transitionProgress = 0.4;
@@ -293,13 +320,34 @@ function playerBackwardMovement(e) {
       const doorNodes = [0, 2, 4, 6, 8];
       const doorDataIdx = doorNodes.indexOf(user.nodeIndex);
       const currentHallwayIdx = WorldGrid.mainHallways.findIndex(h => h.id === state.activeHallway.id);
+      
+      // MINIMAL FIX: Search both from and to hallway indices to avoid the backward teleport bug
       const activeLink = WorldGrid.interconnectingHallways.find(conn =>
-        conn.fromHallwayIndex === currentHallwayIdx && conn.doorIndex === doorDataIdx
+        (conn.fromHallwayIndex === currentHallwayIdx && conn.doorIndex === doorDataIdx) ||
+        (conn.toHallwayIndex === currentHallwayIdx && conn.doorIndex === doorDataIdx)
       );
 
       // If looking backward, hitting ArrowDown moves you deeper towards the destination channel
       const multiplier = (activeLink && user.direction !== activeLink.direction) ? -1 : 1;
-      user.interconnectingProgress -= user.speed * multiplier;
+      
+      // Calculate next backward step position
+      const nextProgress = user.interconnectingProgress - user.speed * multiplier;
+
+// --- FIXED BOUNDARY & CLOSED EXIT DOOR BLOCK RULE (BACKWARD) ---
+      // Mirrors the forward function exactly using your true 3.20 physical boundary
+      if (nextProgress >= 3.20) {
+        if (activeLink) {
+          const destHallway = WorldGrid.mainHallways[activeLink.toHallwayIndex];
+          if (destHallway && destHallway.doorOpenStatus[activeLink.doorIndex] <= 0.95) {
+            user.interconnectingProgress = 3.16; // Clean step back from the door frame
+            user.flashFrames = 5;
+            if (e && typeof e.preventDefault === 'function') e.preventDefault();
+            return;
+          }
+        }
+      }
+
+      user.interconnectingProgress = nextProgress;
 
       // Handle fallback transition bounds
       if (user.interconnectingProgress <= 0.0) {
@@ -322,8 +370,6 @@ function playerBackwardMovement(e) {
       return;
     }
 
-    // Situation C: Standard backward movement down main corridor (Facing Direction 0 or 2)
-    // We restore your original flag behavior here as well!
     // Situation C: Standard backward movement down main corridor (Facing Direction 0 or 2)
     if (user.movementMode === 'normal' && state.activeHallway) {
       e.preventDefault();
@@ -410,6 +456,7 @@ window.addEventListener('keydown', (e) => {
   }
 
   else if (e.key === ' ' || e.key === 'Spacebar') {
+    // FIXED: Cleaned toggle logic. Spacebar toggles doors, no flash warnings here.
     if (state.activeHallway && (user.direction === 1 || user.direction === 3)) {
       const roundedOffset = Math.round(user.forwardOffset * 100) / 100;
       const doorNodes = [0.0, 0.75, 1.95, 3.95, 5.75];

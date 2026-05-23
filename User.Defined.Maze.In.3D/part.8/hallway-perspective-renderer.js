@@ -253,7 +253,7 @@ function drawInterconnectingPerspective(ctx, canvas, currentUser) {
     const cx = w / 2;
     const cy = h / 2;
 
-const totalTubeLength = 4.0;
+    const totalTubeLength = 4.0;
     
     // 1. Recover the native tunnel link to know which direction is "forward" (towards 4.0)
     // We can infer the parent hallway indices based on the active tracking states
@@ -264,21 +264,6 @@ const totalTubeLength = 4.0;
     // (If user.direction matches the link direction, the target wall is at totalTubeLength. If flipped, it's at 0)
     let distanceToFarWall = totalTubeLength - currentUser.interconnectingProgress;
     
-    // Default fallback check: If we have an active state context or assume direction 1 vs 3
-    // If the user's direction indicates they turned around, flip the perspective distance anchor
-    if (currentUser.direction === 3) { 
-        // Facing Up/West depending on map setup - if this is looking back to origin:
-        distanceToFarWall = currentUser.interconnectingProgress;
-    } else if (currentUser.direction === 2 || currentUser.direction === 0) {
-        // Handle side checks if needed, otherwise default to progress tracking
-        distanceToFarWall = totalTubeLength - currentUser.interconnectingProgress;
-    }
-    
-    // Fallback toggle check against progress vector:
-    // If you want it completely airtight regardless of global compass indices:
-    // We check if the player's current viewpoint faces back toward the 0.0 threshold point.
-    // For a link that natively moves East (1), facing West (3) means looking at 0.0.
-    // For a link that natively moves West (3), facing East (1) means looking at 0.0.
     const lookDirection = currentUser.direction;
     if (lookDirection === 3) {
         distanceToFarWall = currentUser.interconnectingProgress; 
@@ -286,7 +271,24 @@ const totalTubeLength = 4.0;
         distanceToFarWall = totalTubeLength - currentUser.interconnectingProgress;
     }
 
-    const scale = distanceToFarWall > 0.05 ? 1 / distanceToFarWall : 20;
+    // --- MINIMAL ADJUSTMENT FOR AIRTIGHT PROJECTION STOP ---
+    // Instead of artificial visual subtraction which squishes the physical lines,
+    // we scale the visual projection distance perfectly to hit near-zero (0.05) 
+    // at the moment your physical engine hits its movement boundary threshold.
+    const maxWalkableProgress = 3.6; // Core engine stop boundary (e.g., 4.0 total length minus 0.4 gap)
+    
+    let normalizedProgress = currentUser.interconnectingProgress / maxWalkableProgress;
+    if (normalizedProgress > 1) normalizedProgress = 1;
+    if (normalizedProgress < 0) normalizedProgress = 0;
+
+    if (lookDirection === 3) {
+        normalizedProgress = 1 - normalizedProgress;
+    }
+
+    const wallProximityLimit = 0.05; // Visual distance when standing nose-to-door
+    const visualDistance = totalTubeLength - (normalizedProgress * (totalTubeLength - wallProximityLimit));
+    const scale = 1 / visualDistance;
+    // --------------------------------------------------------
 
     const x1 = cx - (cx * scale);
     const x2 = cx + ((w - cx) * scale);
