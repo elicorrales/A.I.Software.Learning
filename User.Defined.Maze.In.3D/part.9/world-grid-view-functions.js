@@ -109,30 +109,22 @@ function drawBirdseyeView(minimapCtx, minimapCanvas, worldGrid, activeHallway, u
       let mappedUserY = hY;
 
       if (user.movementMode === 'interconnecting') {
-        // Find the active interconnecting link the player is traveling through
-        const doorNodes = [0, 2, 4, 6, 8];
-        const doorDataIdx = doorNodes.indexOf(user.nodeIndex);
-        const currentHallwayIdx = worldGrid.mainHallways.findIndex(h => h.id === activeHallway.id);
-        
-        // FIX: Find the connector by checking if it matches our parent hallway and door column,
-        // ignoring which way the user's vector arrow is currently turned.
-        const activeLink = worldGrid.interconnectingHallways.find(conn => 
-          conn.fromHallwayIndex === currentHallwayIdx && 
-          conn.doorIndex === doorDataIdx
-        );
+        // Use facade directly to query the tracked live occupied link reliably
+        const activeLink = window.MazeInterface.findActiveTunnel();
 
         if (activeLink) {
-          // X Position stays locked to the uniform door column position
+          // X Position stays locked to the uniform door column position anchored to the starting hallway track
+          const baseHallway = worldGrid.mainHallways[activeLink.fromHallwayIndex];
+          const baseStartX = 20 + (baseHallway.startOffsetFromS / totalGridWidthUnits) * availableRenderWidth;
           const doorXVal = UNIFORM_2D_DOORS[activeLink.doorIndex];
-          mappedUserX = startX + ((doorXVal / maxHallwayWidthUnits) * totalVisualLineLength);
+          mappedUserX = baseStartX + ((doorXVal / maxHallwayWidthUnits) * totalVisualLineLength);
 
           // Y Position smoothly moves between fromHallwayIndex track and toHallwayIndex track
           const fromY = trackSpacingY * (activeLink.fromHallwayIndex + 1);
           const toY = trackSpacingY * (activeLink.toHallwayIndex + 1);
           
-          // progress goes from 0.0 to 4.0 total length
-          // SAFELY RETAIN TRACKING CAPS FOR REVERSED MOVEMENT
-          const percentDone = Math.min(1.0, Math.max(0.0, user.interconnectingProgress / 4.0));
+          // progress goes from 0.0 to 3.20 total length matching 3D engine boundaries
+          const percentDone = Math.min(1.0, Math.max(0.0, user.interconnectingProgress / 3.20));
           mappedUserY = fromY + (toY - fromY) * percentDone;
         }
       } else {
