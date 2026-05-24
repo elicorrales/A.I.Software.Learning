@@ -12,6 +12,7 @@
  * context depending on the structural layout of the current movement mode.
  * * Returns: 'forward' | 'backward' | 'sideways'
  */
+/*
 function getLocalViewOrientation(movementMode, globalDirection) {
     if (movementMode === 'interconnecting') {
         // Tunnels run horizontally (East-West) across the screen layout.
@@ -29,6 +30,7 @@ function getLocalViewOrientation(movementMode, globalDirection) {
         return 'sideways';
     }
 }
+*/
 
 // =========================================================================
 // SECTION 1: MAIN HALLWAY RENDERING COMPONENT
@@ -307,9 +309,12 @@ function drawInterconnectingPerspective(ctx, canvas, currentUser) {
     const doorNodes = [0, 2, 4, 6, 8];
     const doorDataIdx = doorNodes.indexOf(currentUser.nodeIndex);
 
+    // Ask the facade if we are looking backward down the tunnel link tube
+    const view = window.MazeInterface.getRelativeViewOrientation();
+    const isLookingBackward = (view === 'backward');
+
     let distanceToFarWall = totalTubeLength - currentUser.interconnectingProgress;
-    const lookDirection = currentUser.direction;
-    if (lookDirection === 3) {
+    if (isLookingBackward) {
         distanceToFarWall = currentUser.interconnectingProgress;
     } else {
         distanceToFarWall = totalTubeLength - currentUser.interconnectingProgress;
@@ -322,7 +327,7 @@ function drawInterconnectingPerspective(ctx, canvas, currentUser) {
     if (normalizedProgress > 1) normalizedProgress = 1;
     if (normalizedProgress < 0) normalizedProgress = 0;
 
-    if (lookDirection === 3) {
+    if (isLookingBackward) {
         normalizedProgress = 1 - normalizedProgress;
     }
 
@@ -387,23 +392,27 @@ function drawInterconnectingPerspective(ctx, canvas, currentUser) {
 
     if (activeLink) {
         targetDoorIndex = activeLink.doorIndex;
+        
+        // The tunnel link properties 'from' and 'to' are structurally absolute constants.
+        // We set our layout coordinates to look from 'from' to 'to' by default.
         originatingHallwayIdx = activeLink.fromHallwayIndex;
         destinationHallwayIdx = activeLink.toHallwayIndex;
         
-        // Dynamic structural check: Determine which side we are looking from
-        const currentHallwayIdx = window.My3dMazeAppState.WorldGrid.mainHallways.findIndex(h => h.id === window.My3dMazeAppState.activeHallway.id);
-        if (currentHallwayIdx === activeLink.toHallwayIndex) {
-            // Player is standing at the 'to' hallway looking backwards toward the 'from' hallway
+        // If the facade tells us our relative view orientation is 'backward', 
+        // it means our eyes are turned toward the 'from' origin. We invert our layout indices.
+        if (view === 'backward') {
             originatingHallwayIdx = activeLink.toHallwayIndex;
             destinationHallwayIdx = activeLink.fromHallwayIndex;
         }
     }
 
-    // --- EXTRACTED UPWARD OUT OF OLD LOCALITY TO FIX SCOPE ANOMALIES ---
-    const positionContext = (currentUser.interconnectingProgress >= 1.6) ? 'exit' : 'entrance';
-    const openStatus = activeLink ? window.MazeInterface.getOpenStatus(activeLink, positionContext) : 0.0;
-    // -------------------------------------------------------------------
-
+    // The door we are staring at is strictly determined by our orientation view string, 
+    // NOT our walking progress. If we look 'backward' down the tube, we see the entrance door frame. 
+    // If we look 'forward', we see the exit door frame.
+    const doorFrameContext = (view === 'backward') ? 'entrance' : 'exit';
+    
+    // Pass the absolute structure and the unified semantic text label straight to the facade
+    const openStatus = activeLink ? window.MazeInterface.getOpenStatus(activeLink, doorFrameContext) : 0.0;
     // Draw the structural doorway background (Fake Perpendicular Main Hallway)
     ctx.save();
     ctx.beginPath();
@@ -562,7 +571,8 @@ function drawTransitionView(ctx, canvas, currentUser) {
 // =========================================================================
 
 function drawNormalView(ctx, canvas, WorldGrid, currentHallway, currentUser) {
-    const view = getLocalViewOrientation('normal', currentUser.direction);
+    // Call the facade directly to get 'forward' | 'backward' | 'left' | 'right'
+    const view = window.MazeInterface.getRelativeViewOrientation();
 
     if (view === 'forward') {
         drawMainHallwayPerspective(ctx, canvas, currentHallway, currentUser.forwardOffset, false);
@@ -570,18 +580,20 @@ function drawNormalView(ctx, canvas, WorldGrid, currentHallway, currentUser) {
         const inverseOffset = (currentHallway.baseDistances[currentHallway.baseDistances.length - 2] - 0.5) - currentUser.forwardOffset;
         drawMainHallwayPerspective(ctx, canvas, currentHallway, inverseOffset, true);
     } else {
+        // Pass currentUser.direction safely to side view for asset selection boundaries
         drawMainHallwaySideView(ctx, canvas, WorldGrid, currentHallway, currentUser.forwardOffset, currentUser.direction);
     }
 }
 
 function drawInterconnectingView(ctx, canvas, currentUser) {
-    const view = getLocalViewOrientation('interconnecting', currentUser.direction);
+    // Call the facade directly to get 'forward' | 'backward' | 'left' | 'right'
+    const view = window.MazeInterface.getRelativeViewOrientation();
 
-    if (view === 'forward') {
-        // Looking straight down the long lane layout of the connection tube
+    if (view === 'forward' || view === 'backward') {
+        // Looking straight down the tube infrastructure vector
         drawInterconnectingPerspective(ctx, canvas, currentUser);
     } else {
-        // Looking flatly at the bounding side walls of the connection tube
+        // Looking flatly at the structural side walls of the tube link
         drawInterconnectingSideView(ctx, canvas);
     }
 }
@@ -592,6 +604,7 @@ function drawPlayerView(ctx, canvas, WorldGrid, currentHallway, currentUser) {
 
     if (!currentHallway) return;
 
+    // Use explicit movement modes to branch rendering contexts cleanly
     if (currentUser.movementMode === 'interconnecting') {
         drawInterconnectingView(ctx, canvas, currentUser);
     } else if (currentUser.movementMode === 'transition') {

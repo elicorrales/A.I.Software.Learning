@@ -284,6 +284,63 @@ function createNewSmokeParticle(randomInitialAge = false) {
   };
 }
 
+/**
+ * Dynamically resolves and returns the true active hallway object 
+ * based on the player's real-time spatial position and movement mode.
+ * @returns {Object|null} The current active main hallway structure.
+ */
+function getTrueActiveHallway() {
+  const state = window.My3dMazeAppState;
+  if (!state || !state.WorldGrid || !state.user) return null;
+
+  // If navigating a tunnel, calculate proximity to the connected hallways
+  if (state.user.movementMode === 'interconnecting') {
+    const activeTunnel = findActiveTunnel();
+    if (activeTunnel) {
+      // 1.6 is the exact halfway point of a 3.20 length tunnel
+      const trueIndex = (state.user.interconnectingProgress >= 1.6) 
+        ? activeTunnel.toHallwayIndex 
+        : activeTunnel.fromHallwayIndex;
+        
+      return state.WorldGrid.mainHallways[trueIndex] || state.activeHallway;
+    }
+  }
+
+  // Fallback to the standard active hallway context for normal/transition modes
+  return state.activeHallway;
+}
+
+/**
+ * Resolves absolute compass integers into a unified, semantic language string.
+ * This completely isolates the calling engine from tracking numeric dimensions.
+ * @returns {string} 'forward' | 'backward' | 'left' | 'right'
+ */
+function getRelativeViewOrientation() {
+  const state = window.My3dMazeAppState;
+  if (!state || !state.user) return 'forward';
+
+  const userDir = state.user.direction;
+  const mode = state.user.movementMode;
+
+  // Real-time calculation when the player is traveling inside a tunnel link
+  if (mode === 'interconnecting') {
+    const activeTunnel = findActiveTunnel();
+    if (activeTunnel) {
+      // Is our compass direction aligned with the tunnel's forward vector?
+      if (userDir === activeTunnel.direction) return 'forward';
+      if (Math.abs(userDir - activeTunnel.direction) === 2) return 'backward';
+      
+      // If we are looking at the tunnel's side walls
+      return userDir === 0 ? 'left' : 'right'; 
+    }
+  }
+
+  // Real-time calculation when the player is navigating a Main Hallway
+  if (userDir === 0) return 'forward';
+  if (userDir === 2) return 'backward';
+  return userDir === 3 ? 'left' : 'right';
+}
+
 
 // Global window exposure updated with the newly established callers!
 window.MazeInterface = {
@@ -302,4 +359,6 @@ window.MazeInterface = {
   resetAllDoors: resetAllDoors,
   doesMainHallwayExistAtCoordinates: doesMainHallwayExistAtCoordinates,
   updateVoidSmokeState: updateVoidSmokeState,
+  getTrueActiveHallway: getTrueActiveHallway,
+  getRelativeViewOrientation: getRelativeViewOrientation,
 };

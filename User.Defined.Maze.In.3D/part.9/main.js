@@ -118,8 +118,11 @@ function snapToNearestNode(offset, hallwayModel) {
 // =========================================================================
 
 function animationLoop() {
-  if (state.activeHallway && user.movementMode === 'normal') {
-    user.nodeIndex = snapToNearestNodeIndex(user.forwardOffset, state.activeHallway);
+
+  const trueHallway = window.MazeInterface.getTrueActiveHallway();
+
+  if (trueHallway && user.movementMode === 'normal') {
+    user.nodeIndex = snapToNearestNodeIndex(user.forwardOffset, trueHallway);
   }
 
   if (state.activeHallway) {
@@ -144,13 +147,13 @@ function animationLoop() {
   // =========================================
 
   // Inject updated context pointers straight to renderer engines
-  drawPlayerView(ctx, canvas, WorldGrid, state.activeHallway, user);
+  drawPlayerView(ctx, canvas, WorldGrid, trueHallway, user);
 
   // --- FLASH OVERLAY SYSTEM RENDERER ---
   if (user.flashFrames > 0) {
-    ctx.fillStyle = `rgba(255, 255, 255, ${user.flashFrames / 5})`; 
+    ctx.fillStyle = `rgba(255, 255, 255, ${user.flashFrames / 5})`;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    user.flashFrames--; 
+    user.flashFrames--;
   }
 
   if (minimapOverlay.style.display !== 'none') {
@@ -252,6 +255,7 @@ function playerForwardMovement(e) {
       }
       return;
     }
+
 
     // Situation C: Normal navigation, facing a door node, and trying to step into it
     if (user.movementMode === 'normal' && (user.direction === 1 || user.direction === 3)) {
@@ -523,10 +527,10 @@ window.addEventListener('mouseup', () => {
 window.addEventListener('load', () => {
   resizeCanvas();
   initializeAllMainHallways();
-  
+
   // Clean initialization passing index boundary logic off to the interface helper
   window.MazeInterface.setActiveHallwayByIndex(0);
-  
+
   animationLoop();
 });
 
