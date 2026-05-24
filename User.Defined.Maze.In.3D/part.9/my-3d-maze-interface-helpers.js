@@ -92,20 +92,47 @@ function getCurrentNodeIndex() {
 
 /**
  * Searches the world graph registry to extract the live Tunnel link object 
- * that the player is currently occupying based on active location and node alignment.
+ * using absolute global positions, allowing lookup from either connected hallway.
  */
 function findActiveTunnel() {
   const state = window.My3dMazeAppState;
-  if (!state || !state.activeHallway || !state.user) return null;
+  if (!state || !state.WorldGrid || !state.activeHallway || !state.user) return null;
 
-  const doorNodes = [0, 2, 4, 6, 8];
-  const doorDataIdx = doorNodes.indexOf(state.user.nodeIndex);
+  // 1. If there are no tunnels in the array at all, return null immediately
+  if (!state.WorldGrid.interconnectingHallways || state.WorldGrid.interconnectingHallways.length === 0) {
+    return null;
+  }
+
+  // 2. Determine local door data index
+  let doorDataIdx = getCurrentNodeIndex();
+  if (doorDataIdx === -1) {
+    const doorNodes = [0, 2, 4, 6, 8];
+    doorDataIdx = doorNodes.indexOf(state.user.nodeIndex);
+  }
+  if (doorDataIdx === -1) return null;
+
   const currentHallwayIdx = state.WorldGrid.mainHallways.findIndex(h => h.id === state.activeHallway.id);
+  const currentHallway = state.WorldGrid.mainHallways[currentHallwayIdx];
+  if (!currentHallway) return null;
 
-  return state.WorldGrid.interconnectingHallways.find(conn =>
-    (conn.fromHallwayIndex === currentHallwayIdx && conn.doorIndex === doorDataIdx) ||
-    (conn.toHallwayIndex === currentHallwayIdx && conn.doorIndex === doorDataIdx)
-  );
+  // 3. Compute the absolute global X coordinate on the universe grid axis
+  const globalX = currentHallway.startOffsetFromS + doorDataIdx;
+
+  // 4. Scan for any tunnel that physically links to this location from either side
+  return state.WorldGrid.interconnectingHallways.find(conn => {
+    // Only check tunnels that involve our current hallway
+    if (conn.fromHallwayIndex !== currentHallwayIdx && conn.toHallwayIndex !== currentHallwayIdx) {
+      return false;
+    }
+
+    const fromHallway = state.WorldGrid.mainHallways[conn.fromHallwayIndex];
+    if (!fromHallway) return false;
+
+    // The absolute X coordinate where this specific tunnel is located
+    const connGlobalX = fromHallway.startOffsetFromS + conn.doorIndex;
+
+    return connGlobalX === globalX;
+  }) || null;
 }
 
 /**
@@ -151,23 +178,11 @@ function stepStructureDoorAnimation(structure, context, rate = 0.05) {
 
 /**
  * Checks if an interconnecting tunnel already exists at the player's current location.
- * Eliminates manual array .some() filtration inside main.js.
+ * Uses our position-agnostic global lookup.
  * @returns {boolean}
  */
 function hasTunnelAtCurrentNode() {
-  const state = window.My3dMazeAppState;
-  if (!state || !state.activeHallway || !state.user) return false;
-
-  const currentDoorIdx = getCurrentNodeIndex();
-  if (currentDoorIdx === -1) return false;
-
-  const currentHallwayIdx = state.WorldGrid.mainHallways.findIndex(h => h.id === state.activeHallway.id);
-
-  return state.WorldGrid.interconnectingHallways.some(conn =>
-    conn.fromHallwayIndex === currentHallwayIdx &&
-    conn.doorIndex === currentDoorIdx &&
-    conn.direction === state.user.direction
-  );
+  return findActiveTunnel() !== null;
 }
 
 /**
@@ -342,7 +357,6 @@ function getRelativeViewOrientation() {
 }
 
 /**
- * Refactored validation check for drawMainHallwaySideView.
  * Returns true if the player is looking off the edge of the known universe map.
  */
 function isSideViewFacingVoid() {
@@ -361,20 +375,35 @@ function isSideViewFacingVoid() {
 }
 
 /**
- * Refactored connectivity check for drawMainHallwaySideView.
- * Returns true if a tunnel exists matching the current doorway slot node sequence.
+ * Returns true if a tunnel exists matching the current doorway slot node sequence,
+ * properly acknowledging links regardless of whether this is the 'from' or 'to' hallway.
  */
 function isSideViewFacingTunnel(nodeIndex) {
   const state = window.My3dMazeAppState;
   if (!state || !state.WorldGrid || !state.activeHallway || !state.user) return false;
 
   const currentHallwayIdx = state.WorldGrid.mainHallways.findIndex(h => h.id === state.activeHallway.id);
+  const currentHallway = state.WorldGrid.mainHallways[currentHallwayIdx];
+  if (!currentHallway) return false;
 
-  return state.WorldGrid.interconnectingHallways.some(conn =>
-    conn.fromHallwayIndex === currentHallwayIdx &&
-    conn.doorIndex === nodeIndex &&
-    conn.direction === state.user.direction
-  );
+  // 1. Compute absolute global X coordinate for the queried door slot
+  const globalX = currentHallway.startOffsetFromS + nodeIndex;
+
+  // 2. Scan for any registered tunnel whose absolute global position matches our current slot
+  return state.WorldGrid.interconnectingHallways.some(conn => {
+    // Only consider the tunnel if the current hallway is part of its connection pair
+    if (conn.fromHallwayIndex !== currentHallwayIdx && conn.toHallwayIndex !== currentHallwayIdx) {
+      return false;
+    }
+
+    const fromHallway = state.WorldGrid.mainHallways[conn.fromHallwayIndex];
+    if (!fromHallway) return false;
+
+    // Calculate the absolute global X position where this tunnel was original spawned
+    const connGlobalX = fromHallway.startOffsetFromS + conn.doorIndex;
+
+    return connGlobalX === globalX;
+  });
 }
 
 /**
@@ -407,6 +436,53 @@ function doesMainHallwayExistAtTunnelTerminal(activeLink, view) {
   return false;
 }
 
+/**
+ * Instantly exits the player from a tunnel structure directly onto the destination 
+ * hallway's center line, dynamically calculating the alignment by global position.
+ */
+function exitTunnelToCorridor() {
+  const state = window.My3dMazeAppState;
+  if (!state || !state.user) return;
+
+  const user = state.user;
+  const activeTunnel = findActiveTunnel();
+  if (!activeTunnel) return;
+
+  let targetHallwayIdx = activeTunnel.fromHallwayIndex;
+  let localDoorIdx = activeTunnel.doorIndex;
+
+  // 1.6 is the absolute halfway point of the 3.20 length tube.
+  // If the player passed the threshold, they are exiting into the 'to' hallway side.
+  if (user.interconnectingProgress >= 1.6) {
+    targetHallwayIdx = activeTunnel.toHallwayIndex;
+    
+    const fromHallway = state.WorldGrid.mainHallways[activeTunnel.fromHallwayIndex];
+    const toHallway = state.WorldGrid.mainHallways[activeTunnel.toHallwayIndex];
+    if (fromHallway && toHallway) {
+      // Translate the global X coordinate back into the destination hallway's local space
+      const globalX = fromHallway.startOffsetFromS + activeTunnel.doorIndex;
+      localDoorIdx = globalX - toHallway.startOffsetFromS;
+    }
+  }
+
+  const targetHallway = state.WorldGrid.mainHallways[targetHallwayIdx];
+  if (!targetHallway) return;
+
+  // Seamlessly overwrite active context tracking using current location metrics
+  state.activeHallway = targetHallway;
+  user.movementMode = 'normal';
+  user.interconnectingProgress = 0.0;
+  user.transitionProgress = 0.0;
+
+  // Align player position to the corridor center line node matching the target door
+  // Door index 0, 1, 2, 3, 4 maps directly to engine node index 0, 2, 4, 6, 8
+  const nodeIndex = localDoorIdx * 2;
+  user.nodeIndex = nodeIndex;
+  if (targetHallway.nodes && targetHallway.nodes[nodeIndex] !== undefined) {
+    user.forwardOffset = targetHallway.nodes[nodeIndex];
+  }
+}
+
 // Global window exposure updated with the newly established callers!
 window.MazeInterface = {
   isTunnel: isTunnelStructure,
@@ -429,4 +505,5 @@ window.MazeInterface = {
   isSideViewFacingVoid: isSideViewFacingVoid,
   isSideViewFacingTunnel: isSideViewFacingTunnel,
   doesMainHallwayExistAtTunnelTerminal: doesMainHallwayExistAtTunnelTerminal,
+  exitTunnelToCorridor: exitTunnelToCorridor,
 };

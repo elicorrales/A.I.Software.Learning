@@ -236,11 +236,9 @@ function playerForwardMovement(e) {
 
       user.interconnectingProgress = nextProgress;
 
-      // Check exit boundaries if open
-      if (user.interconnectingProgress <= 0.0) {
-        user.movementMode = 'transition';
-        user.transitionProgress = 0.4;
-        user.interconnectingProgress = 0.0;
+      // Check exit boundaries if open or exceeded on either side of the tube
+      if (user.interconnectingProgress <= 0.0 || user.interconnectingProgress >= 3.20) {
+        window.MazeInterface.exitTunnelToCorridor();
       }
       return;
     }
@@ -251,7 +249,18 @@ function playerForwardMovement(e) {
       if (user.transitionProgress >= 0.4) {
         // Hand-off! Cross threshold into the independent tunnel system
         user.movementMode = 'interconnecting';
-        user.interconnectingProgress = 0.0;
+        
+        // Contextual Entry Fix: Check which hallway we are stepping out of
+        const activeLink = window.MazeInterface.findActiveTunnel();
+        const currentHallwayIdx = WorldGrid.mainHallways.findIndex(h => h.id === state.activeHallway.id);
+        
+        if (activeLink && currentHallwayIdx === activeLink.toHallwayIndex) {
+          // Entering tunnel from the terminal/destination end -> start at max progress
+          user.interconnectingProgress = 3.20;
+        } else {
+          // Entering tunnel from the originating end -> start at zero progress
+          user.interconnectingProgress = 0.0;
+        }
       }
       return;
     }
@@ -346,14 +355,11 @@ function playerBackwardMovement(e) {
         }
       }
 
-      user.interconnectingProgress = nextProgress;
+user.interconnectingProgress = nextProgress;
 
-      // Handle fallback transition bounds
-      if (user.interconnectingProgress <= 0.0) {
-        // Fall back into the doorway transition space
-        user.movementMode = 'transition';
-        user.transitionProgress = 0.4;
-        user.interconnectingProgress = 0.0;
+      // Handle direct corridor drop boundary checks
+      if (user.interconnectingProgress <= 0.0 || user.interconnectingProgress >= 3.20) {
+        window.MazeInterface.exitTunnelToCorridor();
       }
       return;
     }
