@@ -341,6 +341,71 @@ function getRelativeViewOrientation() {
   return userDir === 3 ? 'left' : 'right';
 }
 
+/**
+ * Refactored validation check for drawMainHallwaySideView.
+ * Returns true if the player is looking off the edge of the known universe map.
+ */
+function isSideViewFacingVoid() {
+  const state = window.My3dMazeAppState;
+  if (!state || !state.WorldGrid || !state.activeHallway || !state.user) return false;
+
+  const view = getRelativeViewOrientation();
+  const currentHallwayIdx = state.WorldGrid.mainHallways.findIndex(h => h.id === state.activeHallway.id);
+
+  // Left side boundary check (West wall index 0)
+  if (view === 'left' && currentHallwayIdx === 0) return true;
+  // Right side boundary check (East wall index 6)
+  if (view === 'right' && currentHallwayIdx === 6) return true;
+
+  return false;
+}
+
+/**
+ * Refactored connectivity check for drawMainHallwaySideView.
+ * Returns true if a tunnel exists matching the current doorway slot node sequence.
+ */
+function isSideViewFacingTunnel(nodeIndex) {
+  const state = window.My3dMazeAppState;
+  if (!state || !state.WorldGrid || !state.activeHallway || !state.user) return false;
+
+  const currentHallwayIdx = state.WorldGrid.mainHallways.findIndex(h => h.id === state.activeHallway.id);
+
+  return state.WorldGrid.interconnectingHallways.some(conn =>
+    conn.fromHallwayIndex === currentHallwayIdx &&
+    conn.doorIndex === nodeIndex &&
+    conn.direction === state.user.direction
+  );
+}
+
+/**
+ * Clean layout checker for drawInterconnectingPerspective.
+ * Validates map topology when standing inside a tunnel staring at the end door.
+ */
+function doesMainHallwayExistAtTunnelTerminal(activeLink, view) {
+  if (!activeLink) return false;
+
+  const state = window.My3dMazeAppState;
+  if (!state || !state.WorldGrid || !state.WorldGrid.mainHallways) return false;
+
+  // We are looking forward through the tunnel toward the destination
+  if (view === 'forward') {
+    return doesMainHallwayExistAtCoordinates(
+      activeLink.fromHallwayIndex, 
+      activeLink.toHallwayIndex, 
+      activeLink.doorIndex
+    );
+  }
+
+  // We are looking backward through the tunnel toward where it spawned.
+  // The original doorway slot is ALREADY on the fromHallwayIndex track!
+  // We simply verify that the originating hallway structure itself is valid.
+  if (view === 'backward') {
+    const originHallway = state.WorldGrid.mainHallways[activeLink.fromHallwayIndex];
+    return !!originHallway;
+  }
+
+  return false;
+}
 
 // Global window exposure updated with the newly established callers!
 window.MazeInterface = {
@@ -361,4 +426,7 @@ window.MazeInterface = {
   updateVoidSmokeState: updateVoidSmokeState,
   getTrueActiveHallway: getTrueActiveHallway,
   getRelativeViewOrientation: getRelativeViewOrientation,
+  isSideViewFacingVoid: isSideViewFacingVoid,
+  isSideViewFacingTunnel: isSideViewFacingTunnel,
+  doesMainHallwayExistAtTunnelTerminal: doesMainHallwayExistAtTunnelTerminal,
 };

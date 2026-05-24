@@ -4,35 +4,6 @@
  */
 
 // =========================================================================
-// INTERNAL UTILITY: COORDINATE TRANSLATION ENGINE
-// =========================================================================
-
-/**
- * Translates global world compass integers into a local camera orientation
- * context depending on the structural layout of the current movement mode.
- * * Returns: 'forward' | 'backward' | 'sideways'
- */
-/*
-function getLocalViewOrientation(movementMode, globalDirection) {
-    if (movementMode === 'interconnecting') {
-        // Tunnels run horizontally (East-West) across the screen layout.
-        // Therefore, facing East (1) or West (3) means looking down its long perspective.
-        if (globalDirection === 1 || globalDirection === 3) {
-            return 'forward';
-        } else {
-            return 'sideways';
-        }
-    } else {
-        // Main Hallways run vertically (North-South) across the grid.
-        // Facing North (0) is forward perspective; South (2) is reverse perspective.
-        if (globalDirection === 0) return 'forward';
-        if (globalDirection === 2) return 'backward';
-        return 'sideways';
-    }
-}
-*/
-
-// =========================================================================
 // SECTION 1: MAIN HALLWAY RENDERING COMPONENT
 // =========================================================================
 
@@ -193,7 +164,7 @@ function drawSideViewOpenDoorWayStatus(ctx, isWorldBoundaryVoid, connectionExist
     }
 }
 
-function drawMainHallwaySideView(ctx, canvas, WorldGrid, hallwayData, offset, lookDirection) {
+function drawMainHallwaySideView(ctx, canvas, hallwayData, offset) {
     const w = canvas.width;
     const h = canvas.height;
 
@@ -218,7 +189,8 @@ function drawMainHallwaySideView(ctx, canvas, WorldGrid, hallwayData, offset, lo
     const nodeIndex = doorNodes.findIndex(v => Math.abs(v - roundedOffset) < 0.05);
 
     if (nodeIndex !== -1) {
-        ctx.fillStyle = (lookDirection === 3) ? hallwayData.leftSideDoorColor : hallwayData.rightSideDoorColor;
+        const view = window.MazeInterface.getRelativeViewOrientation();
+        ctx.fillStyle = (view === 'left') ? hallwayData.leftSideDoorColor : hallwayData.rightSideDoorColor;
 
         const currentOpenProgress = hallwayData.doorOpenStatus[nodeIndex];
         const frameW = w * 0.4;
@@ -226,14 +198,9 @@ function drawMainHallwaySideView(ctx, canvas, WorldGrid, hallwayData, offset, lo
         const frameX = (w - frameW) / 2;
         const doorY = ceilingLineY;
 
-        const currentHallwayIdx = WorldGrid.mainHallways.findIndex(h => h.id === hallwayData.id);
-        const isWorldBoundaryVoid = (lookDirection === 3 && currentHallwayIdx === 0) || (lookDirection === 1 && currentHallwayIdx === 6);
-
-        const connectionExists = WorldGrid.interconnectingHallways.some(conn =>
-            conn.fromHallwayIndex === currentHallwayIdx &&
-            conn.doorIndex === nodeIndex &&
-            conn.direction === lookDirection
-        );
+        // Abstracted architecture validation checks via facade
+        const isWorldBoundaryVoid = window.MazeInterface.isSideViewFacingVoid();
+        const connectionExists = window.MazeInterface.isSideViewFacingTunnel(nodeIndex);
 
         ctx.fillStyle = '#000000';
         ctx.fillRect(frameX, doorY, frameW, doorH);
@@ -246,7 +213,7 @@ function drawMainHallwaySideView(ctx, canvas, WorldGrid, hallwayData, offset, lo
         ctx.lineWidth = 4;
         ctx.strokeRect(frameX, doorY, frameW, doorH);
 
-        ctx.fillStyle = (lookDirection === 3) ? hallwayData.leftSideDoorColor : hallwayData.rightSideDoorColor;
+        ctx.fillStyle = (view === 'left') ? hallwayData.leftSideDoorColor : hallwayData.rightSideDoorColor;
         const doorW = frameW * (1 - currentOpenProgress);
         const doorX = frameX;
 
@@ -305,20 +272,9 @@ function drawInterconnectingPerspective(ctx, canvas, currentUser) {
 
     const totalTubeLength = 4.0;
 
-    // 1. Recover the native tunnel link to know which direction is "forward" (towards 4.0)
-    const doorNodes = [0, 2, 4, 6, 8];
-    const doorDataIdx = doorNodes.indexOf(currentUser.nodeIndex);
-
     // Ask the facade if we are looking backward down the tunnel link tube
     const view = window.MazeInterface.getRelativeViewOrientation();
     const isLookingBackward = (view === 'backward');
-
-    let distanceToFarWall = totalTubeLength - currentUser.interconnectingProgress;
-    if (isLookingBackward) {
-        distanceToFarWall = currentUser.interconnectingProgress;
-    } else {
-        distanceToFarWall = totalTubeLength - currentUser.interconnectingProgress;
-    }
 
     // --- MINIMAL ADJUSTMENT FOR AIRTIGHT PROJECTION STOP ---
     const maxWalkableProgress = 3.6; // Core engine stop boundary
@@ -385,42 +341,19 @@ function drawInterconnectingPerspective(ctx, canvas, currentUser) {
 
     // Read the active tunnel link state cleanly from our interface adapter layer!
     const activeLink = window.MazeInterface.findActiveTunnel();
-
-    let originatingHallwayIdx = -1;
-    let destinationHallwayIdx = -1;
-    let targetDoorIndex = -1;
-
-    if (activeLink) {
-        targetDoorIndex = activeLink.doorIndex;
-        
-        // The tunnel link properties 'from' and 'to' are structurally absolute constants.
-        // We set our layout coordinates to look from 'from' to 'to' by default.
-        originatingHallwayIdx = activeLink.fromHallwayIndex;
-        destinationHallwayIdx = activeLink.toHallwayIndex;
-        
-        // If the facade tells us our relative view orientation is 'backward', 
-        // it means our eyes are turned toward the 'from' origin. We invert our layout indices.
-        if (view === 'backward') {
-            originatingHallwayIdx = activeLink.toHallwayIndex;
-            destinationHallwayIdx = activeLink.fromHallwayIndex;
-        }
-    }
-
-    // The door we are staring at is strictly determined by our orientation view string, 
-    // NOT our walking progress. If we look 'backward' down the tube, we see the entrance door frame. 
-    // If we look 'forward', we see the exit door frame.
-    const doorFrameContext = (view === 'backward') ? 'entrance' : 'exit';
+    const doorFrameContext = isLookingBackward ? 'entrance' : 'exit';
     
     // Pass the absolute structure and the unified semantic text label straight to the facade
     const openStatus = activeLink ? window.MazeInterface.getOpenStatus(activeLink, doorFrameContext) : 0.0;
+    
     // Draw the structural doorway background (Fake Perpendicular Main Hallway)
     ctx.save();
     ctx.beginPath();
     ctx.rect(doorX, doorY, doorW, doorH);
     ctx.clip(); // Ensure fake hall lines do not bleed outside the door frame cavity
 
-    // FIX: Pass all 3 parameters correctly matching the facade adapter specification!
-    if (activeLink && window.MazeInterface.doesMainHallwayExistAtCoordinates(originatingHallwayIdx, destinationHallwayIdx, targetDoorIndex)) {
+    // Query facade layout environment without processing numerical arrays local context
+    if (activeLink && window.MazeInterface.doesMainHallwayExistAtTunnelTerminal(activeLink, view)) {
         drawFakeCrossHallwayCavityFacade(ctx, doorX, doorY, doorW, doorH, scale);
     } else {
         // Just fill the canvas door cavity with the far wall background color if no hallway exists
@@ -467,8 +400,6 @@ function drawInterconnectingPerspective(ctx, canvas, currentUser) {
     ctx.lineWidth = Math.max(1, scale * 2);
     ctx.strokeRect(doorX, doorY, doorW, doorH);
 }
-
-
 
 /**
  * Visual slice of a flat side wall within an interconnecting tube
@@ -580,8 +511,8 @@ function drawNormalView(ctx, canvas, WorldGrid, currentHallway, currentUser) {
         const inverseOffset = (currentHallway.baseDistances[currentHallway.baseDistances.length - 2] - 0.5) - currentUser.forwardOffset;
         drawMainHallwayPerspective(ctx, canvas, currentHallway, inverseOffset, true);
     } else {
-        // Pass currentUser.direction safely to side view for asset selection boundaries
-        drawMainHallwaySideView(ctx, canvas, WorldGrid, currentHallway, currentUser.forwardOffset, currentUser.direction);
+        // Clean stateless call: WorldGrid and direction metrics are no longer leaked downstream
+        drawMainHallwaySideView(ctx, canvas, currentHallway, currentUser.forwardOffset);
     }
 }
 
