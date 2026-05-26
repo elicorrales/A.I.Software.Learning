@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Realistic Procedural Breathing</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #121212;
+            color: #e0e0e0;
+            margin: 0;
+        }
+        button {
+            padding: 15px 35px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            cursor: pointer;
+            border: none;
+            border-radius: 30px;
+            background-color: #00adb5;
+            color: white;
+            box-shadow: 0 4px 15px rgba(0, 173, 181, 0.4);
+            transition: all 0.2s ease;
+        }
+        button:hover {
+            background-color: #00ceda;
+            box-shadow: 0 6px 20px rgba(0, 173, 181, 0.6);
+        }
+        button:active {
+            transform: scale(0.98);
+        }
+        #status {
+            margin-top: 20px;
+            font-style: italic;
+            color: #666;
+            font-size: 0.9rem;
+            letter-spacing: 1px;
+        }
+    </style>
+</head>
+<body>
+
+    <button id="breathBtn">Start Breathing</button>
+    <div id="status">IDLE</div>
+
+    <script>
+        let audioCtx = null;
+        let isBreathing = false;
+        let breathTimeout = null;
+
+        const button = document.getElementById('breathBtn');
+        const statusText = document.getElementById('status');
+
+        // 1. Generate Pink Noise (Much softer and bassier than white noise)
+        function createPinkNoiseBuffer(ctx) {
+            const bufferSize = ctx.sampleRate * 4; // 4 seconds
+            const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            
+            let b0, b1, b2, b3, b4, b5, b6;
+            b0 = b1 = b2 = b3 = b4 = b5 = b6 = 0.0;
+            
+            for (let i = 0; i < bufferSize; i++) {
+                let white = Math.random() * 2 - 1;
+                // Voss-McCartney algorithm for pink noise approximation
+                b0 = 0.99886 * b0 + white * 0.0555179;
+                b1 = 0.99332 * b1 + white * 0.0750759;
+                b2 = 0.96900 * b2 + white * 0.1538520;
+                b3 = 0.86650 * b3 + white * 0.3104856;
+                b4 = 0.55000 * b4 + white * 0.5329522;
+                b5 = -0.7616 * b5 - white * 0.0168980;
+                let pink = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
+                b6 = white * 0.115926;
+                data[i] = pink * 0.11; // Normalize rough volume
+            }
+            return buffer;
+        }
+
+        function startBreathing() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+
+            isBreathing = true;
+            button.textContent = "Stop Breathing";
+            button.style.backgroundColor = "#ff5722";
+            button.style.boxShadow = "0 4px 15px rgba(255, 87, 34, 0.4)";
+
+            // Create Audio Nodes
+            const noiseSource = audioCtx.createBufferSource();
+            noiseSource.buffer = createPinkNoiseBuffer(audioCtx);
+            noiseSource.loop = true;
+
+            // Two parallel bandpass filters to mimic throat resonance (Formants)
+            const throatFilter1 = audioCtx.createBiquadFilter();
+            throatFilter1.type = 'bandpass';
+            throatFilter1.Q.value = 3.0; // Sharpness of resonance
+
+            const throatFilter2 = audioCtx.createBiquadFilter();
+            throatFilter2.type = 'bandpass';
+            throatFilter2.Q.value = 4.0;
+
+            const mainGain = audioCtx.createGain();
+
+            // Connect graph: Source splits into both filters, merges into Gain, then out
+            noiseSource.connect(throatFilter1);
+            noiseSource.connect(throatFilter2);
+            
+            throatFilter1.connect(mainGain);
+            throatFilter2.connect(mainGain);
+            
+            mainGain.connect(audioCtx.destination);
+            noiseSource.start();
+
+            // Store nodes to stop them later
+            button.noiseSource = noiseSource;
+            button.mainGain = mainGain;
+
+            // Automation parameters
+            const inhaleTime = 1.6;
+            const exhaleTime = 2.2;
+            const pauseTime = 0.4;
+
+            function scheduleInhale() {
+                if (!isBreathing) return;
+                statusText.textContent = "INHALE";
+                let now = audioCtx.currentTime;
+
+                // Inhale: Higher frequencies, fast volume ramp up
+                mainGain.gain.setValueAtTime(mainGain.gain.value, now);
+                mainGain.gain.linearRampToValueAtTime(0.25, now + inhaleTime);
+
+                throatFilter1.frequency.setValueAtTime(throatFilter1.frequency.value, now);
+                throatFilter1.frequency.linearRampToValueAtTime(450, now + inhaleTime);
+
+                throatFilter2.frequency.setValueAtTime(throatFilter2.frequency.value, now);
+                throatFilter2.frequency.linearRampToValueAtTime(900, now + inhaleTime);
+
+                breathTimeout = setTimeout(scheduleExhale, inhaleTime * 1000);
+            }
+
+            function scheduleExhale() {
+                if (!isBreathing) return;
+                statusText.textContent = "EXHALE";
+                let now = audioCtx.currentTime;
+
+                // Exhale: Deeper, hollower frequencies, slow exponential fade out
+                mainGain.gain.setValueAtTime(0.25, now);
+                mainGain.gain.exponentialRampToValueAtTime(0.005, now + exhaleTime);
+
+                throatFilter1.frequency.setValueAtTime(450, now);
+                throatFilter1.frequency.linearRampToValueAtTime(280, now + exhaleTime);
+
+                throatFilter2.frequency.setValueAtTime(900, now);
+                throatFilter2.frequency.linearRampToValueAtTime(550, now + exhaleTime);
+
+                // Add a small biological pause before the next breath
+                breathTimeout = setTimeout(scheduleInhale, (exhaleTime + pauseTime) * 1000);
+            }
+
+            // Start the cycle
+            scheduleInhale();
+        }
+
+        function stopBreathing() {
+            isBreathing = false;
+            clearTimeout(breathTimeout);
+            
+            button.textContent = "Start Breathing";
+            button.style.backgroundColor = "#00adb5";
+            button.style.boxShadow = "0 4px 15px rgba(0, 173, 181, 0.4)";
+            statusText.textContent = "IDLE";
+
+            if (button.mainGain && audioCtx) {
+                const now = audioCtx.currentTime;
+                button.mainGain.gain.cancelScheduledValues(now);
+                button.mainGain.gain.linearRampToValueAtTime(0, now + 0.2);
+                setTimeout(() => {
+                    try { button.noiseSource.stop(); } catch(e) {}
+                }, 200);
+            }
+        }
+
+        button.addEventListener('click', () => {
+            if (!isBreathing) startBreathing();
+            else stopBreathing();
+        });
+    </script>
+</body>
+</html>

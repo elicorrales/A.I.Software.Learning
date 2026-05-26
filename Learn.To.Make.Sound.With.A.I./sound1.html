@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Click To Start Sound</title>
+<style>
+body{
+    font-family:sans-serif;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+    margin:0;
+}
+button{
+    font-size:24px;
+    padding:20px 40px;
+}
+</style>
+</head>
+<body>
+
+<button id="start">START SOUND</button>
+
+<script>
+document.getElementById('start').addEventListener('click', () => {
+
+    const ctx = new AudioContext();
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.value = 440;
+
+    gain.gain.setValueAtTime(0.05, ctx.currentTime);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start();
+
+    osc.stop(ctx.currentTime + 1);
+
+}, { once:true });
+</script>
+
+</body>
+</html>

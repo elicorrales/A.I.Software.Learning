@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Realistic Softened Heel Footsteps</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #1a1816;
+            color: #ebdcd0;
+            margin: 0;
+        }
+        button {
+            padding: 15px 32px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            border: 1px solid #61554d;
+            border-radius: 6px;
+            background-color: #3b332e;
+            color: #fff;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+            transition: background-color 0.15s;
+        }
+        button:hover {
+            background-color: #4da6ff;
+            color: #000;
+            border-color: #4da6ff;
+        }
+        #status {
+            margin-top: 20px;
+            font-size: 0.9rem;
+            color: #9c8e85;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+    </style>
+</head>
+<body>
+
+    <button id="walkBtn">Start Walking</button>
+    <div id="status">Stopped</div>
+
+    <script>
+        let audioCtx = null;
+        let isWalking = false;
+        let walkTimeout = null;
+        let stepCount = 0;
+
+        const button = document.getElementById('walkBtn');
+        const statusText = document.getElementById('status');
+
+        function createNoiseBuffer(ctx) {
+            const bufferSize = ctx.sampleRate * 0.4;
+            const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+            return buffer;
+        }
+
+        function playImpact(isHeel) {
+            if (!audioCtx) return;
+            const now = audioCtx.currentTime;
+
+            // 1. Texture Component (Noise)
+            const noise = audioCtx.createBufferSource();
+            noise.buffer = createNoiseBuffer(audioCtx);
+
+            const highpass = audioCtx.createBiquadFilter();
+            highpass.type = 'highpass';
+            
+            // ADJUSTMENT: Lowered heel from 1400Hz to 900Hz to remove the brittle "point"
+            highpass.frequency.setValueAtTime(isHeel ? 900 : 700, now);
+
+            const noiseGain = audioCtx.createGain();
+            noiseGain.gain.setValueAtTime(0, now);
+            
+            // ADJUSTMENT: Softened the attack time on the heel (0.010s instead of 0.002s)
+            // This rounds out the physical impact edge.
+            const attackTime = isHeel ? 0.010 : 0.002;
+            const peakVolume = isHeel ? 0.13 : 0.07;
+            const decayTime = isHeel ? 0.05 : 0.07;
+
+            noiseGain.gain.linearRampToValueAtTime(peakVolume, now + attackTime);
+            noiseGain.gain.exponentialRampToValueAtTime(0.001, now + attackTime + decayTime);
+
+            noise.connect(highpass);
+            highpass.connect(noiseGain);
+            noiseGain.connect(audioCtx.destination);
+
+            // 2. Weight Component (Thud)
+            const thud = audioCtx.createOscillator();
+            thud.type = 'triangle';
+
+            const lowpass = audioCtx.createBiquadFilter();
+            lowpass.type = 'lowpass';
+            lowpass.frequency.setValueAtTime(isHeel ? 150 : 110, now);
+
+            const thudGain = audioCtx.createGain();
+            thudGain.gain.setValueAtTime(0, now);
+            thudGain.gain.linearRampToValueAtTime(isHeel ? 0.22 : 0.12, now + 0.005);
+            thudGain.gain.exponentialRampToValueAtTime(0.001, now + (isHeel ? 0.10 : 0.14));
+
+            thud.frequency.setValueAtTime(isHeel ? 120 : 90, now);
+            thud.frequency.exponentialRampToValueAtTime(isHeel ? 65 : 50, now + 0.09);
+
+            thud.connect(lowpass);
+            lowpass.connect(thudGain);
+            thudGain.connect(audioCtx.destination);
+
+            noise.start(now);
+            noise.stop(now + 0.2);
+            thud.start(now);
+            thud.stop(now + 0.2);
+        }
+
+        function triggerFullFootstep() {
+            if (!isWalking) return;
+
+            stepCount++;
+            const currentFoot = (stepCount % 2 === 0) ? "Left" : "Right";
+            statusText.textContent = `${currentFoot} Foot`;
+
+            playImpact(true); // Heel
+
+            setTimeout(() => {
+                if (!isWalking) return;
+                playImpact(false); // Toe
+            }, 115); // Time gap between heel and toe strike
+        }
+
+        function startWalking() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+
+            isWalking = true;
+            button.textContent = "Stop Walking";
+
+            triggerFullFootstep();
+
+            function loop() {
+                if (!isWalking) return;
+                triggerFullFootstep();
+                const nextStepDelay = 530 + (Math.random() * 40);
+                walkTimeout = setTimeout(loop, nextStepDelay);
+            }
+
+            walkTimeout = setTimeout(loop, 550);
+        }
+
+        function stopWalking() {
+            isWalking = false;
+            clearTimeout(walkTimeout);
+            button.textContent = "Start Walking";
+            statusText.textContent = "Stopped";
+        }
+
+        button.addEventListener('click', () => {
+            if (!isWalking) startWalking();
+            else stopWalking();
+        });
+    </script>
+</body>
+</html>

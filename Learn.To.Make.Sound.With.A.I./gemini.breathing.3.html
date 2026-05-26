@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calm Resting Breath</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #1e1e24;
+            color: #d1d1d6;
+            margin: 0;
+        }
+        button {
+            padding: 12px 28px;
+            font-size: 1rem;
+            cursor: pointer;
+            border: 1px solid #444;
+            border-radius: 4px;
+            background-color: #2c2c35;
+            color: #e5e5ea;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #3a3a45;
+        }
+        #status {
+            margin-top: 15px;
+            font-size: 0.85rem;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+    </style>
+</head>
+<body>
+
+    <button id="breathBtn">Start Ambient Breath</button>
+    <div id="status">Idle</div>
+
+    <script>
+        let audioCtx = null;
+        let isBreathing = false;
+        let breathTimeout = null;
+
+        const button = document.getElementById('breathBtn');
+        const statusText = document.getElementById('status');
+
+        // Generate a very soft, heavily filtered Pink Noise
+        function createPinkNoiseBuffer(ctx) {
+            const bufferSize = ctx.sampleRate * 2;
+            const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            
+            let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+            
+            for (let i = 0; i < bufferSize; i++) {
+                let white = Math.random() * 2 - 1;
+                b0 = 0.99886 * b0 + white * 0.0555179;
+                b1 = 0.99332 * b1 + white * 0.0750759;
+                b2 = 0.96900 * b2 + white * 0.1538520;
+                b3 = 0.86650 * b3 + white * 0.3104856;
+                b4 = 0.55000 * b4 + white * 0.5329522;
+                b5 = -0.7616 * b5 - white * 0.0168980;
+                let pink = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
+                b6 = white * 0.115926;
+                data[i] = pink * 0.05; // Dropped base volume of the raw noise
+            }
+            return buffer;
+        }
+
+        function startBreathing() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+
+            isBreathing = true;
+            button.textContent = "Stop Ambient Breath";
+            statusText.textContent = "Calm Inhale";
+
+            const noiseSource = audioCtx.createBufferSource();
+            noiseSource.buffer = createPinkNoiseBuffer(audioCtx);
+            noiseSource.loop = true;
+
+            // Lowpass filter instead of bandpass to eliminate the "tube/pipe" resonance entirely
+            const lowpassFilter = audioCtx.createBiquadFilter();
+            lowpassFilter.type = 'lowpass';
+            lowpassFilter.Q.value = 0.5; // Very flat, natural response (no whistling/ringing)
+
+            const mainGain = audioCtx.createGain();
+
+            noiseSource.connect(lowpassFilter);
+            lowpassFilter.connect(mainGain);
+            mainGain.connect(audioCtx.destination);
+            
+            noiseSource.start();
+
+            button.noiseSource = noiseSource;
+            button.mainGain = mainGain;
+
+            // Restful breathing timings (Slower, relaxed pace)
+            const inhaleTime = 2.0;
+            const exhaleTime = 2.5;
+            const pauseTime = 1.0; // Longer pause at the bottom of the breath
+
+            function scheduleInhale() {
+                if (!isBreathing) return;
+                statusText.textContent = "Calm Inhale";
+                let now = audioCtx.currentTime;
+
+                // Very subtle peak volume (0.06 instead of 0.25)
+                mainGain.gain.setValueAtTime(mainGain.gain.value, now);
+                mainGain.gain.linearRampToValueAtTime(0.06, now + inhaleTime);
+
+                // Gentle, warm lowpass shift
+                lowpassFilter.frequency.setValueAtTime(lowpassFilter.frequency.value, now);
+                lowpassFilter.frequency.linearRampToValueAtTime(450, now + inhaleTime);
+
+                breathTimeout = setTimeout(scheduleExhale, inhaleTime * 1000);
+            }
+
+            function scheduleExhale() {
+                if (!isBreathing) return;
+                statusText.textContent = "Calm Exhale";
+                let now = audioCtx.currentTime;
+
+                // Gentle fade down to near-silence
+                mainGain.gain.setValueAtTime(0.06, now);
+                mainGain.gain.exponentialRampToValueAtTime(0.002, now + exhaleTime);
+
+                // Muffle the sound on exhale smoothly
+                lowpassFilter.frequency.setValueAtTime(450, now);
+                lowpassFilter.frequency.linearRampToValueAtTime(250, now + exhaleTime);
+
+                breathTimeout = setTimeout(scheduleInhale, (exhaleTime + pauseTime) * 1000);
+            }
+
+            scheduleInhale();
+        }
+
+        function stopBreathing() {
+            isBreathing = false;
+            clearTimeout(breathTimeout);
+            
+            button.textContent = "Start Ambient Breath";
+            statusText.textContent = "Idle";
+
+            if (button.mainGain && audioCtx) {
+                const now = audioCtx.currentTime;
+                button.mainGain.gain.cancelScheduledValues(now);
+                button.mainGain.gain.linearRampToValueAtTime(0, now + 0.2);
+                setTimeout(() => {
+                    try { button.noiseSource.stop(); } catch(e) {}
+                }, 200);
+            }
+        }
+
+        button.addEventListener('click', () => {
+            if (!isBreathing) startBreathing();
+            else stopBreathing();
+        });
+    </script>
+</body>
+</html>

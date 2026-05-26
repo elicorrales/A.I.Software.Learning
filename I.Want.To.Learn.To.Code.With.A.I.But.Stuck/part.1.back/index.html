@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Age Roaster</title>
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background: #f4f9ff;
+        color: #333;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        margin: 0;
+    }
+
+    .box {
+        background: #ffffff;
+        padding: 30px;
+        border-radius: 12px;
+        width: 400px;
+        text-align: center;
+        box-shadow: 0 0 20px rgba(0,0,0,0.15);
+    }
+
+    input, button {
+        width: 100%;
+        padding: 12px;
+        margin-top: 10px;
+        border: none;
+        border-radius: 8px;
+        font-size: 16px;
+        box-sizing: border-box;
+    }
+
+    input {
+        background: #eef4ff;
+        color: #333;
+    }
+
+    button {
+        background: #4da6ff;
+        color: white;
+        cursor: pointer;
+        transition: 0.1s;
+    }
+
+    button:hover {
+        background: #66b3ff;
+    }
+
+    button:active {
+        transform: scale(0.97);
+    }
+
+    #output {
+        margin-top: 20px;
+        font-size: 18px;
+        line-height: 1.5;
+    }
+
+    #comeback {
+        margin-top: 15px;
+    }
+</style>
+</head>
+<body>
+
+<div class="box">
+    <h1>Age Roaster</h1>
+
+    <input type="text" id="name" placeholder="Enter your name" />
+    <input type="number" id="age" placeholder="Enter your age" />
+
+    <button onclick="roast()">Roast Me</button>
+
+    <div id="output"></div>
+
+    <input type="text" id="comeback" placeholder="Roast me back" />
+    <button onclick="reply()">Send Roast Back</button>
+</div>
+
+<script>
+function roast() {
+    const name = document.getElementById("name").value.trim();
+    const age = parseInt(document.getElementById("age").value);
+    const output = document.getElementById("output");
+
+    if (!name || isNaN(age)) {
+        output.innerHTML = "Enter both your name and age.";
+        return;
+    }
+
+    let roast = "";
+
+    if (age < 13) {
+        roast = `${name}, you're so young your bedtime still has terms and conditions.`;
+    } else if (age < 20) {
+        roast = `${name}, you're at the age where every decision becomes a future embarrassing memory.`;
+    } else if (age < 30) {
+        roast = `${name}, you're old enough to pay bills but still googling how taxes work.`;
+    } else if (age < 40) {
+        roast = `${name}, your knees now make more noise than your social life.`;
+    } else if (age < 50) {
+        roast = `${name}, you don't "sleep wrong" anymore. Your body just declares bankruptcy overnight.`;
+    } else if (age < 60) {
+        roast = `${name}, your back goes out more than you do.`;
+    } else {
+        roast = `${name}, you remember when 'streaming' meant a creek.`;
+    }
+
+    output.innerHTML = roast;
+}
+
+function reply() {
+    const comeback = document.getElementById("comeback").value.trim();
+    const output = document.getElementById("output");
+
+    if (!comeback) {
+        output.innerHTML = "You need a roast first.";
+        return;
+    }
+
+    output.innerHTML = `Wow. "${comeback}"? I've been insulted harder by microwave instructions.`;
+}
+</script>
+
+</body>
+</html>

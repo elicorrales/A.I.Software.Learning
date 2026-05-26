@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Breathing Sound v2</title>
+
+<style>
+body{
+    margin:0;
+    background:#0f1115;
+    color:white;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+    font-family:sans-serif;
+}
+
+button{
+    font-size:22px;
+    padding:18px 34px;
+    cursor:pointer;
+}
+</style>
+</head>
+
+<body>
+
+<button id="start">START</button>
+
+<script>
+document.getElementById('start').onclick = () => {
+
+    const ctx = new AudioContext();
+
+    // =========================
+    // noise source
+    // =========================
+
+    const length = ctx.sampleRate * 4;
+    const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+
+    for(let i=0;i<length;i++){
+
+        // softer noise
+        data[i] =
+            (Math.random()*2-1) *
+            (Math.random()*0.6);
+    }
+
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    noise.loop = true;
+
+    // =========================
+    // filters
+    // =========================
+
+    const band = ctx.createBiquadFilter();
+    band.type = "bandpass";
+    band.frequency.value = 900;
+    band.Q.value = 0.7;
+
+    const low = ctx.createBiquadFilter();
+    low.type = "lowpass";
+    low.frequency.value = 1400;
+
+    // =========================
+    // gain
+    // =========================
+
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+
+    noise.connect(band);
+    band.connect(low);
+    low.connect(gain);
+    gain.connect(ctx.destination);
+
+    noise.start();
+
+    // =========================
+    // breathing loop
+    // =========================
+
+    function cycle(){
+
+        const t = ctx.currentTime;
+
+        gain.gain.cancelScheduledValues(t);
+
+        // inhale
+        gain.gain.setValueAtTime(0.0001, t);
+        gain.gain.exponentialRampToValueAtTime(0.028, t + 1.8);
+
+        // slight hold
+        gain.gain.exponentialRampToValueAtTime(0.03, t + 2.2);
+
+        // exhale
+        gain.gain.exponentialRampToValueAtTime(0.004, t + 5.5);
+
+        // silence between breaths
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + 6.2);
+
+        // subtle tone change during breath
+        band.frequency.setValueAtTime(700, t);
+        band.frequency.linearRampToValueAtTime(1200, t + 2);
+        band.frequency.linearRampToValueAtTime(500, t + 6);
+    }
+
+    cycle();
+
+    setInterval(cycle, 6200);
+
+    document.getElementById('start').remove();
+};
+</script>
+
+</body>
+</html>

@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Procedural Running Footsteps</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #141312;
+            color: #e3dcd5;
+            margin: 0;
+        }
+        button {
+            padding: 15px 35px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            border: 1px solid #544b44;
+            border-radius: 6px;
+            background-color: #38312c;
+            color: #fff;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.6);
+            transition: background-color 0.15s, border-color 0.15s;
+        }
+        button:hover {
+            background-color: #ff5722;
+            color: #fff;
+            border-color: #ff5722;
+        }
+        #status {
+            margin-top: 20px;
+            font-size: 0.9rem;
+            color: #8c8177;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+    </style>
+</head>
+<body>
+
+    <button id="runBtn">Start Running</button>
+    <div id="status">Stopped</div>
+
+    <script>
+        let audioCtx = null;
+        let isRunning = false;
+        let runTimeout = null;
+        let stepCount = 0;
+
+        const button = document.getElementById('runBtn');
+        const statusText = document.getElementById('status');
+
+        // Create a soft white noise buffer for the impact friction
+        function createNoiseBuffer(ctx) {
+            const bufferSize = ctx.sampleRate * 0.3;
+            const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+            return buffer;
+        }
+
+        // Simulates a single, heavy, midfoot running impact
+        function playRunningStep() {
+            if (!audioCtx) return;
+            const now = audioCtx.currentTime;
+
+            // 1. Texture Component (Dull shoe surface slap)
+            const noise = audioCtx.createBufferSource();
+            noise.buffer = createNoiseBuffer(audioCtx);
+
+            const lowpassNoise = audioCtx.createBiquadFilter();
+            lowpassNoise.type = 'lowpass';
+            // Using a lowpass instead of highpass makes the shoe strike sound dull and heavy, not sharp
+            lowpassNoise.frequency.setValueAtTime(600, now);
+
+            const noiseGain = audioCtx.createGain();
+            noiseGain.gain.setValueAtTime(0, now);
+            // Quick attack, fast decay
+            noiseGain.gain.linearRampToValueAtTime(0.08, now + 0.005);
+            noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+
+            noise.connect(lowpassNoise);
+            lowpassNoise.connect(noiseGain);
+            noiseGain.connect(audioCtx.destination);
+
+            // 2. Weight Component (The Boomy Floor Thud)
+            const thud = audioCtx.createOscillator();
+            thud.type = 'triangle';
+
+            const lowpassThud = audioCtx.createBiquadFilter();
+            lowpassThud.type = 'lowpass';
+            lowpassThud.frequency.setValueAtTime(120, now); // Lock down tightly to low frequencies
+
+            const thudGain = audioCtx.createGain();
+            thudGain.gain.setValueAtTime(0, now);
+            // Increased peak volume (0.42) for a heavy, forceful impact
+            thudGain.gain.linearRampToValueAtTime(0.42, now + 0.008);
+            thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+
+            // Deeper pitch drop (from 100Hz down to 45Hz) creates the "boomy" structural thud
+            thud.frequency.setValueAtTime(100, now);
+            thud.frequency.exponentialRampToValueAtTime(45, now + 0.1);
+
+            thud.connect(lowpassThud);
+            lowpassThud.connect(thudGain);
+            thudGain.connect(audioCtx.destination);
+
+            noise.start(now);
+            noise.stop(now + 0.15);
+            thud.start(now);
+            thud.stop(now + 0.2);
+        }
+
+        function triggerRunningStride() {
+            if (!isRunning) return;
+
+            stepCount++;
+            const currentFoot = (stepCount % 2 === 0) ? "Left" : "Right";
+            statusText.textContent = `Running (${currentFoot})`;
+
+            // Fire the entire flat foot impact at once
+            playRunningStep(); 
+        }
+
+        function startRunning() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+
+            isRunning = true;
+            button.textContent = "Stop Running";
+
+            triggerRunningStride();
+
+            // Loop the footsteps at a rapid running pace (~180 steps per minute = ~330ms per step)
+            function loop() {
+                if (!isRunning) return;
+                triggerRunningStride();
+                
+                // Add tiny organic variations to the run timing
+                const nextStepDelay = 310 + (Math.random() * 30);
+                runTimeout = setTimeout(loop, nextStepDelay);
+            }
+
+            runTimeout = setTimeout(loop, 330);
+        }
+
+        function stopRunning() {
+            isRunning = false;
+            clearTimeout(runTimeout);
+            button.textContent = "Start Running";
+            statusText.textContent = "Stopped";
+        }
+
+        button.addEventListener('click', () => {
+            if (!isRunning) startRunning();
+            else stopRunning();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Procedural Breathing Sound</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+            margin: 0;
+        }
+        button {
+            padding: 15px 30px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            cursor: pointer;
+            border: none;
+            border-radius: 8px;
+            background-color: #4caf50;
+            color: white;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            transition: background-color 0.2s, transform 0.1s;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:active {
+            transform: scale(0.98);
+        }
+        #status {
+            margin-top: 20px;
+            font-style: italic;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+
+    <button id="breathBtn">Start Breathing</button>
+    <div id="status">Audio is stopped</div>
+
+    <script>
+        let audioCtx = null;
+        let isBreathing = false;
+        let breathInterval = null;
+
+        const button = document.getElementById('breathBtn');
+        const statusText = document.getElementById('status');
+
+        // 1. Generate White Noise Buffer
+        function createNoiseBuffer(ctx) {
+            const bufferSize = ctx.sampleRate * 2; // 2 seconds of audio
+            const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+            return buffer;
+        }
+
+        function startBreathing() {
+            // Initialize Audio Context on user gesture
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+
+            isBreathing = true;
+            button.textContent = "Stop Breathing";
+            button.style.backgroundColor = "#f44336";
+            statusText.textContent = "Breathing...";
+
+            // Create the white noise source loop
+            const noiseSource = audioCtx.createBufferSource();
+            noiseSource.buffer = createNoiseBuffer(audioCtx);
+            noiseSource.loop = true;
+
+            // Create a low-pass filter to shape the breath sound
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = 'lowpass';
+
+            // Create a gain node to control breath volume
+            const gainNode = audioCtx.createGain();
+
+            // Connect the graph: Source -> Filter -> Gain -> Speakers
+            noiseSource.connect(filter);
+            filter.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            noiseSource.start();
+
+            // 2. The Breathing Automation Loop
+            // Duration of a full cycle (inhale + exhale) in seconds
+            const cycleDuration = 4; 
+
+            function breathCycle() {
+                if (!isBreathing) return;
+
+                const now = audioCtx.currentTime;
+
+                // --- INHALE (Sharp, rising pitch, rising volume) ---
+                // Volume ramp
+                gainNode.gain.setValueAtTime(0.01, now);
+                gainNode.gain.linearRampToValueAtTime(0.15, now + 1.5); // peak volume
+                // Filter frequency ramp (opens up for a brighter sound)
+                filter.frequency.setValueAtTime(300, now);
+                filter.frequency.linearRampToValueAtTime(700, now + 1.5);
+
+                // --- EXHALE (Longer, fading pitch, fading volume) ---
+                // Volume ramp
+                gainNode.gain.setValueAtTime(0.15, now + 1.5);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, now + 4.0); // fade out
+                // Filter frequency ramp (closes down for a deeper, softer sound)
+                filter.frequency.setValueAtTime(700, now + 1.5);
+                filter.frequency.exponentialRampToValueAtTime(200, now + 4.0);
+            }
+
+            // Trigger the first cycle immediately
+            breathCycle();
+            
+            // Loop the automation parameters every 4 seconds
+            breathInterval = setInterval(breathCycle, cycleDuration * 1000);
+
+            // Keep track of nodes so we can stop them later
+            button.noiseSource = noiseSource;
+            button.gainNode = gainNode;
+        }
+
+        function stopBreathing() {
+            isBreathing = false;
+            clearInterval(breathInterval);
+            
+            button.textContent = "Start Breathing";
+            button.style.backgroundColor = "#4caf50";
+            statusText.textContent = "Audio is stopped";
+
+            // Cleanly fade out and stop the source
+            if (button.gainNode && audioCtx) {
+                const now = audioCtx.currentTime;
+                button.gainNode.gain.cancelScheduledValues(now);
+                button.gainNode.gain.linearRampToValueAtTime(0, now + 0.1);
+                setTimeout(() => {
+                    try { button.noiseSource.stop(); } catch(e) {}
+                }, 100);
+            }
+        }
+
+        // Toggle button logic
+        button.addEventListener('click', () => {
+            if (!isBreathing) {
+                startBreathing();
+            } else {
+                stopBreathing();
+            }
+        });
+    </script>
+</body>
+</html>

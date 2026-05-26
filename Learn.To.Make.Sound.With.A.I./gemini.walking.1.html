@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Procedural Footsteps (Hard Shoes)</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #1c1a17;
+            color: #e6e1da;
+            margin: 0;
+        }
+        button {
+            padding: 14px 30px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            border: 1px solid #554e45;
+            border-radius: 4px;
+            background-color: #3a352e;
+            color: #fff;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.4);
+            transition: background-color 0.15s;
+        }
+        button:hover {
+            background-color: #4a433a;
+        }
+        #status {
+            margin-top: 20px;
+            font-size: 0.9rem;
+            color: #8a8174;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+    </style>
+</head>
+<body>
+
+    <button id="walkBtn">Start Walking</button>
+    <div id="status">Stopped</div>
+
+    <script>
+        let audioCtx = null;
+        let isWalking = false;
+        let walkInterval = null;
+        let stepCount = 0;
+
+        const button = document.getElementById('walkBtn');
+        const statusText = document.getElementById('status');
+
+        // Create a short buffer of White Noise for the "clack" of the shoe sole
+        function createNoiseBuffer(ctx) {
+            const bufferSize = ctx.sampleRate * 0.5; // 0.5 seconds is plenty
+            const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+            return buffer;
+        }
+
+        // Simulates a single hard-soled step
+        function playSingleStep() {
+            if (!audioCtx) return;
+
+            const now = audioCtx.currentTime;
+
+            // 1. THE "CLICK/CLACK" (Hard heel hitting a solid surface)
+            const noiseSource = audioCtx.createBufferSource();
+            noiseSource.buffer = createNoiseBuffer(audioCtx);
+
+            const highpassFilter = audioCtx.createBiquadFilter();
+            highpassFilter.type = 'highpass';
+            highpassFilter.frequency.setValueAtTime(1200, now); // Isolate high, sharp frequencies
+
+            const clickGain = audioCtx.createGain();
+            // Instant attack, incredibly fast decay
+            clickGain.gain.setValueAtTime(0, now);
+            clickGain.gain.linearRampToValueAtTime(0.18, now + 0.002); 
+            clickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+
+            noiseSource.connect(highpassFilter);
+            highpassFilter.connect(clickGain);
+            clickGain.connect(audioCtx.destination);
+
+            // 2. THE "THUD" (The heavy impact of the boot/body weight echoing)
+            const thudOscillator = audioCtx.createOscillator();
+            thudOscillator.type = 'triangle'; // Smoother than a sine wave for impact
+
+            const lowpassFilter = audioCtx.createBiquadFilter();
+            lowpassFilter.type = 'lowpass';
+            lowpassFilter.frequency.setValueAtTime(150, now); // Keep it deep and muffled
+
+            const thudGain = audioCtx.createGain();
+            // Instant attack, slightly longer decay than the click
+            thudGain.gain.setValueAtTime(0, now);
+            thudGain.gain.linearRampToValueAtTime(0.35, now + 0.005);
+            thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+
+            // Pitch drop during the thud mimics the energy absorbing into the floor
+            thudOscillator.frequency.setValueAtTime(120, now);
+            thudOscillator.frequency.exponentialRampToValueAtTime(60, now + 0.1);
+
+            thudOscillator.connect(lowpassFilter);
+            lowpassFilter.connect(thudGain);
+            thudGain.connect(audioCtx.destination);
+
+            // Start and stop both components instantly to free up memory
+            noiseSource.start(now);
+            noiseSource.stop(now + 0.1);
+
+            thudOscillator.start(now);
+            thudOscillator.stop(now + 0.15);
+
+            // Alternating visual feedback (Left / Right foot)
+            stepCount++;
+            statusText.textContent = (stepCount % 2 === 0) ? "Step (Left)" : "Step (Right)";
+        }
+
+        function startWalking() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+
+            isWalking = true;
+            button.textContent = "Stop Walking";
+            statusText.textContent = "Walking...";
+
+            // Play the first step immediately
+            playSingleStep();
+
+            // Set up a human walking pace (roughly 115 steps per minute = ~520ms per step)
+            // We add a tiny bit of variation so it doesn't sound entirely robotic
+            function stepLoop() {
+                if (!isWalking) return;
+                playSingleStep();
+                
+                // Add minor random variation to the stride timing (between 500ms and 550ms)
+                const nextStepDelay = 500 + (Math.random() * 50); 
+                walkInterval = setTimeout(stepLoop, nextStepDelay);
+            }
+
+            walkInterval = setTimeout(stepLoop, 520);
+        }
+
+        function stopWalking() {
+            isWalking = false;
+            clearTimeout(walkInterval);
+            button.textContent = "Start Walking";
+            statusText.textContent = "Stopped";
+        }
+
+        button.addEventListener('click', () => {
+            if (!isWalking) startWalking();
+            else stopWalking();
+        });
+    </script>
+</body>
+</html>

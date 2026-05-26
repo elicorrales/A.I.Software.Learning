@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Realistic Heel-Toe Footsteps</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #1a1816;
+            color: #ebdcd0;
+            margin: 0;
+        }
+        button {
+            padding: 15px 32px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            border: 1px solid #61554d;
+            border-radius: 6px;
+            background-color: #3b332e;
+            color: #fff;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+            transition: background-color 0.15s;
+        }
+        button:hover {
+            background-color: #4da6ff;
+            color: #000;
+            border-color: #4da6ff;
+        }
+        #status {
+            margin-top: 20px;
+            font-size: 0.9rem;
+            color: #9c8e85;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+    </style>
+</head>
+<body>
+
+    <button id="walkBtn">Start Heel-Toe Walk</button>
+    <div id="status">Stopped</div>
+
+    <script>
+        let audioCtx = null;
+        let isWalking = false;
+        let walkTimeout = null;
+        let stepCount = 0;
+
+        const button = document.getElementById('walkBtn');
+        const statusText = document.getElementById('status');
+
+        // Create a fast reusable white noise buffer
+        function createNoiseBuffer(ctx) {
+            const bufferSize = ctx.sampleRate * 0.4;
+            const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+            return buffer;
+        }
+
+        // Simulates either the sharp HEEL or the softer TOE impact
+        function playImpact(isHeel) {
+            if (!audioCtx) return;
+            const now = audioCtx.currentTime;
+
+            // 1. High-frequency crack/scrape component
+            const noise = audioCtx.createBufferSource();
+            noise.buffer = createNoiseBuffer(audioCtx);
+
+            const highpass = audioCtx.createBiquadFilter();
+            highpass.type = 'highpass';
+            // Heel is crisp and sharp (1400Hz), Toe is muffled and scuffy (700Hz)
+            highpass.frequency.setValueAtTime(isHeel ? 1400 : 700, now);
+
+            const noiseGain = audioCtx.createGain();
+            noiseGain.gain.setValueAtTime(0, now);
+            // Heel strikes harder and decays faster. Toe is softer.
+            noiseGain.gain.linearRampToValueAtTime(isHeel ? 0.14 : 0.07, now + 0.002);
+            noiseGain.gain.exponentialRampToValueAtTime(0.001, now + (isHeel ? 0.04 : 0.07));
+
+            noise.connect(highpass);
+            highpass.connect(noiseGain);
+            noiseGain.connect(audioCtx.destination);
+
+            // 2. Low-frequency solid floor thud component
+            const thud = audioCtx.createOscillator();
+            thud.type = 'triangle';
+
+            const lowpass = audioCtx.createBiquadFilter();
+            lowpass.type = 'lowpass';
+            lowpass.frequency.setValueAtTime(isHeel ? 160 : 110, now); // Heel has a harder floor slap frequency
+
+            const thudGain = audioCtx.createGain();
+            thudGain.gain.setValueAtTime(0, now);
+            thudGain.gain.linearRampToValueAtTime(isHeel ? 0.25 : 0.12, now + 0.004);
+            thudGain.gain.exponentialRampToValueAtTime(0.001, now + (isHeel ? 0.09 : 0.14));
+
+            // Pitch bend downwards to simulate weight transfer
+            thud.frequency.setValueAtTime(isHeel ? 130 : 90, now);
+            thud.frequency.exponentialRampToValueAtTime(isHeel ? 70 : 50, now + 0.08);
+
+            thud.connect(lowpass);
+            lowpass.connect(thudGain);
+            thudGain.connect(audioCtx.destination);
+
+            noise.start(now);
+            noise.stop(now + 0.1);
+            thud.start(now);
+            thud.stop(now + 0.15);
+        }
+
+        // Orchestrates a complete footstep (Heel immediately followed by Toe)
+        function triggerFullFootstep() {
+            if (!isWalking) return;
+
+            stepCount++;
+            const currentFoot = (stepCount % 2 === 0) ? "Left" : "Right";
+            statusText.textContent = `${currentFoot} Foot (Heel...)`;
+
+            // 1. Play the HEEL instantly
+            playImpact(true);
+
+            // 2. Schedule the TOE to drop 110 milliseconds later
+            setTimeout(() => {
+                if (!isWalking) return;
+                statusText.textContent = `${currentFoot} Foot (...Toe)`;
+                playImpact(false);
+            }, 110); 
+        }
+
+        function startWalking() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+
+            isWalking = true;
+            button.textContent = "Stop Walking";
+
+            triggerFullFootstep();
+
+            // Loop the footsteps at a realistic stride interval (~540ms between steps)
+            function loop() {
+                if (!isWalking) return;
+                triggerFullFootstep();
+                
+                // Add minor human organic micro-timing variations
+                const nextStepDelay = 520 + (Math.random() * 40);
+                walkTimeout = setTimeout(loop, nextStepDelay);
+            }
+
+            walkTimeout = setTimeout(loop, 540);
+        }
+
+        function stopWalking() {
+            isWalking = false;
+            clearTimeout(walkTimeout);
+            button.textContent = "Start Heel-Toe Walk";
+            statusText.textContent = "Stopped";
+        }
+
+        button.addEventListener('click', () => {
+            if (!isWalking) startWalking();
+            else stopWalking();
+        });
+    </script>
+</body>
+</html>
