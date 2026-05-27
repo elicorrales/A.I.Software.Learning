@@ -152,6 +152,22 @@ function animationLoop() {
   }
   // =========================================
 
+  // === ROLLING BALL UPDATE ===
+  if (state.rollingBall) {
+    state.rollingBall.offset -= state.rollingBall.speed;
+    state.rollingBall.rotation += state.rollingBall.speed * 18;
+
+    const ball = state.rollingBall;
+    const ballInActiveHall = state.activeHallway && ball.hallwayId === state.activeHallway.id;
+    if (user.movementMode === 'normal' && ballInActiveHall && ball.offset <= user.forwardOffset + 0.4) {
+      state.rollingBall = null;
+      user.flashFrames = 5;
+    } else if (ball.offset < -1.0) {
+      state.rollingBall = null;
+    }
+  }
+  // ===========================
+
   // Inject updated context pointers straight to renderer engines
   drawPlayerView(ctx, canvas, WorldGrid, trueHallway, user);
 
@@ -266,6 +282,17 @@ window.addEventListener('keydown', (e) => {
             window.My3dMazeDiagnostics.logHistoryEvent('🚪');
         }
       }
+    }
+  }
+
+  else if (e.key === 'b' || e.key === 'B') {
+    if (user.movementMode === 'normal' && user.direction === 0 && !state.rollingBall && state.activeHallway) {
+      state.rollingBall = {
+        offset: 11.0,
+        speed: 0.07,
+        rotation: 0,
+        hallwayId: state.activeHallway.id
+      };
     }
   }
 

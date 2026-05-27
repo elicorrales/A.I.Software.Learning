@@ -132,6 +132,10 @@ function drawMainHallwayPerspective(ctx, canvas, hallwayData, offset, isLookingB
             drawRecedingPerspectiveDoorPair(ctx, segX1, segY1, segX2, segY2, nextSegX1, nextSegY1, nextSegX2, nextSegY2, doorOpenValue, leftDoorColor, rightDoorColor);
         }
     });
+
+    if (!isLookingBackward) {
+        drawRollingBallInPerspective(ctx, canvas, offset);
+    }
 }
 
 function drawSideViewOpenDoorWayStatus(ctx, isWorldBoundaryVoid, connectionExists, frameX, doorY, frameW, doorH) {
@@ -222,6 +226,74 @@ function drawMainHallwaySideView(ctx, canvas, hallwayData, offset) {
             ctx.strokeRect(doorX, doorY, doorW, doorH);
         }
     }
+}
+
+function drawRollingBallInPerspective(ctx, canvas, offset) {
+    const state = window.My3dMazeAppState;
+    if (!state || !state.rollingBall) return;
+    if (!state.activeHallway || state.rollingBall.hallwayId !== state.activeHallway.id) return;
+
+    const ball = state.rollingBall;
+    const ballZ = ball.offset - offset;
+    if (ballZ <= 0.2) return;
+
+    const w = canvas.width;
+    const h = canvas.height;
+    const cx = w / 2;
+    const cy = h / 2;
+
+    const scale = 1 / ballZ;
+    const floorY = cy + (h - cy) * scale;
+    const ceilY  = cy - cy * scale;
+    const screenRadius = Math.max(4, (floorY - ceilY) * 0.45);
+    const ballX = cx;
+    const ballY = floorY - screenRadius;
+
+    // Ground shadow ellipse
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(ballX, floorY, screenRadius * 0.85, screenRadius * 0.14, 0, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(0, 0, 0, ${Math.min(0.45, 0.6 / ballZ)})`;
+    ctx.fill();
+    ctx.restore();
+
+    // Clip interior to circle
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(ballX, ballY, screenRadius, 0, Math.PI * 2);
+    ctx.clip();
+
+    // Sphere radial gradient: bright upper-left highlight, dark lower-right rim
+    const glX = ballX - screenRadius * 0.28;
+    const glY = ballY - screenRadius * 0.32;
+    const sphereGrad = ctx.createRadialGradient(glX, glY, screenRadius * 0.05, ballX, ballY, screenRadius);
+    sphereGrad.addColorStop(0.0,  '#ffffff');
+    sphereGrad.addColorStop(0.28, '#e0e0e0');
+    sphereGrad.addColorStop(0.6,  '#808080');
+    sphereGrad.addColorStop(1.0,  '#181818');
+    ctx.fillStyle = sphereGrad;
+    ctx.fillRect(ballX - screenRadius, ballY - screenRadius, screenRadius * 2, screenRadius * 2);
+
+    // Horizontal rolling stripes scrolling upward as ball approaches
+    const stripeSpacing = (screenRadius * 2) / 7;
+    const scrollAmt = ((ball.rotation % stripeSpacing) + stripeSpacing) % stripeSpacing;
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.18)';
+    ctx.lineWidth = Math.max(1, stripeSpacing * 0.38);
+    for (let sy = ballY - screenRadius - stripeSpacing + scrollAmt; sy <= ballY + screenRadius + stripeSpacing; sy += stripeSpacing) {
+        ctx.beginPath();
+        ctx.moveTo(ballX - screenRadius, sy);
+        ctx.lineTo(ballX + screenRadius, sy);
+        ctx.stroke();
+    }
+
+    ctx.restore();
+
+    // Outline ring
+    ctx.beginPath();
+    ctx.arc(ballX, ballY, screenRadius, 0, Math.PI * 2);
+    ctx.strokeStyle = '#111111';
+    ctx.lineWidth = Math.max(1, screenRadius * 0.035);
+    ctx.stroke();
 }
 
 // =========================================================================

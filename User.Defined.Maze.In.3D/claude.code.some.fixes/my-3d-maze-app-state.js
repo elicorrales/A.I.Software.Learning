@@ -33,6 +33,8 @@ window.My3dMazeAppState = {
 
   smokeParticles: [],
 
+  rollingBall: null,
+
   // UI Metrics
   UI_SCALE: {
     currentGridScale: 1.0,
