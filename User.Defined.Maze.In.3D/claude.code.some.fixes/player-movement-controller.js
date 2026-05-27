@@ -27,7 +27,8 @@
 
             const activeLink = window.MazeInterface.findActiveTunnel();
             const multiplier = (activeLink && user.direction !== activeLink.direction) ? -1 : 1;
-            const nextProgress = user.interconnectingProgress + user.speed * multiplier;
+            const speedModifier = user.isShiftPressed ? user.speed * 3 : user.speed;
+            const nextProgress = user.interconnectingProgress + speedModifier * multiplier;
 
             const isMovingTowardsExit = nextProgress > user.interconnectingProgress;
             if (isMovingTowardsExit) {
@@ -90,7 +91,8 @@
 
         // Situation B: Inside the wall transition lip space
         if (user.movementMode === 'transition') {
-            user.transitionProgress += user.speed;
+            const speedModifier = user.isShiftPressed ? user.speed * 3 : user.speed;
+            user.transitionProgress += speedModifier;
             if (user.transitionProgress >= 0.4) {
                 // Log when the player leaves the lip space and enters the deep tunnel track
                 if (window.My3dMazeDiagnostics && typeof window.My3dMazeDiagnostics.logHistoryEvent === 'function') {
@@ -182,16 +184,22 @@
         if (user.movementMode === 'normal' && state.activeHallway) {
             if (e && typeof e.preventDefault === 'function') e.preventDefault();
             const speedModifier = user.isShiftPressed ? user.speed * 3 : user.speed;
+            const prevOffset = user.forwardOffset;
 
             if (user.direction === 0) user.forwardOffset += speedModifier;
             if (user.direction === 2) user.forwardOffset -= speedModifier;
-
-            window.MazeAudioController.handleMovementAudioCadence(user.isShiftPressed ? 'run' : 'walk');
 
             user.forwardOffset = Math.max(
                 state.activeHallway.nodes[0],
                 Math.min(state.activeHallway.nodes[state.activeHallway.nodes.length - 1], user.forwardOffset)
             );
+
+            if (user.forwardOffset === prevOffset) {
+                window.MazeAudioController.handleMovementAudioCadence('ugh');
+                user.flashFrames = 5;
+            } else {
+                window.MazeAudioController.handleMovementAudioCadence(user.isShiftPressed ? 'run' : 'walk');
+            }
         }
     };
 
@@ -213,7 +221,8 @@
 
             const activeLink = window.MazeInterface.findActiveTunnel();
             const multiplier = (activeLink && user.direction !== activeLink.direction) ? -1 : 1;
-            const nextProgress = user.interconnectingProgress - user.speed * multiplier;
+            const speedModifier = user.isShiftPressed ? user.speed * 3 : user.speed;
+            const nextProgress = user.interconnectingProgress - speedModifier * multiplier;
 
             // TRACK INTENDED MOVEMENT DIRECTION BACKWARDS
             const isBackingTowardsExit = nextProgress > user.interconnectingProgress;
@@ -296,7 +305,8 @@
 
         // Situation B: Retreating out of the doorway lip back to center line
         if (user.movementMode === 'transition') {
-            user.transitionProgress -= user.speed;
+            const speedModifier = user.isShiftPressed ? user.speed * 3 : user.speed;
+            user.transitionProgress -= speedModifier;
             if (user.transitionProgress <= 0.0) {
                 user.movementMode = 'normal';
                 user.transitionProgress = 0.0;
@@ -308,15 +318,22 @@
         if (user.movementMode === 'normal' && state.activeHallway) {
             if (e && typeof e.preventDefault === 'function') e.preventDefault();
             const speedModifier = user.isShiftPressed ? user.speed * 3 : user.speed;
+            const prevOffset = user.forwardOffset;
 
             if (user.direction === 0) user.forwardOffset -= speedModifier;
             if (user.direction === 2) user.forwardOffset += speedModifier;
 
-            window.MazeAudioController.handleMovementAudioCadence(user.isShiftPressed ? 'run' : 'walk');
             user.forwardOffset = Math.max(
                 state.activeHallway.nodes[0],
                 Math.min(state.activeHallway.nodes[state.activeHallway.nodes.length - 1], user.forwardOffset)
             );
+
+            if (user.forwardOffset === prevOffset) {
+                window.MazeAudioController.handleMovementAudioCadence('ugh');
+                user.flashFrames = 5;
+            } else {
+                window.MazeAudioController.handleMovementAudioCadence(user.isShiftPressed ? 'run' : 'walk');
+            }
         }
     };
 
