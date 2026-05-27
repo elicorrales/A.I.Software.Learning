@@ -542,6 +542,11 @@ function exitTunnelToCorridor() {
     const targetHallway = state.WorldGrid.mainHallways[targetHallwayIdx];
     if (!targetHallway) return;
 
+    activeTunnel.entranceDoorTarget = 0;
+    activeTunnel.entranceDoorOpenStatus = 0;
+    activeTunnel.exitDoorTarget = 0;
+    activeTunnel.exitDoorOpenStatus = 0;
+
     state.activeHallway = targetHallway;
     user.movementMode = 'normal';
     user.interconnectingProgress = 0.0;
@@ -553,6 +558,9 @@ function exitTunnelToCorridor() {
     if (targetHallway.nodes && targetHallway.nodes[nodeIndex] !== undefined) {
       user.forwardOffset = targetHallway.nodes[nodeIndex];
     }
+
+    if (targetHallway.doorOpenStatus) targetHallway.doorOpenStatus.fill(0);
+    if (targetHallway.doorTargets) targetHallway.doorTargets.fill(0);
   } else {
     // Tunnel-to-tunnel chaining not yet implemented. Block and flash.
     if (user.interconnectingProgress >= 1.6) user.interconnectingProgress = 3.16;
@@ -590,6 +598,7 @@ function doesAnyStructureExistAtTunnelTerminal(activeLink, view) {
   const relevantSideIndex = view === 'forward' ? activeLink.toHallwayIndex : activeLink.fromHallwayIndex;
 
   const chainedTunnelExists = state.WorldGrid.interconnectingHallways.some(otherTunnel => {
+    // Ignore the tunnel we are currently standing inside
     if (otherTunnel === activeLink) return false;
 
     const otherFromHallway = state.WorldGrid.mainHallways[otherTunnel.fromHallwayIndex];

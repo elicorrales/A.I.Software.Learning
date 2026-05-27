@@ -11,6 +11,30 @@ window.MazeAudioController = (function() {
     }
   }
 
+  let lastStepTimestamp = 0;
+  let lastHitTimestamp = 0;
+  let lastDoorTimestamp = 0;
+
+  function handleMovementAudioCadence(whichSound) {
+    const now = performance.now();
+
+    if (whichSound === 'walk' || whichSound === 'run') {
+      const interval = whichSound === 'run' ? 330 : 530;
+      if (now - lastStepTimestamp < interval) return;
+      lastStepTimestamp = now;
+      if (whichSound === 'run') doRunningStep(); else doWalkingStep();
+    } else if (whichSound === 'ugh') {
+      if (now - lastHitTimestamp < 500) return;
+      lastHitTimestamp = now;
+      doPlayerGotHit();
+    } else if (whichSound === 'door') {
+      if (now - lastDoorTimestamp < 600) return;
+      lastDoorTimestamp = now;
+      doSlidingDoor();
+    }
+  }
+
+
   // Generates unique noise buffers for sole friction textures
   function createNoiseBuffer(duration) {
     const bufferSize = audioCtx.sampleRate * duration;
@@ -349,10 +373,11 @@ window.MazeAudioController = (function() {
 
   // Clean module export via shorthand property names
   return {
-    doWalkingStep,
-    doRunningStep,
-    doShuffleStep,
-    doSlidingDoor,
-    doPlayerGotHit,
+    handleMovementAudioCadence,
+//    doWalkingStep,
+//    doRunningStep,
+//   doShuffleStep,
+//    doSlidingDoor,
+//    doPlayerGotHit,
   };
 })();

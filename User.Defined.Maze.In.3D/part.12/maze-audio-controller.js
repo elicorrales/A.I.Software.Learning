@@ -11,6 +11,38 @@ window.MazeAudioController = (function() {
     }
   }
 
+/**
+ * Handles the smart timing gate and routes commands to the dumb audio controller.
+ * @param {boolean} isShiftPressed - True if sprinting/running, false if walking.
+ */
+function handleMovementAudioCadence(whichSound) {
+  // If the audio controller isn't loaded yet, bail safely
+  if (!window.MazeAudioController) return;
+
+  const now = performance.now();
+  
+  // Set human stride pacing: ~330ms for running, ~530ms for walking
+  const stepCooldownInterval = isShiftPressed ? 330 : 530;
+
+  // Gate Check: If the required time hasn't passed since the last step, ignore this event frame
+  if (now - lastStepTimestamp < stepCooldownInterval) {
+    return;
+  }
+
+  // Update timestamp immediately so subsequent held frames are locked out
+  lastStepTimestamp = now;
+
+  if (whichSound === 'walk') {
+    window.MazeAudioController.doWalkingStep();
+  } else if (whichSound === 'run') {
+    window.MazeAudioController.doRunningStep();
+  } else if (whichSound === 'ugh') {
+    window.MazeAudioController.doPlayerGotHit();
+  } else if (whichSound === 'door') {
+    window.MazeAudioController.doSlidingDoor();
+}
+
+
   // Generates unique noise buffers for sole friction textures
   function createNoiseBuffer(duration) {
     const bufferSize = audioCtx.sampleRate * duration;
@@ -349,10 +381,11 @@ window.MazeAudioController = (function() {
 
   // Clean module export via shorthand property names
   return {
-    doWalkingStep,
-    doRunningStep,
-    doShuffleStep,
-    doSlidingDoor,
-    doPlayerGotHit,
+    handleMovementAudioCadence,
+//    doWalkingStep,
+//    doRunningStep,
+//   doShuffleStep,
+//    doSlidingDoor,
+//    doPlayerGotHit,
   };
 })();

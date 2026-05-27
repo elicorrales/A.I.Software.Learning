@@ -120,34 +120,6 @@ function snapToNearestNode(offset, hallwayModel) {
   return closestOffset;
 }
 
-/**
- * Handles the smart timing gate and routes commands to the dumb audio controller.
- * @param {boolean} isShiftPressed - True if sprinting/running, false if walking.
- */
-function handleMovementAudioCadence(isShiftPressed) {
-  // If the audio controller isn't loaded yet, bail safely
-  if (!window.MazeAudioController) return;
-
-  const now = performance.now();
-  
-  // Set human stride pacing: ~330ms for running, ~530ms for walking
-  const stepCooldownInterval = isShiftPressed ? 330 : 530;
-
-  // Gate Check: If the required time hasn't passed since the last step, ignore this event frame
-  if (now - lastStepTimestamp < stepCooldownInterval) {
-    return;
-  }
-
-  // Update timestamp immediately so subsequent held frames are locked out
-  lastStepTimestamp = now;
-
-  // Execute the exact plain English call requested
-  if (isShiftPressed) {
-    window.MazeAudioController.doRunningStep();
-  } else {
-    window.MazeAudioController.doWalkingStep();
-  }
-}
 
 // =========================================================================
 // 4. ANIMATION LOGIC ENGINE & ENGINE CONTROLLER

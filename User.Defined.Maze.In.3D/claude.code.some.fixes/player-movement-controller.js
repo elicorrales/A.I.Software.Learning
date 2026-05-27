@@ -7,36 +7,7 @@
     const state = window.My3dMazeAppState;
     const user = state.user;
     const WorldGrid = state.WorldGrid;
-    let lastStepTimestamp = 0;
 
-/**
- * Handles the smart timing gate and routes commands to the dumb audio controller.
- * @param {boolean} isShiftPressed - True if sprinting/running, false if walking.
- */
-function handleMovementAudioCadence(isShiftPressed) {
-  // If the audio controller isn't loaded yet, bail safely
-  if (!window.MazeAudioController) return;
-
-  const now = performance.now();
-  
-  // Set human stride pacing: ~330ms for running, ~530ms for walking
-  const stepCooldownInterval = isShiftPressed ? 330 : 530;
-
-  // Gate Check: If the required time hasn't passed since the last step, ignore this event frame
-  if (now - lastStepTimestamp < stepCooldownInterval) {
-    return;
-  }
-
-  // Update timestamp immediately so subsequent held frames are locked out
-  lastStepTimestamp = now;
-
-  // Execute the exact plain English call requested
-  if (isShiftPressed) {
-    window.MazeAudioController.doRunningStep();
-  } else {
-    window.MazeAudioController.doWalkingStep();
-  }
-}
 
     window.playerForwardMovement = function(e) {
         // Situation A: Inside the continuous interconnecting tube
@@ -46,7 +17,7 @@ function handleMovementAudioCadence(isShiftPressed) {
                     window.My3dMazeDiagnostics.logHistoryEvent('💥');
                 }
                 if (window.MazeAudioController) {
-                  window.MazeAudioController.doPlayerGotHit();
+                  window.MazeAudioController.handleMovementAudioCadence('ugh');
                 }
 
                 user.flashFrames = 5;
@@ -66,7 +37,7 @@ function handleMovementAudioCadence(isShiftPressed) {
                         window.My3dMazeDiagnostics.logHistoryEvent('🚧');
                     }
                     if (window.MazeAudioController) {
-                      window.MazeAudioController.doPlayerGotHit();
+                      window.MazeAudioController.handleMovementAudioCadence('ugh');
                     }
 
                     user.flashFrames = 5;
@@ -80,7 +51,7 @@ function handleMovementAudioCadence(isShiftPressed) {
                         window.My3dMazeDiagnostics.logHistoryEvent('🚧');
                     }
                     if (window.MazeAudioController) {
-                      window.MazeAudioController.doPlayerGotHit();
+                      window.MazeAudioController.handleMovementAudioCadence('ugh');
                     }
 
                     user.flashFrames = 5;
@@ -98,7 +69,7 @@ function handleMovementAudioCadence(isShiftPressed) {
                             window.My3dMazeDiagnostics.logHistoryEvent('🚧');
                         }
                         if (window.MazeAudioController) {
-                          window.MazeAudioController.doPlayerGotHit();
+                          window.MazeAudioController.handleMovementAudioCadence('ugh');
                         }
 
                         user.flashFrames = 5;
@@ -108,7 +79,7 @@ function handleMovementAudioCadence(isShiftPressed) {
                 }
             }
 
-            handleMovementAudioCadence(user.isShiftPressed);
+            window.MazeAudioController.handleMovementAudioCadence(user.isShiftPressed ? 'run' : 'walk');
             user.interconnectingProgress = nextProgress;
 
             if (user.interconnectingProgress <= 0.0 || user.interconnectingProgress >= 3.20) {
@@ -140,7 +111,7 @@ function handleMovementAudioCadence(isShiftPressed) {
                 } else {
                     user.interconnectingProgress = 0.0;
                 }
-                handleMovementAudioCadence(user.isShiftPressed);
+                window.MazeAudioController.handleMovementAudioCadence(user.isShiftPressed ? 'run' : 'walk');
             }
             return;
         }
@@ -156,7 +127,7 @@ function handleMovementAudioCadence(isShiftPressed) {
                         window.My3dMazeDiagnostics.logHistoryEvent('🚧'); // Door Closed
                     }
                     if (window.MazeAudioController) {
-                      window.MazeAudioController.doPlayerGotHit();
+                      window.MazeAudioController.handleMovementAudioCadence('ugh');
                     }
 
                     user.flashFrames = 5;
@@ -173,7 +144,7 @@ function handleMovementAudioCadence(isShiftPressed) {
                         window.My3dMazeDiagnostics.logHistoryEvent('⛔'); // Door opened but NOT allowed (Edge of Universe)
                     }
                     if (window.MazeAudioController) {
-                      window.MazeAudioController.doPlayerGotHit();
+                      window.MazeAudioController.handleMovementAudioCadence('ugh');
                     }
 
                     user.flashFrames = 5;
@@ -187,7 +158,7 @@ function handleMovementAudioCadence(isShiftPressed) {
                         window.My3dMazeDiagnostics.logHistoryEvent('🕳️'); // Door opened but NO tunnel structure
                     }
                     if (window.MazeAudioController) {
-                      window.MazeAudioController.doPlayerGotHit();
+                      window.MazeAudioController.handleMovementAudioCadence('ugh');
                     }
 
                     user.flashFrames = 5;
@@ -200,7 +171,7 @@ function handleMovementAudioCadence(isShiftPressed) {
                     window.My3dMazeDiagnostics.logHistoryEvent('⏩[T]');
                 }
 
-                handleMovementAudioCadence(user.isShiftPressed);
+                window.MazeAudioController.handleMovementAudioCadence(user.isShiftPressed ? 'run' : 'walk');
                 user.movementMode = 'transition';
                 user.transitionProgress = user.speed;
                 return;
@@ -215,7 +186,7 @@ function handleMovementAudioCadence(isShiftPressed) {
             if (user.direction === 0) user.forwardOffset += speedModifier;
             if (user.direction === 2) user.forwardOffset -= speedModifier;
 
-            handleMovementAudioCadence(user.isShiftPressed);
+            window.MazeAudioController.handleMovementAudioCadence(user.isShiftPressed ? 'run' : 'walk');
 
             user.forwardOffset = Math.max(
                 state.activeHallway.nodes[0],
@@ -232,7 +203,7 @@ function handleMovementAudioCadence(isShiftPressed) {
                     window.My3dMazeDiagnostics.logHistoryEvent('💥');
                 }
                 if (window.MazeAudioController) {
-                  window.MazeAudioController.doPlayerGotHit();
+                  window.MazeAudioController.handleMovementAudioCadence('ugh');
                 }
 
                 user.flashFrames = 5;
@@ -257,7 +228,7 @@ function handleMovementAudioCadence(isShiftPressed) {
                             window.My3dMazeDiagnostics.logHistoryEvent('🛑🚧');
                         }
                         if (window.MazeAudioController) {
-                          window.MazeAudioController.doPlayerGotHit();
+                          window.MazeAudioController.handleMovementAudioCadence('ugh');
                         }
 
                         user.flashFrames = 5;
@@ -272,7 +243,7 @@ function handleMovementAudioCadence(isShiftPressed) {
                             window.My3dMazeDiagnostics.logHistoryEvent('🛑🕳️'); // Void Blocked
                         }
                         if (window.MazeAudioController) {
-                          window.MazeAudioController.doPlayerGotHit();
+                          window.MazeAudioController.handleMovementAudioCadence('ugh');
                         }
 
                         user.flashFrames = 5;
@@ -290,7 +261,7 @@ function handleMovementAudioCadence(isShiftPressed) {
                             window.My3dMazeDiagnostics.logHistoryEvent('🛑🚧');
                         }
                         if (window.MazeAudioController) {
-                          window.MazeAudioController.doPlayerGotHit();
+                          window.MazeAudioController.handleMovementAudioCadence('ugh');
                         }
 
                         user.flashFrames = 5;
@@ -305,7 +276,7 @@ function handleMovementAudioCadence(isShiftPressed) {
                             window.My3dMazeDiagnostics.logHistoryEvent('🛑🕳️'); // Void Blocked
                         }
                         if (window.MazeAudioController) {
-                          window.MazeAudioController.doPlayerGotHit();
+                          window.MazeAudioController.handleMovementAudioCadence('ugh');
                         }
                         user.flashFrames = 5;
                         if (e && typeof e.preventDefault === 'function') e.preventDefault();
@@ -314,7 +285,7 @@ function handleMovementAudioCadence(isShiftPressed) {
                 }
             }
 
-            handleMovementAudioCadence(user.isShiftPressed);
+            window.MazeAudioController.handleMovementAudioCadence(user.isShiftPressed ? 'run' : 'walk');
             user.interconnectingProgress = nextProgress;
 
             if (user.interconnectingProgress <= 0.0 || user.interconnectingProgress >= 3.20) {
@@ -341,7 +312,7 @@ function handleMovementAudioCadence(isShiftPressed) {
             if (user.direction === 0) user.forwardOffset -= speedModifier;
             if (user.direction === 2) user.forwardOffset += speedModifier;
 
-            handleMovementAudioCadence(user.isShiftPressed);
+            window.MazeAudioController.handleMovementAudioCadence(user.isShiftPressed ? 'run' : 'walk');
             user.forwardOffset = Math.max(
                 state.activeHallway.nodes[0],
                 Math.min(state.activeHallway.nodes[state.activeHallway.nodes.length - 1], user.forwardOffset)
