@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Procedural Sound Test - Refined Door</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #141312;
+            color: #e3dcd5;
+            margin: 0;
+            gap: 20px;
+        }
+        .btn-container {
+            display: flex;
+            gap: 20px;
+        }
+        button {
+            padding: 15px 35px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            border: 1px solid #544b44;
+            border-radius: 6px;
+            background-color: #38312c;
+            color: #fff;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.6);
+            transition: background-color 0.15s, border-color 0.15s, transform 0.05s;
+        }
+        button:hover {
+            background-color: #ff5722;
+            color: #fff;
+            border-color: #ff5722;
+        }
+        button:active {
+            transform: scale(0.98);
+        }
+        #status {
+            margin-top: 20px;
+            font-size: 0.9rem;
+            color: #8c8177;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            height: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="btn-container">
+        <button id="doorBtn">Sliding Door & Bang</button>
+        <button id="hitBtn">Vocal Hit ("Ugh")</button>
+    </div>
+    
+    <div id="status">Ready</div>
+
+    <script>
+        let audioCtx = null;
+        const statusText = document.getElementById('status');
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        function updateStatus(text) {
+            statusText.textContent = text;
+            setTimeout(() => {
+                if (statusText.textContent === text) {
+                    statusText.textContent = "Ready";
+                }
+            }, 1200);
+        }
+
+        function createNoiseBuffer() {
+            const bufferSize = audioCtx.sampleRate * 1.5;
+            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+            return buffer;
+        }
+
+        // --- SOUND 1: REFINED SLIDING DOOR (Fast Slide + Hard Bang) ---
+        function playSlidingDoor() {
+            initAudio();
+            const now = audioCtx.currentTime;
+            const duration = 0.25; 
+            
+            updateStatus("Door Slammed!");
+
+            const noise = audioCtx.createBufferSource();
+            noise.buffer = createNoiseBuffer();
+
+            const slideFilter = audioCtx.createBiquadFilter();
+            slideFilter.type = 'bandpass';
+            slideFilter.frequency.setValueAtTime(900, now);
+            slideFilter.frequency.linearRampToValueAtTime(400, now + duration);
+            slideFilter.Q.setValueAtTime(4, now);
+
+            const slideGain = audioCtx.createGain();
+            slideGain.gain.setValueAtTime(0, now);
+            slideGain.gain.linearRampToValueAtTime(0.2, now + 0.04); 
+            slideGain.gain.setValueAtTime(0.2, now + duration - 0.02);
+            slideGain.gain.linearRampToValueAtTime(0.0, now + duration); 
+
+            noise.connect(slideFilter);
+            slideFilter.connect(slideGain);
+            slideGain.connect(audioCtx.destination);
+
+            const slamOsc = audioCtx.createOscillator();
+            slamOsc.type = 'square';
+
+            const slamFilter = audioCtx.createBiquadFilter();
+            slamFilter.type = 'lowpass';
+            slamFilter.frequency.setValueAtTime(180, now + duration); 
+
+            const slamGain = audioCtx.createGain();
+            slamGain.gain.setValueAtTime(0, now);
+            slamGain.gain.setValueAtTime(0, now + duration);
+            slamGain.gain.linearRampToValueAtTime(0.6, now + duration + 0.002); 
+            slamGain.gain.exponentialRampToValueAtTime(0.001, now + duration + 0.15); 
+
+            slamOsc.frequency.setValueAtTime(140, now + duration);
+            slamOsc.frequency.exponentialRampToValueAtTime(50, now + duration + 0.08);
+
+            slamOsc.connect(slamFilter);
+            slamFilter.connect(slamGain);
+            slamGain.connect(audioCtx.destination);
+
+            const slamNoise = audioCtx.createBufferSource();
+            slamNoise.buffer = createNoiseBuffer();
+
+            const slamNoiseFilter = audioCtx.createBiquadFilter();
+            slamNoiseFilter.type = 'bandpass';
+            slamNoiseFilter.frequency.setValueAtTime(250, now + duration);
+            slamNoiseFilter.Q.setValueAtTime(2, now + duration);
+
+            const slamNoiseGain = audioCtx.createGain();
+            slamNoiseGain.gain.setValueAtTime(0, now);
+            slamNoiseGain.gain.setValueAtTime(0, now + duration);
+            slamNoiseGain.gain.linearRampToValueAtTime(0.35, now + duration + 0.005);
+            slamNoiseGain.gain.exponentialRampToValueAtTime(0.001, now + duration + 0.22); 
+
+            slamNoise.connect(slamNoiseFilter);
+            slamNoiseFilter.connect(slamNoiseGain);
+            slamNoiseGain.connect(audioCtx.destination);
+
+            noise.start(now);
+            noise.stop(now + duration);
+            
+            slamOsc.start(now + duration);
+            slamOsc.stop(now + duration + 0.2);
+
+            slamNoise.start(now + duration);
+            slamNoise.stop(now + duration + 0.3);
+        }
+
+        // --- SOUND 2: SEPARATED HIT TONE & TRUE DYING GASP ---
+        function playVocalHit() {
+            initAudio();
+            const now = audioCtx.currentTime;
+            
+            updateStatus("Vocal Hit: Ugh!");
+
+            // 1. THE IMPACT TONE (Cuts off early to stop the buzzing/fart tail)
+            const voiceOsc = audioCtx.createOscillator();
+            voiceOsc.type = 'sawtooth'; 
+            
+            // Fixed stable compression frequency pitch drop, avoiding ultra-low muddy ranges
+            voiceOsc.frequency.setValueAtTime(130, now);
+            voiceOsc.frequency.linearRampToValueAtTime(95, now + 0.08);
+
+            const formant1 = audioCtx.createBiquadFilter();
+            formant1.type = 'bandpass';
+            formant1.frequency.setValueAtTime(480, now);
+            formant1.Q.setValueAtTime(8, now); 
+
+            const formant2 = audioCtx.createBiquadFilter();
+            formant2.type = 'bandpass';
+            formant2.frequency.setValueAtTime(920, now);
+            formant2.Q.setValueAtTime(6, now);
+
+            const voiceGain = audioCtx.createGain();
+            voiceGain.gain.setValueAtTime(0, now);
+            
+            // BRIEF RISE: Super fast linear attack up to maximum intensity
+            voiceGain.gain.linearRampToValueAtTime(0.5, now + 0.025);
+            
+            // HARD TONAL DROPOFF: The throat tone completely vanishes before it can sound synthetic
+            voiceGain.gain.setValueAtTime(0.5, now + 0.05);
+            voiceGain.gain.exponentialRampToValueAtTime(0.001, now + 0.08); 
+
+            voiceOsc.connect(formant1);
+            voiceOsc.connect(formant2);
+            formant1.connect(voiceGain);
+            formant2.connect(voiceGain);
+            voiceGain.connect(audioCtx.destination);
+
+            // 2. THE DYING BREATH (Pure noise airflow, completely free of oscillator buzz)
+            const breath = audioCtx.createBufferSource();
+            breath.buffer = createNoiseBuffer();
+
+            const breathFilter = audioCtx.createBiquadFilter();
+            breathFilter.type = 'bandpass';
+            
+            // Mimicking the sliding door's frequency slide profile for realistic air movement
+            breathFilter.frequency.setValueAtTime(850, now + 0.05); 
+            breathFilter.frequency.linearRampToValueAtTime(350, now + 0.4);
+            breathFilter.Q.setValueAtTime(3.5, now); // Slightly wider, natural air texture
+
+            const breathGain = audioCtx.createGain();
+            breathGain.gain.setValueAtTime(0, now);
+            
+            // The breath builds smoothly behind the max hit punch...
+            breathGain.gain.linearRampToValueAtTime(0.15, now + 0.04);
+            
+            // ...then handles Part 3 independently as a soft, fading air trail
+            breathGain.gain.setValueAtTime(0.15, now + 0.07);
+            breathGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.42); 
+
+            breath.connect(breathFilter);
+            breathFilter.connect(breathGain);
+            breathGain.connect(audioCtx.destination);
+
+            // Independent node execution timelines
+            voiceOsc.start(now);
+            voiceOsc.stop(now + 0.09); // Shuts down voice early to keep the decay pure
+            breath.start(now);
+            breath.stop(now + 0.45);   // Soft trailing air release finishes out the sound
+        }
+
+        document.getElementById('doorBtn').addEventListener('click', playSlidingDoor);
+        document.getElementById('hitBtn').addEventListener('click', playVocalHit);
+    </script>
+</body>
+</html>

@@ -120,6 +120,15 @@ function findActiveTunnel() {
     return null;
   }
 
+  // When already inside a tunnel, return it by stored index. This avoids false matches
+  // when two tunnels share the same global X column (inline tunnels on adjacent hallways).
+  if (state.user.movementMode === 'interconnecting') {
+    const idx = state.user.activeTunnelIndex;
+    if (idx >= 0 && idx < state.WorldGrid.interconnectingHallways.length) {
+      return state.WorldGrid.interconnectingHallways[idx];
+    }
+  }
+
   // 2. Determine local door data index
   let doorDataIdx = getCurrentNodeIndex();
   if (doorDataIdx === -1) {
@@ -135,6 +144,11 @@ function findActiveTunnel() {
   // 3. Compute the absolute global X coordinate on the universe grid axis
   const globalX = currentHallway.startOffsetFromS + doorDataIdx;
 
+  // Direction guard only applies from a hallway (normal mode). When the player is
+  // already inside the tunnel (interconnecting mode), any facing direction is valid —
+  // we identify the tunnel by position alone.
+  const applyDirectionGuard = state.user.movementMode !== 'interconnecting';
+
   // 4. Scan for any tunnel that physically links to this location from either side
   return state.WorldGrid.interconnectingHallways.find(conn => {
     // Only check tunnels that involve our current hallway
@@ -148,7 +162,17 @@ function findActiveTunnel() {
     // The absolute X coordinate where this specific tunnel is located
     const connGlobalX = fromHallway.startOffsetFromS + conn.doorIndex;
 
-    return connGlobalX === globalX;
+    if (connGlobalX !== globalX) return false;
+
+    // When inside the tunnel, position match alone is sufficient.
+    if (!applyDirectionGuard) return true;
+
+    // When in a hallway, only match if the player faces the side the tunnel is on.
+    const playerDir = state.user.direction;
+    if (currentHallwayIdx === conn.fromHallwayIndex) return playerDir === conn.direction;
+    if (currentHallwayIdx === conn.toHallwayIndex)   return playerDir !== conn.direction;
+
+    return false;
   }) || null;
 }
 
@@ -430,7 +454,14 @@ function isSideViewFacingTunnel(nodeIndex) {
     // Calculate the absolute global X position where this tunnel was original spawned
     const connGlobalX = fromHallway.startOffsetFromS + conn.doorIndex;
 
-    return connGlobalX === globalX;
+    if (connGlobalX !== globalX) return false;
+
+    // Only match if the player is facing the side the tunnel is actually on.
+    const playerDir = state.user.direction;
+    if (currentHallwayIdx === conn.fromHallwayIndex) return playerDir === conn.direction;
+    if (currentHallwayIdx === conn.toHallwayIndex)   return playerDir !== conn.direction;
+
+    return false;
   });
 }
 
@@ -515,6 +546,7 @@ function exitTunnelToCorridor() {
     user.movementMode = 'normal';
     user.interconnectingProgress = 0.0;
     user.transitionProgress = 0.0;
+    user.activeTunnelIndex = -1;
 
     const nodeIndex = localDoorIdx * 2;
     user.nodeIndex = nodeIndex;
@@ -522,10 +554,10 @@ function exitTunnelToCorridor() {
       user.forwardOffset = targetHallway.nodes[nodeIndex];
     }
   } else {
-    // Handled when tunnel-to-tunnel chaining mechanics are fully deployed!
-    // For now, safely treat it as a block until your multi-tunnel state tracker is built.
+    // Tunnel-to-tunnel chaining not yet implemented. Block and flash.
     if (user.interconnectingProgress >= 1.6) user.interconnectingProgress = 3.16;
     else user.interconnectingProgress = 0.04;
+    user.flashFrames = 5;
   }
 }
 
@@ -552,16 +584,22 @@ function doesAnyStructureExistAtTunnelTerminal(activeLink, view) {
     exitGlobalX = fromHallway.startOffsetFromS + activeLink.doorIndex;
   }
 
-  // Look through the tunnel registry to see if another link shares this global X coordinate
+  // A chained tunnel must connect on the correct terminal side, not just share the same X column.
+  // For 'forward': the other tunnel must touch activeLink.toHallwayIndex.
+  // For 'backward': the other tunnel must touch activeLink.fromHallwayIndex.
+  const relevantSideIndex = view === 'forward' ? activeLink.toHallwayIndex : activeLink.fromHallwayIndex;
+
   const chainedTunnelExists = state.WorldGrid.interconnectingHallways.some(otherTunnel => {
-    // Ignore the tunnel we are currently standing inside
     if (otherTunnel === activeLink) return false;
 
     const otherFromHallway = state.WorldGrid.mainHallways[otherTunnel.fromHallwayIndex];
     if (!otherFromHallway) return false;
 
     const otherGlobalX = otherFromHallway.startOffsetFromS + otherTunnel.doorIndex;
-    return otherGlobalX === exitGlobalX;
+    if (otherGlobalX !== exitGlobalX) return false;
+
+    return otherTunnel.fromHallwayIndex === relevantSideIndex
+        || otherTunnel.toHallwayIndex === relevantSideIndex;
   });
 
   return chainedTunnelExists;
