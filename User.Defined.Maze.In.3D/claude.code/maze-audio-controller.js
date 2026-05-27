@@ -15,6 +15,13 @@ window.MazeAudioController = (function() {
   let lastHitTimestamp = 0;
   let lastDoorTimestamp = 0;
 
+  // Rolling ball persistent sound nodes
+  let ballRollSource     = null;
+  let ballRollGainNode   = null;
+  let ballRollOscSource  = null;
+  let ballRollOscGain    = null;
+  let ballRollLfo        = null;
+
   function handleMovementAudioCadence(whichSound) {
     const now = performance.now();
 
@@ -371,9 +378,110 @@ window.MazeAudioController = (function() {
     breath.stop(now + 0.45);   // Soft trailing air release finishes out the sound
   }
 
+  // Starts a looping rolling sound representing a heavy ball on a hard floor
+  function startBallRollingSound() {
+    initAudio();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    stopBallRollingSound();
+
+    const now = audioCtx.currentTime;
+    const sr  = audioCtx.sampleRate;
+
+    // Looping white noise buffer (2 seconds)
+    const loopBuffer = audioCtx.createBuffer(1, sr * 2, sr);
+    const loopData   = loopBuffer.getChannelData(0);
+    for (let i = 0; i < loopData.length; i++) loopData[i] = Math.random() * 2 - 1;
+
+    ballRollSource        = audioCtx.createBufferSource();
+    ballRollSource.buffer = loopBuffer;
+    ballRollSource.loop   = true;
+
+    // Single lowpass at 200 Hz — strips all hissing, keeps only the low rumble body
+    const rumble = audioCtx.createBiquadFilter();
+    rumble.type  = 'lowpass';
+    rumble.frequency.setValueAtTime(200, now);
+
+    // Triangle oscillator at 90 Hz — tonal floor-contact thud (audible on most speakers)
+    ballRollOscSource      = audioCtx.createOscillator();
+    ballRollOscSource.type = 'triangle';
+    ballRollOscSource.frequency.setValueAtTime(90, now);
+
+    // Fixed mix level for the oscillator relative to the noise rumble
+    ballRollOscGain = audioCtx.createGain();
+    ballRollOscGain.gain.setValueAtTime(0.55, now);
+
+    // LFO at 4 Hz — rhythmic rolling thump, like contact points hitting the floor
+    ballRollLfo      = audioCtx.createOscillator();
+    ballRollLfo.type = 'sine';
+    ballRollLfo.frequency.setValueAtTime(4, now);
+
+    const lfoDepth = audioCtx.createGain();
+    lfoDepth.gain.setValueAtTime(0.42, now); // ±0.42
+
+    // Shared pulse gate: DC 0.55 ± 0.42 → swells 0.13 → 0.97 and back, 4x/sec
+    const pulseGain = audioCtx.createGain();
+    pulseGain.gain.setValueAtTime(0.55, now);
+    ballRollLfo.connect(lfoDepth);
+    lfoDepth.connect(pulseGain.gain);
+
+    // Master distance gain — the only node updated each frame
+    ballRollGainNode = audioCtx.createGain();
+    ballRollGainNode.gain.setValueAtTime(0, now);
+
+    // Graph: [noise->rumble] + [osc->oscGain] -> pulseGain -> masterGain -> output
+    ballRollSource.connect(rumble);
+    rumble.connect(pulseGain);
+
+    ballRollOscSource.connect(ballRollOscGain);
+    ballRollOscGain.connect(pulseGain);
+
+    pulseGain.connect(ballRollGainNode);
+    ballRollGainNode.connect(audioCtx.destination);
+
+    ballRollSource.start(now);
+    ballRollOscSource.start(now);
+    ballRollLfo.start(now);
+  }
+
+  // Called every animation frame — swells masterGain as ball closes in on player
+  function updateBallRollingSoundVolume(ballZ) {
+    if (!audioCtx || !ballRollGainNode) return;
+    const safeZ = Math.max(0.15, ballZ);
+    // ~0.06 at z=11 (faint), ~0.75 at z=0.5 (loud)
+    const vol = Math.min(0.85, 0.55 / Math.pow(safeZ + 0.2, 0.9));
+    const now = audioCtx.currentTime;
+    ballRollGainNode.gain.linearRampToValueAtTime(vol, now + 0.05);
+  }
+
+  // Fades out and cleans up all rolling sound nodes
+  function stopBallRollingSound() {
+    if (!audioCtx) return;
+    const now = audioCtx.currentTime;
+    if (ballRollGainNode) {
+      ballRollGainNode.gain.cancelScheduledValues(now);
+      ballRollGainNode.gain.linearRampToValueAtTime(0, now + 0.15);
+    }
+    const srcRef = ballRollSource;
+    const oscRef = ballRollOscSource;
+    const lfoRef = ballRollLfo;
+    ballRollSource   = null;
+    ballRollOscSource = null;
+    ballRollLfo      = null;
+    ballRollGainNode = null;
+    ballRollOscGain  = null;
+    setTimeout(() => {
+      if (srcRef) try { srcRef.stop(); } catch(e) {}
+      if (oscRef) try { oscRef.stop(); } catch(e) {}
+      if (lfoRef) try { lfoRef.stop(); } catch(e) {}
+    }, 250);
+  }
+
   // Clean module export via shorthand property names
   return {
     handleMovementAudioCadence,
+    startBallRollingSound,
+    updateBallRollingSoundVolume,
+    stopBallRollingSound,
 //    doWalkingStep,
 //    doRunningStep,
 //   doShuffleStep,

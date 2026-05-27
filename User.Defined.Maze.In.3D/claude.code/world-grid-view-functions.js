@@ -55,10 +55,12 @@ function drawBirdseyeView(minimapCtx, minimapCanvas, worldGrid, activeHallway, u
       const hY1 = trackSpacingY * (conn.fromHallwayIndex + 1);
       const hY2 = trackSpacingY * (nextRowIndex + 1);
 
-      // --- MINIMAL CHANGE HERE ---
-      // We calculate the exact X coordinate once using the originating door's position.
+      // Use chainGlobalX when present so all chain segments share the same visual column.
+      // Without it, each segment's doorIndex is relative to its own fromHallway, which shifts the column.
       const parentStartX = 20 + (parentHallway.startOffsetFromS / totalGridWidthUnits) * availableRenderWidth;
-      const doorX = parentStartX + ((UNIFORM_2D_DOORS[conn.doorIndex] / totalGridWidthUnits) * availableRenderWidth);
+      const doorX = (conn.chainGlobalX !== undefined)
+        ? 20 + (conn.chainGlobalX / totalGridWidthUnits) * availableRenderWidth
+        : parentStartX + ((UNIFORM_2D_DOORS[conn.doorIndex] / totalGridWidthUnits) * availableRenderWidth);
 
       // Draw a perfectly straight line to the destination track row, even if it's completely empty space
       minimapCtx.strokeStyle = '#00ffcc';
@@ -113,11 +115,15 @@ function drawBirdseyeView(minimapCtx, minimapCanvas, worldGrid, activeHallway, u
         const activeLink = window.MazeInterface.findActiveTunnel();
 
         if (activeLink) {
-          // X Position stays locked to the uniform door column position anchored to the starting hallway track
-          const baseHallway = worldGrid.mainHallways[activeLink.fromHallwayIndex];
-          const baseStartX = 20 + (baseHallway.startOffsetFromS / totalGridWidthUnits) * availableRenderWidth;
-          const doorXVal = UNIFORM_2D_DOORS[activeLink.doorIndex];
-          mappedUserX = baseStartX + ((doorXVal / maxHallwayWidthUnits) * totalVisualLineLength);
+          // Use chainGlobalX when present so the player dot tracks the chain's visual column.
+          if (activeLink.chainGlobalX !== undefined) {
+            mappedUserX = 20 + (activeLink.chainGlobalX / totalGridWidthUnits) * availableRenderWidth;
+          } else {
+            const baseHallway = worldGrid.mainHallways[activeLink.fromHallwayIndex];
+            const baseStartX = 20 + (baseHallway.startOffsetFromS / totalGridWidthUnits) * availableRenderWidth;
+            const doorXVal = UNIFORM_2D_DOORS[activeLink.doorIndex];
+            mappedUserX = baseStartX + ((doorXVal / maxHallwayWidthUnits) * totalVisualLineLength);
+          }
 
           // Y Position smoothly moves between fromHallwayIndex track and toHallwayIndex track
           const fromY = trackSpacingY * (activeLink.fromHallwayIndex + 1);

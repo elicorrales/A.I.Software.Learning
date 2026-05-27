@@ -534,7 +534,9 @@ function exitTunnelToCorridor() {
       const fromHallway = state.WorldGrid.mainHallways[activeTunnel.fromHallwayIndex];
       const toHallway = state.WorldGrid.mainHallways[activeTunnel.toHallwayIndex];
       if (fromHallway && toHallway) {
-        const globalX = fromHallway.startOffsetFromS + activeTunnel.doorIndex;
+        const globalX = (activeTunnel.chainGlobalX !== undefined)
+          ? activeTunnel.chainGlobalX
+          : fromHallway.startOffsetFromS + activeTunnel.doorIndex;
         localDoorIdx = globalX - toHallway.startOffsetFromS;
       }
     }
@@ -562,10 +564,67 @@ function exitTunnelToCorridor() {
     if (targetHallway.doorOpenStatus) targetHallway.doorOpenStatus.fill(0);
     if (targetHallway.doorTargets) targetHallway.doorTargets.fill(0);
   } else {
-    // Tunnel-to-tunnel chaining not yet implemented. Block and flash.
-    if (user.interconnectingProgress >= 1.6) user.interconnectingProgress = 3.16;
-    else user.interconnectingProgress = 0.04;
-    user.flashFrames = 5;
+    // A chained tunnel segment exists at this terminal — resolve it and transition.
+
+    // Prefer the direct forward chain link created by createChainedTunnelFromDeadEnd()
+    let chainedTunnel = null;
+    if (viewOrientation === 'forward'
+        && activeTunnel.forwardChainIndex !== undefined
+        && activeTunnel.forwardChainIndex >= 0) {
+      chainedTunnel = state.WorldGrid.interconnectingHallways[activeTunnel.forwardChainIndex] || null;
+    }
+
+    // Fallback: globalX column search for any tunnel that connects at this terminal
+    if (!chainedTunnel) {
+      const fromHallway = state.WorldGrid.mainHallways[activeTunnel.fromHallwayIndex];
+      if (fromHallway) {
+        const exitGlobalX = fromHallway.startOffsetFromS + activeTunnel.doorIndex;
+        const relevantSideIdx = viewOrientation === 'forward'
+          ? activeTunnel.toHallwayIndex
+          : activeTunnel.fromHallwayIndex;
+        chainedTunnel = state.WorldGrid.interconnectingHallways.find(otherTunnel => {
+          if (otherTunnel === activeTunnel) return false;
+          const otherFrom = state.WorldGrid.mainHallways[otherTunnel.fromHallwayIndex];
+          if (!otherFrom) return false;
+          const otherGlobalX = otherFrom.startOffsetFromS + otherTunnel.doorIndex;
+          if (otherGlobalX !== exitGlobalX) return false;
+          return otherTunnel.fromHallwayIndex === relevantSideIdx
+              || otherTunnel.toHallwayIndex   === relevantSideIdx;
+        }) || null;
+      }
+    }
+
+    if (!chainedTunnel) {
+      if (user.interconnectingProgress >= 1.6) user.interconnectingProgress = 3.16;
+      else user.interconnectingProgress = 0.04;
+      user.flashFrames = 5;
+      return;
+    }
+
+    const chainedTunnelIdx = state.WorldGrid.interconnectingHallways.indexOf(chainedTunnel);
+    const relevantSideIndex = viewOrientation === 'forward'
+      ? activeTunnel.toHallwayIndex
+      : activeTunnel.fromHallwayIndex;
+
+    // Close the segment we just traversed
+    activeTunnel.entranceDoorTarget     = 0;
+    activeTunnel.entranceDoorOpenStatus = 0;
+    activeTunnel.exitDoorTarget         = 0;
+    activeTunnel.exitDoorOpenStatus     = 0;
+
+    state.activeHallway    = state.WorldGrid.mainHallways[relevantSideIndex];
+    user.activeTunnelIndex = chainedTunnelIdx;
+
+    // Place player at the near end of the chained segment and open that door
+    if (chainedTunnel.fromHallwayIndex === relevantSideIndex) {
+      user.interconnectingProgress         = 0.0;
+      chainedTunnel.entranceDoorTarget     = 1;
+      chainedTunnel.entranceDoorOpenStatus = 1.0;
+    } else {
+      user.interconnectingProgress     = 3.20;
+      chainedTunnel.exitDoorTarget     = 1;
+      chainedTunnel.exitDoorOpenStatus = 1.0;
+    }
   }
 }
 
@@ -578,6 +637,14 @@ function doesAnyStructureExistAtTunnelTerminal(activeLink, view) {
 
   const state = window.My3dMazeAppState;
   if (!state || !state.WorldGrid) return false;
+
+  // 0. Direct chain link — takes priority over globalX scan for chained segments
+  if (view === 'forward'
+      && activeLink.forwardChainIndex !== undefined
+      && activeLink.forwardChainIndex >= 0
+      && activeLink.forwardChainIndex < state.WorldGrid.interconnectingHallways.length) {
+    return true;
+  }
 
   // 1. First, check if a standard hallway is there
   const hallwayExists = doesMainHallwayExistAtTunnelTerminal(activeLink, view);

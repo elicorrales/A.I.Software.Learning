@@ -77,6 +77,64 @@ function initializeAllMainHallways() {
   }
 }
 
+function createChainedTunnelFromDeadEnd() {
+  const activeTunnel = window.MazeInterface.findActiveTunnel();
+  if (!activeTunnel) return;
+
+  // Only chain in the tunnel's forward direction
+  if (user.direction !== activeTunnel.direction) return;
+  // Must be at the dead-end wall (player gets pinned at 3.16 when hitting a void)
+  if (user.interconnectingProgress < 3.10) return;
+  // Exit door must be open — consistent with normal tunnel creation requiring open door
+  if (activeTunnel.exitDoorOpenStatus <= 0.95) return;
+  // Forward terminal must be empty (true dead end)
+  if (window.MazeInterface.doesMainHallwayExistAtTunnelTerminal(activeTunnel, 'forward')) return;
+  // A chain must not already be linked from this tunnel
+  if (activeTunnel.forwardChainIndex !== undefined && activeTunnel.forwardChainIndex >= 0) return;
+
+  const newFromIdx = activeTunnel.toHallwayIndex;
+  const newToIdx = activeTunnel.direction === 1 ? newFromIdx + 1 : newFromIdx - 1;
+
+  // Universe boundary — cannot chain past the outermost hallway row
+  if (newToIdx < 0 || newToIdx >= WorldGrid.mainHallways.length) {
+    user.flashFrames = 5;
+    return;
+  }
+
+  // Reuse the same relative door slot (0–4) — always valid, avoids globalX alignment issues
+  const newDoorIdx = activeTunnel.doorIndex;
+
+  // Preserve the visual X column from the originating tunnel for the 2D minimap.
+  // Each hallway has a random startOffsetFromS, so doorIndex alone shifts the column.
+  // chainGlobalX pins all segments in the chain to the same rendered X.
+  const originHallway = WorldGrid.mainHallways[activeTunnel.fromHallwayIndex];
+  const chainGlobalX = (activeTunnel.chainGlobalX !== undefined)
+    ? activeTunnel.chainGlobalX
+    : (originHallway ? originHallway.startOffsetFromS + activeTunnel.doorIndex : newDoorIdx);
+
+  const newTunnel = {
+    fromHallwayIndex:       newFromIdx,
+    toHallwayIndex:         newToIdx,
+    doorIndex:              newDoorIdx,
+    direction:              activeTunnel.direction,
+    chainGlobalX:           chainGlobalX,
+    entranceDoorTarget:     0,
+    entranceDoorOpenStatus: 0.0,
+    exitDoorTarget:         0,
+    exitDoorOpenStatus:     0.0
+  };
+
+  WorldGrid.interconnectingHallways.push(newTunnel);
+  const newTunnelIdx = WorldGrid.interconnectingHallways.length - 1;
+
+  // Directly link this tunnel to its forward chain segment — transition code uses this
+  activeTunnel.forwardChainIndex = newTunnelIdx;
+
+  if (window.My3dMazeDiagnostics && typeof window.My3dMazeDiagnostics.logHistoryEvent === 'function') {
+    window.My3dMazeDiagnostics.logHistoryEvent('🛠️⛓️');
+  }
+}
+
 function createInterconnectingHallway() {
   // Read target exclusively from our structured application state
   if (!state.activeHallway || (user.direction !== 1 && user.direction !== 3)) return;
@@ -158,11 +216,19 @@ function animationLoop() {
     state.rollingBall.rotation += state.rollingBall.speed * 18;
 
     const ball = state.rollingBall;
+    const ballZ = ball.offset - user.forwardOffset;
+
+    if (window.MazeAudioController) {
+      window.MazeAudioController.updateBallRollingSoundVolume(ballZ);
+    }
+
     const ballInActiveHall = state.activeHallway && ball.hallwayId === state.activeHallway.id;
     if (user.movementMode === 'normal' && ballInActiveHall && ball.offset <= user.forwardOffset + 0.4) {
+      if (window.MazeAudioController) window.MazeAudioController.stopBallRollingSound();
       state.rollingBall = null;
       user.flashFrames = 5;
     } else if (ball.offset < -1.0) {
+      if (window.MazeAudioController) window.MazeAudioController.stopBallRollingSound();
       state.rollingBall = null;
     }
   }
@@ -289,15 +355,18 @@ window.addEventListener('keydown', (e) => {
     if (user.movementMode === 'normal' && user.direction === 0 && !state.rollingBall && state.activeHallway) {
       state.rollingBall = {
         offset: 11.0,
-        speed: 0.07,
+        speed: state.BASE_SPEED,
         rotation: 0,
         hallwayId: state.activeHallway.id
       };
+      if (window.MazeAudioController) {
+        window.MazeAudioController.startBallRollingSound();
+      }
     }
   }
 
   else if (e.key === 'n' || e.key === 'N') {
-    if (state.activeHallway && (user.direction === 1 || user.direction === 3)) {
+    if (user.movementMode === 'normal' && state.activeHallway && (user.direction === 1 || user.direction === 3)) {
       const nodeIndex = window.MazeInterface.getCurrentNodeIndex();
 
       if (nodeIndex !== -1) {
@@ -309,6 +378,8 @@ window.addEventListener('keydown', (e) => {
           }
         }
       }
+    } else if (user.movementMode === 'interconnecting') {
+      createChainedTunnelFromDeadEnd();
     }
   }
 

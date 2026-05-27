@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Rolling Boulder - With Dynamic Audio</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #1a1a1a;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        #controls {
+            margin-bottom: 20px;
+            z-index: 10;
+        }
+
+        button {
+            padding: 12px 24px;
+            font-size: 18px;
+            font-weight: bold;
+            color: #fff;
+            background-color: #e74c3c;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            transition: background 0.2s, transform 0.1s;
+        }
+
+        button:hover {
+            background-color: #c0392b;
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        canvas {
+            background-color: #000;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            border: 2px solid #333;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="controls">
+        <button id="rollBtn">Release the Ball</button>
+    </div>
+
+    <canvas id="simCanvas" width="800" height="500"></canvas>
+
+    <script>
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+        const rollBtn = document.getElementById('rollBtn');
+
+        let isAnimating = false;
+        let ball = {
+            z: 0,          
+            speed: 0.00075,  
+            rotation: 0,   
+            active: false
+        };
+
+        const horizonY = 200; 
+        const originX = canvas.width / 2;
+
+        // --- WEB AUDIO API SETUP ---
+        let audioCtx = null;
+        let mainGainNode = null;
+        let noiseFilter = null;
+        let bassOsc = null;
+        let bassGain = null;
+
+        function initAudio() {
+            if (audioCtx) return; // Already initialized
+
+            // Create Audio Context
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+            // 1. Create Floor Friction Noise (White Noise)
+            const bufferSize = 2 * audioCtx.sampleRate;
+            const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const output = noiseBuffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                output[i] = Math.random() * 2 - 1;
+            }
+            const noiseSource = audioCtx.createBufferSource();
+            noiseSource.buffer = noiseBuffer;
+            noiseSource.loop = true;
+
+            // Filter out high frequencies to make it a low rumble rather than static hiss
+            noiseFilter = audioCtx.createBiquadFilter();
+            noiseFilter.type = 'lowpass';
+            noiseFilter.frequency.setValueAtTime(120, audioCtx.currentTime); 
+
+            // 2. Create Deep Heavy Bass Rumble (Oscillator)
+            bassOsc = audioCtx.createOscillator();
+            bassOsc.type = 'sine';
+            bassOsc.frequency.setValueAtTime(50, audioCtx.currentTime); // 50Hz deep bass
+
+            bassGain = audioCtx.createGain();
+            bassGain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+
+            // 3. Master Volume Control
+            mainGainNode = audioCtx.createGain();
+            mainGainNode.gain.setValueAtTime(0, audioCtx.currentTime); // Start silent
+
+            // Connections
+            noiseSource.connect(noiseFilter);
+            noiseFilter.connect(mainGainNode);
+
+            bassOsc.connect(bassGain);
+            bassGain.connect(mainGainNode);
+
+            mainGainNode.connect(audioCtx.destination);
+
+            // Start generators
+            noiseSource.start();
+            bassOsc.start();
+        }
+
+        function updateAudioProperties() {
+            if (!audioCtx || !ball.active) return;
+
+            // Audio volume curve follows the visual scale (grows exponentially as it approaches)
+            let volume = Math.pow(ball.z, 2.5) * 0.8; 
+            if (volume > 1) volume = 1;
+
+            // Bring up the low frequencies slightly as the ball gets closer to imply proximity
+            let currentFilterFreq = 80 + (ball.z * 100); 
+            let currentBassFreq = 45 + (ball.z * 15);
+
+            // Apply smooth audio parameter updates
+            mainGainNode.gain.setTargetAtTime(volume, audioCtx.currentTime, 0.05);
+            noiseFilter.frequency.setTargetAtTime(currentFilterFreq, audioCtx.currentTime, 0.05);
+            bassOsc.frequency.setTargetAtTime(currentBassFreq, audioCtx.currentTime, 0.05);
+
+            // Add a subtle periodic "thump/wobble" using the rotation math to simulate texture inconsistencies
+            let textureWobble = 1 + Math.sin(ball.rotation * 4) * 0.15;
+            bassGain.gain.setTargetAtTime(0.4 * textureWobble, audioCtx.currentTime, 0.02);
+        }
+
+        function stopAudio() {
+            if (mainGainNode) {
+                mainGainNode.gain.setTargetAtTime(0, audioCtx.currentTime, 0.1);
+            }
+        }
+
+        // --- GRAPHICS & ANIMATION LOOP ---
+        function drawScene() {
+            // 1. Background/Wall
+            ctx.fillStyle = '#2c3e50';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 2. Hard Floor
+            ctx.fillStyle = '#7f8c8d';
+            ctx.beginPath();
+            ctx.moveTo(0, horizonY);
+            ctx.lineTo(canvas.width, horizonY);
+            ctx.lineTo(canvas.width, canvas.height);
+            ctx.lineTo(0, canvas.height);
+            ctx.closePath();
+            ctx.fill();
+
+            // 3. Floor Grid Lines
+            ctx.strokeStyle = '#616a6b';
+            ctx.lineWidth = 2;
+            const numLines = 8;
+            for (let i = 0; i <= numLines; i++) {
+                let xEnd = (canvas.width / numLines) * i;
+                ctx.beginPath();
+                ctx.moveTo(originX, horizonY);
+                ctx.lineTo(xEnd, canvas.height);
+                ctx.stroke();
+            }
+
+            // Horizontal floor joints
+            ctx.strokeStyle = '#566573';
+            let numJoints = 6;
+            for(let i = 0; i < numJoints; i++) {
+                let progress = ((i + (ball.active ? (ball.z * 3) % 1 : 0)) / numJoints);
+                let y = horizonY + (canvas.height - horizonY) * Math.pow(progress, 2);
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+
+            // 4. Draw Ball
+            if (ball.active) {
+                let scale = Math.pow(ball.z, 2); 
+                let minRadius = 4;
+                let maxRadius = 150; 
+                let radius = minRadius + (maxRadius - minRadius) * scale;
+
+                let startY = horizonY;
+                let endY = canvas.height - 35; 
+                let ballY = startY + (endY - startY) * scale;
+                let ballX = originX; 
+
+                // Shadow
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+                ctx.beginPath();
+                ctx.ellipse(ballX, ballY + radius * 0.9, radius * 0.9, radius * 0.18, 0, 0, 2 * Math.PI);
+                ctx.fill();
+
+                // Ball Texture
+                ctx.save();
+                ctx.translate(ballX, ballY);
+                ctx.rotate(ball.rotation);
+
+                ctx.fillStyle = '#34495e';
+                ctx.beginPath();
+                ctx.arc(0, 0, radius, 0, 2 * Math.PI);
+                ctx.fill();
+
+                ctx.strokeStyle = '#1a252f';
+                ctx.lineWidth = Math.max(1, radius / 15);
+                
+                ctx.beginPath();
+                ctx.arc(0, 0, radius * 0.7, 0.5, Math.PI * 0.8);
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.moveTo(-radius, 0);
+                ctx.lineTo(radius, 0);
+                ctx.stroke();
+                
+                ctx.beginPath();
+                ctx.moveTo(0, -radius);
+                ctx.lineTo(0, radius);
+                ctx.stroke();
+
+                ctx.restore();
+
+                // 3D Shading Overlay
+                let gradient = ctx.createRadialGradient(
+                    ballX - radius * 0.3, ballY - radius * 0.3, radius * 0.1,
+                    ballX, ballY, radius
+                );
+                gradient.addColorStop(0, 'rgba(255,255,255,0.15)');
+                gradient.addColorStop(0.5, 'rgba(0,0,0,0)');
+                gradient.addColorStop(1, 'rgba(0,0,0,0.75)');
+                
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(ballX, ballY, radius, 0, 2 * Math.PI);
+                ctx.fill();
+            }
+        }
+
+        function updateAnimation() {
+            if (!ball.active) return;
+
+            let currentAcceleration = 0.0001 + (ball.z * 0.001);
+            ball.z += ball.speed;
+            ball.speed += currentAcceleration;
+            ball.rotation += ball.speed * 1.1;
+
+            // Sync the procedural audio to new math properties
+            updateAudioProperties();
+
+            if (ball.z >= 1.02) {
+                ball.active = false;
+                isAnimating = false;
+                rollBtn.disabled = false;
+                rollBtn.textContent = "Release the Ball";
+                stopAudio();
+            }
+        }
+
+        function loop() {
+            updateAnimation();
+            drawScene();
+            if (isAnimating) {
+                requestAnimationFrame(loop);
+            }
+        }
+
+        rollBtn.addEventListener('click', () => {
+            if (isAnimating) return;
+
+            // Browser requirement: Initialize or resume audio context upon user click interaction
+            initAudio();
+            if (audioCtx && audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+
+            ball.z = 0;
+            ball.speed = 0.00075; 
+            ball.rotation = 0;
+            ball.active = true;
+            isAnimating = true;
+            
+            rollBtn.disabled = true;
+            rollBtn.textContent = "Listen closely...";
+
+            loop();
+        });
+
+        drawScene();
+    </script>
+</body>
+</html>
