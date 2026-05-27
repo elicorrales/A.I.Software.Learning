@@ -182,16 +182,22 @@
         if (user.movementMode === 'normal' && state.activeHallway) {
             if (e && typeof e.preventDefault === 'function') e.preventDefault();
             const speedModifier = user.isShiftPressed ? user.speed * 3 : user.speed;
+            const prevOffset = user.forwardOffset;
 
             if (user.direction === 0) user.forwardOffset += speedModifier;
             if (user.direction === 2) user.forwardOffset -= speedModifier;
-
-            window.MazeAudioController.handleMovementAudioCadence(user.isShiftPressed ? 'run' : 'walk');
 
             user.forwardOffset = Math.max(
                 state.activeHallway.nodes[0],
                 Math.min(state.activeHallway.nodes[state.activeHallway.nodes.length - 1], user.forwardOffset)
             );
+
+            if (user.forwardOffset === prevOffset) {
+                window.MazeAudioController.handleMovementAudioCadence('ugh');
+                user.flashFrames = 5;
+            } else {
+                window.MazeAudioController.handleMovementAudioCadence(user.isShiftPressed ? 'run' : 'walk');
+            }
         }
     };
 
@@ -308,15 +314,22 @@
         if (user.movementMode === 'normal' && state.activeHallway) {
             if (e && typeof e.preventDefault === 'function') e.preventDefault();
             const speedModifier = user.isShiftPressed ? user.speed * 3 : user.speed;
+            const prevOffset = user.forwardOffset;
 
             if (user.direction === 0) user.forwardOffset -= speedModifier;
             if (user.direction === 2) user.forwardOffset += speedModifier;
 
-            window.MazeAudioController.handleMovementAudioCadence(user.isShiftPressed ? 'run' : 'walk');
             user.forwardOffset = Math.max(
                 state.activeHallway.nodes[0],
                 Math.min(state.activeHallway.nodes[state.activeHallway.nodes.length - 1], user.forwardOffset)
             );
+
+            if (user.forwardOffset === prevOffset) {
+                window.MazeAudioController.handleMovementAudioCadence('ugh');
+                user.flashFrames = 5;
+            } else {
+                window.MazeAudioController.handleMovementAudioCadence(user.isShiftPressed ? 'run' : 'walk');
+            }
         }
     };
 
