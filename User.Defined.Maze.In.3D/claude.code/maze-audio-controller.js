@@ -53,32 +53,22 @@ window.MazeAudioController = (function() {
     return buffer;
   }
 
-  // Internal component used by the walking function
+  // Internal component used by the walking function — ORIGINAL (commented out)
+  /*
   function playWalkImpact(isHeel) {
     const now = audioCtx.currentTime;
 
-    // 1. Texture (Noise friction)
     const noise = audioCtx.createBufferSource();
     noise.buffer = createNoiseBuffer(0.4);
 
     const highpass = audioCtx.createBiquadFilter();
     highpass.type = 'highpass';
-
-    // --- WALKING TEXTURE FILTER MODIFICATION ---
-    // HEEL: Uses 900Hz for a crisp, sharp initial skeletal strike.
-    // TOE:  Dropped from 700Hz to 250Hz to remove the snappy "snare drum" rattle,
-    //       creating a warmer, muffled leather/brush sliding scuff.
     highpass.frequency.setValueAtTime(isHeel ? 400 : 250, now);
 
     const noiseGain = audioCtx.createGain();
-
-    // --- WALKING TEXTURE TIMING & VOLUME MANIPULATION ---
-    // HEEL: Slower attack (10ms) and louder peak (0.13) for structural impact force.
-    // TOE:  Instant attack (2ms) and quieter peak (0.07) for trailing friction.
     const attackTime = isHeel ? 0.025 : 0.002;
     const peakVolume = isHeel ? 0.13 : 0.07;
     const decayTime = isHeel ? 0.05 : 0.07;
-
     noiseGain.gain.setValueAtTime(0, now);
     noiseGain.gain.linearRampToValueAtTime(peakVolume, now + attackTime);
     noiseGain.gain.exponentialRampToValueAtTime(0.001, now + attackTime + decayTime);
@@ -87,30 +77,18 @@ window.MazeAudioController = (function() {
     highpass.connect(noiseGain);
     noiseGain.connect(audioCtx.destination);
 
-    // 2. Weight (Physical thud)
     const thud = audioCtx.createOscillator();
     thud.type = 'triangle';
 
     const lowpass = audioCtx.createBiquadFilter();
     lowpass.type = 'lowpass';
-
-    // --- WALKING WEIGHT FILTER MODIFICATION ---
-    // HEEL: Changed from 150Hz to 120Hz to match the running filter depth.
-    // TOE:  Kept at 110Hz.
     lowpass.frequency.setValueAtTime(isHeel ? 120 : 110, now);
 
     const thudGain = audioCtx.createGain();
     thudGain.gain.setValueAtTime(0, now);
-
-    // --- WALKING WEIGHT TIMING & VOLUME MANIPULATION ---
-    // HEEL: Cranked peak volume up from 0.22 to 0.42 to match the running impact force.
-    // TOE:  Kept at 0.12.
     thudGain.gain.linearRampToValueAtTime(isHeel ? 0.42 : 0.12, now + 0.005);
     thudGain.gain.exponentialRampToValueAtTime(0.001, now + (isHeel ? 0.10 : 0.14));
 
-    // --- WALKING WEIGHT PITCH SWEEP ---
-    // HEEL: Changed from 120Hz->65Hz to a deeper 100Hz->45Hz curve to replicate the running boom.
-    // TOE:  Kept at 90Hz->50Hz.
     thud.frequency.setValueAtTime(isHeel ? 100 : 90, now);
     thud.frequency.exponentialRampToValueAtTime(isHeel ? 45 : 50, now + 0.09);
 
@@ -124,16 +102,57 @@ window.MazeAudioController = (function() {
     thud.stop(now + 0.2);
   }
 
-  // Standalone Public Function 1
-  function doWalkingStep() {
-    //doShuffleStep();
-
+  function doWalkingStep_ORIGINAL() {
     initAudio();
-    playWalkImpact(true); // Heel strike click
+    playWalkImpact(true);
+    setTimeout(() => { playWalkImpact(false); }, 115);
+  }
+  */
 
-    setTimeout(() => {
-      playWalkImpact(false); // Toe roll tap
-    }, 115);
+  // Standalone Public Function 1 — single footfall on a hard floor
+  function doWalkingStep() {
+    initAudio();
+    const now = audioCtx.currentTime;
+
+    // Surface click — the hard contact of sole on floor
+    const click = audioCtx.createBufferSource();
+    click.buffer = createNoiseBuffer(0.08);
+
+    const clickBp = audioCtx.createBiquadFilter();
+    clickBp.type = 'bandpass';
+    clickBp.frequency.setValueAtTime(1400, now);
+    clickBp.Q.setValueAtTime(3, now);
+
+    const clickGain = audioCtx.createGain();
+    clickGain.gain.setValueAtTime(0, now);
+    clickGain.gain.linearRampToValueAtTime(0.16, now + 0.003);
+    clickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.022);
+
+    click.connect(clickBp);
+    clickBp.connect(clickGain);
+    clickGain.connect(audioCtx.destination);
+
+    // Weight thud — body mass settling into the step
+    const thud = audioCtx.createOscillator();
+    thud.type = 'sine';
+    thud.frequency.setValueAtTime(88, now);
+    thud.frequency.exponentialRampToValueAtTime(40, now + 0.07);
+
+    const thudLp = audioCtx.createBiquadFilter();
+    thudLp.type = 'lowpass';
+    thudLp.frequency.setValueAtTime(170, now);
+
+    const thudGain = audioCtx.createGain();
+    thudGain.gain.setValueAtTime(0, now);
+    thudGain.gain.linearRampToValueAtTime(0.26, now + 0.005);
+    thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+
+    thud.connect(thudLp);
+    thudLp.connect(thudGain);
+    thudGain.connect(audioCtx.destination);
+
+    click.start(now); click.stop(now + 0.045);
+    thud.start(now);  thud.stop(now + 0.10);
   }
 
   // Standalone Public Function 3
@@ -307,22 +326,21 @@ window.MazeAudioController = (function() {
     slamNoise.stop(now + duration + 0.3);
   }
 
-  // Standalone Public Function 5: SEPARATED HIT TONE & TRUE DYING GASP
+  // Standalone Public Function 5: ORIGINAL (commented out — sounds fart-like due to long breath sweep)
+  /*
   function doPlayerGotHit() {
     initAudio();
     const now = audioCtx.currentTime;
 
-    // PARTS 1 & 2: THE INITIAL HIT (Vocal Tone)
     const voiceOsc = audioCtx.createOscillator();
-    voiceOsc.type = 'sawtooth'; 
-    
+    voiceOsc.type = 'sawtooth';
     voiceOsc.frequency.setValueAtTime(130, now);
     voiceOsc.frequency.linearRampToValueAtTime(95, now + 0.08);
 
     const formant1 = audioCtx.createBiquadFilter();
     formant1.type = 'bandpass';
     formant1.frequency.setValueAtTime(480, now);
-    formant1.Q.setValueAtTime(8, now); 
+    formant1.Q.setValueAtTime(8, now);
 
     const formant2 = audioCtx.createBiquadFilter();
     formant2.type = 'bandpass';
@@ -331,13 +349,9 @@ window.MazeAudioController = (function() {
 
     const voiceGain = audioCtx.createGain();
     voiceGain.gain.setValueAtTime(0, now);
-    
-    // PART 1: Brief rise from no sound to maximum intensity
     voiceGain.gain.linearRampToValueAtTime(0.5, now + 0.025);
-    
-    // PART 2: Max Ugh holds briefly then drops away cleanly
     voiceGain.gain.setValueAtTime(0.5, now + 0.05);
-    voiceGain.gain.exponentialRampToValueAtTime(0.001, now + 0.08); 
+    voiceGain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
 
     voiceOsc.connect(formant1);
     voiceOsc.connect(formant2);
@@ -345,37 +359,127 @@ window.MazeAudioController = (function() {
     formant2.connect(voiceGain);
     voiceGain.connect(audioCtx.destination);
 
-    // PART 3: THE DECAY (Sliding Door Air Movement Architecture)
     const breath = audioCtx.createBufferSource();
     breath.buffer = createNoiseBuffer(1.5);
 
     const breathFilter = audioCtx.createBiquadFilter();
     breathFilter.type = 'bandpass';
-    
-    // Mimicking the sliding door's exact frequency slide profile for realistic air movement
-    breathFilter.frequency.setValueAtTime(850, now + 0.05); 
+    breathFilter.frequency.setValueAtTime(850, now + 0.05);
     breathFilter.frequency.linearRampToValueAtTime(350, now + 0.4);
-    breathFilter.Q.setValueAtTime(3.5, now); 
+    breathFilter.Q.setValueAtTime(3.5, now);
 
     const breathGain = audioCtx.createGain();
     breathGain.gain.setValueAtTime(0, now);
-    
-    // The breath builds smoothly behind the max hit punch...
     breathGain.gain.linearRampToValueAtTime(0.15, now + 0.04);
-    
-    // ...then handles Part 3 independently as a soft, fading air trail
     breathGain.gain.setValueAtTime(0.15, now + 0.07);
-    breathGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.42); 
+    breathGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.42);
 
     breath.connect(breathFilter);
     breathFilter.connect(breathGain);
     breathGain.connect(audioCtx.destination);
 
-    // Independent node execution timelines
     voiceOsc.start(now);
-    voiceOsc.stop(now + 0.09); // Shuts down voice early to keep the decay pure
+    voiceOsc.stop(now + 0.09);
     breath.start(now);
-    breath.stop(now + 0.45);   // Soft trailing air release finishes out the sound
+    breath.stop(now + 0.45);
+  }
+  */
+
+  // Standalone Public Function 5: UGH — gut-punch / head-hit grunt
+  function doPlayerGotHit() {
+    initAudio();
+    const now = audioCtx.currentTime;
+
+    // Layer 1: Physical body thud — the hit landing
+    const thud = audioCtx.createOscillator();
+    thud.type = 'triangle';
+    thud.frequency.setValueAtTime(110, now);
+    thud.frequency.exponentialRampToValueAtTime(38, now + 0.05);
+
+    const thudLp = audioCtx.createBiquadFilter();
+    thudLp.type = 'lowpass';
+    thudLp.frequency.setValueAtTime(220, now);
+
+    const thudGain = audioCtx.createGain();
+    thudGain.gain.setValueAtTime(0, now);
+    thudGain.gain.linearRampToValueAtTime(0.48, now + 0.006);
+    thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+
+    thud.connect(thudLp);
+    thudLp.connect(thudGain);
+    thudGain.connect(audioCtx.destination);
+
+    // Layer 2: Impact crack — percussive attack texture
+    const crack = audioCtx.createBufferSource();
+    crack.buffer = createNoiseBuffer(0.15);
+
+    const crackBp = audioCtx.createBiquadFilter();
+    crackBp.type = 'bandpass';
+    crackBp.frequency.setValueAtTime(380, now);
+    crackBp.Q.setValueAtTime(2.5, now);
+
+    const crackGain = audioCtx.createGain();
+    crackGain.gain.setValueAtTime(0, now);
+    crackGain.gain.linearRampToValueAtTime(0.22, now + 0.004);
+    crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.042);
+
+    crack.connect(crackBp);
+    crackBp.connect(crackGain);
+    crackGain.connect(audioCtx.destination);
+
+    // Layer 3: Vocal grunt — "UGH" (effort vowel, pitch drops under impact)
+    const voice = audioCtx.createOscillator();
+    voice.type = 'sawtooth';
+    voice.frequency.setValueAtTime(158, now + 0.012);
+    voice.frequency.linearRampToValueAtTime(95, now + 0.22);
+
+    // F1 ~550 Hz: stressed "U" — jaw clenched under impact, higher than relaxed speech
+    const f1 = audioCtx.createBiquadFilter();
+    f1.type = 'bandpass';
+    f1.frequency.setValueAtTime(550, now);
+    f1.Q.setValueAtTime(8, now);
+
+    // F2 ~1100 Hz: second formant for "U" vowel
+    const f2 = audioCtx.createBiquadFilter();
+    f2.type = 'bandpass';
+    f2.frequency.setValueAtTime(1100, now);
+    f2.Q.setValueAtTime(6, now);
+
+    const voiceGain = audioCtx.createGain();
+    voiceGain.gain.setValueAtTime(0, now);
+    voiceGain.gain.linearRampToValueAtTime(0.40, now + 0.018);
+    voiceGain.gain.setValueAtTime(0.40, now + 0.055);
+    voiceGain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+
+    voice.connect(f1);
+    voice.connect(f2);
+    f1.connect(voiceGain);
+    f2.connect(voiceGain);
+    voiceGain.connect(audioCtx.destination);
+
+    // Layer 4: Short glottal close-off — the "gh" at the end, tight and brief
+    const ghNoise = audioCtx.createBufferSource();
+    ghNoise.buffer = createNoiseBuffer(0.3);
+
+    const ghBp = audioCtx.createBiquadFilter();
+    ghBp.type = 'bandpass';
+    ghBp.frequency.setValueAtTime(820, now + 0.08);
+    ghBp.frequency.linearRampToValueAtTime(620, now + 0.24);
+    ghBp.Q.setValueAtTime(6, now);
+
+    const ghGain = audioCtx.createGain();
+    ghGain.gain.setValueAtTime(0, now);
+    ghGain.gain.linearRampToValueAtTime(0.065, now + 0.10);
+    ghGain.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
+
+    ghNoise.connect(ghBp);
+    ghBp.connect(ghGain);
+    ghGain.connect(audioCtx.destination);
+
+    thud.start(now);       thud.stop(now + 0.08);
+    crack.start(now);      crack.stop(now + 0.055);
+    voice.start(now + 0.012); voice.stop(now + 0.26);
+    ghNoise.start(now + 0.08); ghNoise.stop(now + 0.28);
   }
 
   // Starts a looping rolling sound representing a heavy ball on a hard floor
