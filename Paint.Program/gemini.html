@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Canvas Paint Program</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background-color: #f0f0f0;
+            font-family: sans-serif;
+            overflow: hidden;
+        }
+
+        /* Top Menu Bar */
+        #top-bar {
+            background-color: #222;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            padding: 0 15px;
+            height: 40px;
+            border-bottom: 1px solid #444;
+            z-index: 20;
+        }
+
+        .menu-item {
+            position: relative;
+            display: inline-block;
+        }
+
+        .menu-btn {
+            background: none;
+            border: none;
+            color: #fff;
+            padding: 10px 15px;
+            font-size: 14px;
+            cursor: pointer;
+            height: 40px;
+        }
+
+        .menu-btn:hover {
+            background-color: #444;
+        }
+
+        /* Dropdown Content */
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            background-color: #333;
+            min-width: 120px;
+            box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.3);
+            z-index: 30;
+            border: 1px solid #444;
+        }
+
+        .dropdown-content button {
+            color: white;
+            padding: 10px 16px;
+            text-decoration: none;
+            display: block;
+            background: none;
+            border: none;
+            width: 100%;
+            text-align: left;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .dropdown-content button:hover {
+            background-color: #007bff;
+        }
+
+        /* Show dropdown on hover */
+        .menu-item:hover .dropdown-content {
+            display: block;
+        }
+
+        /* Main workspace area */
+        #workspace {
+            display: flex;
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Left Sidebar Nav */
+        #sidebar {
+            width: 60px;
+            background-color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 10px 0;
+            gap: 10px;
+            z-index: 10;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.2);
+        }
+
+        .tool-btn {
+            width: 44px;
+            height: 44px;
+            background-color: #444;
+            border: 2px solid #555;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: all 0.2s ease;
+        }
+
+        .tool-btn:hover {
+            background-color: #555;
+            border-color: #888;
+        }
+
+        .tool-btn.active {
+            background-color: #007bff;
+            border-color: #fff;
+            box-shadow: 0 0 8px #007bff;
+        }
+
+        .tool-btn svg {
+            width: 24px;
+            height: 24px;
+            fill: #fff;
+        }
+
+        /* Canvas Container */
+        #canvas-container {
+            flex: 1;
+            position: relative;
+            background-color: #f0f0f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        canvas {
+            background-color: #ffffff;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+            cursor: crosshair;
+        }
+
+        /* Bottom Palette */
+        #palette-container {
+            background-color: #222;
+            padding: 6px;
+            display: flex;
+            justify-content: center;
+            border-top: 2px solid #444;
+            z-index: 10;
+        }
+
+        #palette {
+            display: flex;
+            flex-direction: column;
+            gap: 2px; /* Tight stack */
+            background: #111;
+            padding: 2px;
+            border-radius: 4px;
+        }
+
+        .palette-row {
+            display: flex;
+            gap: 2px;
+        }
+
+        .color-swatch {
+            width: 24px;
+            height: 24px;
+            border: 1px solid rgba(0,0,0,0.5);
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+
+        .color-swatch:hover {
+            transform: scale(1.1);
+            z-index: 2;
+            border-color: #fff;
+        }
+
+        .color-swatch.active {
+            border: 2px solid #fff;
+            transform: scale(1.1);
+            z-index: 3;
+        }
+
+        /* Hidden file input for open action */
+        #file-input {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="top-bar">
+        <div class="menu-item">
+            <button class="menu-btn">File</button>
+            <div class="dropdown-content">
+                <button id="menu-new">New</button>
+                <button id="menu-open">Open</button>
+                <button id="menu-save">Save As</button>
+            </div>
+        </div>
+        <div class="menu-item">
+            <button class="menu-btn" id="menu-undo">Undo</button>
+        </div>
+        <div class="menu-item">
+            <button class="menu-btn" id="menu-redo">Redo</button>
+        </div>
+    </div>
+
+    <input type="file" id="file-input" accept="image/*">
+
+    <div id="workspace">
+        <div id="sidebar">
+            <button class="tool-btn" id="tool-pen" title="Pen Draw">
+                <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+            </button>
+            <button class="tool-btn" id="tool-brush" title="Brush Draw">
+                <svg viewBox="0 0 24 24"><path d="M7 14c-1.66 0-3 1.34-3 3 0 1.31-1.16 2-2 2 .92.62 2.1 1 3.5 1 2.5 0 4.5-2 4.5-4.5 0-.41-.15-.79-.34-1.14L7 14zM18.71 2.29c-.39-.39-1.02-.39-1.41 0l-9.9 9.9c-.34.34-.34.89 0 1.23l2.47 2.48c.34.34.89.34 1.23 0l9.9-9.9c.39-.39.39-1.02 0-1.41l-2.29-2.3z"/></svg>
+            </button>
+            <button class="tool-btn" id="tool-line" title="Draw Line">
+                <svg viewBox="0 0 24 24"><line x1="4" y1="20" x2="20" y2="4" stroke="white" stroke-width="3" stroke-linecap="round"/></svg>
+            </button>
+            <button class="tool-btn" id="tool-rect" title="Draw Rectangle">
+                <svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" fill="none" stroke="white" stroke-width="3"/></svg>
+            </button>
+            <button class="tool-btn" id="tool-circle" title="Draw Circle">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="white" stroke-width="3"/></svg>
+            </button>
+            <button class="tool-btn" id="tool-bucket" title="Paint Bucket (Flood Fill)">
+                <svg viewBox="0 0 24 24"><path d="M12 22c4.41 0 8-3.59 8-8 0-4.42-8-12-8-12S4 9.58 4 14c0 4.41 3.59 8 8 8z" fill="none" stroke="white" stroke-width="2"/> <path d="M12 20c3.31 0 6-2.69 6-6 0-2.97-4.5-8.2-6-9.92C10.53 5.77 6 11 6 14c0 3.31 2.69 6 6 6z"/></svg>
+            </button>
+        </div>
+
+        <div id="canvas-container">
+            <canvas id="paintCanvas" width="800" height="600"></canvas>
+        </div>
+    </div>
+
+    <div id="palette-container">
+        <div id="palette">
+            <div class="palette-row" id="row1"></div>
+            <div class="palette-row" id="id2"></div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('paintCanvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        
+        // State variables
+        let currentTool = null;
+        let currentColor = '#000000';
+        let isDrawing = false;
+        let startX, startY;
+        let snapshot; // Saves canvas state for previewing shapes
+
+        // Undo/Redo Stacks
+        let undoStack = [];
+        let redoStack = [];
+        const MAX_HISTORY = 20; // Limits memory usage
+
+        // Initialize Canvas color (fill white) and save initial state
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        saveState();
+
+        // Define colors for the 2 tight horizontal rows
+        const row1Colors = ['#000000', '#7f7f7f', '#880015', '#ed1c24', '#ff7f27', '#fff200', '#22b14c', '#00a2e8', '#3f48cc', '#a349a4', '#ffffff', '#c3c3c3'];
+        const row2Colors = ['#b97a57', '#ffaec9', '#b5e61d', '#99d9ea', '#7092be', '#c8bfe7', '#464646', '#e06666', '#f6b26b', '#ffd966', '#93c47d', '#76a5af'];
+
+        // Build Palette UI
+        function buildPalette() {
+            const r1 = document.getElementById('row1');
+            const r2 = document.getElementById('id2');
+
+            row1Colors.forEach(color => createSwatch(color, r1));
+            row2Colors.forEach(color => createSwatch(color, r2));
+
+            // Set default active color
+            document.querySelector('.color-swatch').classList.add('active');
+        }
+
+        function createSwatch(color, parentRow) {
+            const swatch = document.createElement('div');
+            swatch.className = 'color-swatch';
+            swatch.style.backgroundColor = color;
+            swatch.addEventListener('click', () => {
+                document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+                swatch.classList.add('active');
+                currentColor = color;
+            });
+            parentRow.appendChild(swatch);
+        }
+
+        // Sidebar Tool logic (Toggle/Unselect functionality)
+        const tools = {
+            'tool-pen': 'pen',
+            'tool-brush': 'brush',
+            'tool-line': 'line',
+            'tool-rect': 'rect',
+            'tool-circle': 'circle',
+            'tool-bucket': 'bucket'
+        };
+
+        Object.keys(tools).forEach(id => {
+            const btn = document.getElementById(id);
+            btn.addEventListener('click', () => {
+                if (currentTool === tools[id]) {
+                    // Clicked again to UNselect
+                    btn.classList.remove('active');
+                    currentTool = null;
+                } else {
+                    // Switch to new tool
+                    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    currentTool = tools[id];
+                }
+            });
+        });
+
+        // Event Listeners for Drawing
+        canvas.addEventListener('mousedown', startDraw);
+        canvas.addEventListener('mousemove', draw);
+        window.addEventListener('mouseup', stopDraw);
+
+        function startDraw(e) {
+            if (!currentTool) return;
+            isDrawing = true;
+
+            // Get correct coordinates relative to canvas
+            const rect = canvas.getBoundingClientRect();
+            startX = e.clientX - rect.left;
+            startY = e.clientY - rect.top;
+
+            // Save snapshot for shapes preview
+            snapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+            ctx.lineWidth = currentTool === 'brush' ? 14 : 3;
+            ctx.strokeStyle = currentColor;
+            ctx.fillStyle = currentColor;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            if (currentTool === 'pen' || currentTool === 'brush') {
+                ctx.beginPath();
+                ctx.moveTo(startX, startY);
+                ctx.lineTo(startX, startY);
+                ctx.stroke();
+            } else if (currentTool === 'bucket') {
+                floodFill(Math.floor(startX), Math.floor(startY), currentColor);
+                saveState(); // Commit fill action to history
+                isDrawing = false; 
+            }
+        }
+
+        function draw(e) {
+            if (!isDrawing || !currentTool) return;
+
+            const rect = canvas.getBoundingClientRect();
+            const currentX = e.clientX - rect.left;
+            const currentY = e.clientY - rect.top;
+
+            // Freehand Tools
+            if (currentTool === 'pen') {
+                ctx.lineTo(currentX, currentY);
+                ctx.stroke();
+            } 
+            else if (currentTool === 'brush') {
+                // Simulating an irregular brush texture with simple offset dabs
+                ctx.lineTo(currentX, currentY);
+                ctx.stroke();
+                
+                // Add irregular bristly strokes alongside main line
+                ctx.save();
+                ctx.lineWidth = 2;
+                ctx.globalAlpha = 0.4;
+                for (let i = 0; i < 3; i++) {
+                    let offsetO = (Math.random() - 0.5) * 10;
+                    ctx.beginPath();
+                    ctx.arc(currentX + offsetO, currentY + offsetO, Math.random() * 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.restore();
+            } 
+            // Shape Previews
+            else if (currentTool === 'line') {
+                ctx.putImageData(snapshot, 0, 0);
+                ctx.beginPath();
+                ctx.moveTo(startX, startY);
+                ctx.lineTo(currentX, currentY);
+                ctx.stroke();
+            } 
+            else if (currentTool === 'rect') {
+                ctx.putImageData(snapshot, 0, 0);
+                ctx.beginPath();
+                ctx.rect(startX, startY, currentX - startX, currentY - startY);
+                ctx.stroke();
+            } 
+            else if (currentTool === 'circle') {
+                ctx.putImageData(snapshot, 0, 0);
+                ctx.beginPath();
+                let radius = Math.sqrt(Math.pow(currentX - startX, 2) + Math.pow(currentY - startY, 2));
+                ctx.arc(startX, startY, radius, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+        }
+
+        function stopDraw() {
+            if (isDrawing) {
+                isDrawing = false;
+                saveState(); // Save state when user finishes an element stroke/shape
+            }
+        }
+
+        // Tipping Paint Bucket (Flood Fill) Logic
+        // Fills interconnected WHITE areas with chosen color
+        function floodFill(startX, startY, fillColor) {
+            const canvasData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = canvasData.data;
+            
+            // Target color is strictly white (255, 255, 255) as requested
+            const targetR = 255, targetG = 255, targetB = 255;
+
+            // Parse hex fill color to RGB
+            const fillR = parseInt(fillColor.slice(1, 3), 16);
+            const fillG = parseInt(fillColor.slice(3, 5), 16);
+            const fillB = parseInt(fillColor.slice(5, 7), 16);
+
+            // If target color matches replacement color, return to prevent loop
+            if (targetR === fillR && targetG === fillG && targetB === fillB) return;
+
+            const getPixelIndex = (x, y) => (y * canvas.width + x) * 4;
+
+            // Check if coordinates match white target color
+            const matchTarget = (x, y) => {
+                const idx = getPixelIndex(x, y);
+                return data[idx] === targetR && data[idx+1] === targetG && data[idx+2] === targetB;
+            };
+
+            if (!matchTarget(startX, startY)) return;
+
+            // Stack-based linear flood fill algorithm
+            const queue = [[startX, startY]];
+
+            while (queue.length > 0) {
+                const [x, y] = queue.pop();
+
+                if (!matchTarget(x, y)) continue;
+
+                let idx = getPixelIndex(x, y);
+                data[idx] = fillR;
+                data[idx+1] = fillG;
+                data[idx+2] = fillB;
+
+                // Push surrounding neighbors into queue
+                if (x > 0) queue.push([x - 1, y]);
+                if (x < canvas.width - 1) queue.push([x + 1, y]);
+                if (y > 0) queue.push([x, y - 1]);
+                if (y < canvas.height - 1) queue.push([x, y + 1]);
+            }
+
+            ctx.putImageData(canvasData, 0, 0);
+        }
+
+        // --- History & Menu Functionality ---
+
+        // Save current canvas state to history stack
+        function saveState() {
+            // Clear future history if a new stroke is drawn after an undo
+            redoStack = [];
+            
+            if (undoStack.length >= MAX_HISTORY) {
+                undoStack.shift(); // Remove oldest save state
+            }
+            undoStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
+        }
+
+        // Undo action
+        document.getElementById('menu-undo').addEventListener('click', () => {
+            if (undoStack.length > 1) { // Keep initial state
+                redoStack.push(undoStack.pop());
+                const previousState = undoStack[undoStack.length - 1];
+                ctx.putImageData(previousState, 0, 0);
+            }
+        });
+
+        // Redo action
+        document.getElementById('menu-redo').addEventListener('click', () => {
+            if (redoStack.length > 0) {
+                const nextState = redoStack.pop();
+                undoStack.push(nextState);
+                ctx.putImageData(nextState, 0, 0);
+            }
+        });
+
+        // File -> New
+        document.getElementById('menu-new').addEventListener('click', () => {
+            if (confirm("Are you sure you want to start a new drawing? This will clear your current canvas.")) {
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                undoStack = [];
+                saveState();
+            }
+        });
+
+        // File -> Save As (Downloads image)
+        document.getElementById('menu-save').addEventListener('click', () => {
+            const link = document.createElement('a');
+            link.download = 'my-drawing.png';
+            link.href = canvas.toDataURL();
+            link.click();
+        });
+
+        // File -> Open (Triggers local file picker)
+        const fileInput = document.getElementById('file-input');
+        document.getElementById('menu-open').addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    // Clear canvas and draw imported image fitting to scale
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    
+                    // Center image scaling logic
+                    const hRatio = canvas.width / img.width;
+                    const vRatio = canvas.height / img.height;
+                    const ratio  = Math.min(hRatio, vRatio);
+                    const centerShift_x = (canvas.width - img.width * ratio) / 2;
+                    const centerShift_y = (canvas.height - img.height * ratio) / 2;  
+                    
+                    ctx.drawImage(img, 0, 0, img.width, img.height, 
+                                       centerShift_x, centerShift_y, img.width * ratio, img.height * ratio);
+                    saveState();
+                }
+                img.src = event.target.result;
+            }
+            reader.readAsDataURL(file);
+            // Reset value so same file can be loaded consecutively if needed
+            fileInput.value = '';
+        });
+
+        // Fire on boot
+        buildPalette();
+    </script>
+</body>
+</html>

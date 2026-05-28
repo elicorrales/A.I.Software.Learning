@@ -425,7 +425,7 @@ function drawInterconnectingPerspective(ctx, canvas, currentUser) {
     ctx.clip(); // Ensure fake hall lines do not bleed outside the door frame cavity
 
     // Query facade layout environment without processing numerical arrays local context
-    if (activeLink && window.MazeInterface.doesMainHallwayExistAtTunnelTerminal(activeLink, view)) {
+    if (activeLink && window.MazeInterface.doesAnyStructureExistAtTunnelTerminal(activeLink, view)) {
         drawFakeCrossHallwayCavityFacade(ctx, doorX, doorY, doorW, doorH, scale);
     } else {
         // Just fill the canvas door cavity with the far wall background color if no hallway exists
@@ -598,6 +598,14 @@ function drawInterconnectingView(ctx, canvas, currentUser) {
     } else {
         // Looking flatly at the structural side walls of the tube link
         drawInterconnectingSideView(ctx, canvas);
+    }
+
+    // Chain-hop flash: alpha-blend the transition view briefly when crossing segment boundaries
+    if (currentUser.chainHopOriginProgress > 0) {
+        ctx.save();
+        ctx.globalAlpha = currentUser.chainHopOriginProgress / 18;
+        drawTransitionView(ctx, canvas, { transitionProgress: 0.20 });
+        ctx.restore();
     }
 }
 

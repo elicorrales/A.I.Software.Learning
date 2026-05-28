@@ -203,6 +203,14 @@ function animationLoop() {
     });
   }
 
+  // Tick down the chain-hop flash counter; clear it if the player leaves interconnecting mode
+  if (user.movementMode !== 'interconnecting') {
+    user.chainHopOriginProgress = -1;
+  } else if (user.chainHopOriginProgress > 0) {
+    user.chainHopOriginProgress -= 1;
+    if (user.chainHopOriginProgress === 0) user.chainHopOriginProgress = -1;
+  }
+
   // === INSERT THE SMOKE UPDATE STEP HERE ===
   // Animates the physical smoke particles if they exist in state
   if (typeof window.MazeInterface.updateVoidSmokeState === 'function') {

@@ -530,9 +530,10 @@ function exitTunnelToCorridor() {
   const activeTunnel = findActiveTunnel();
   if (!activeTunnel) return;
 
-  const viewOrientation = getRelativeViewOrientation();
+  const exitingFromFarEnd = user.interconnectingProgress >= 1.6;
+  const tunnelExitView = exitingFromFarEnd ? 'forward' : 'backward';
 
-  if (!doesAnyStructureExistAtTunnelTerminal(activeTunnel, viewOrientation)) {
+  if (!doesAnyStructureExistAtTunnelTerminal(activeTunnel, tunnelExitView)) {
     // Literal edge of the universe. Keep them locked inside the tube.
     if (user.interconnectingProgress >= 1.6) {
       user.interconnectingProgress = 3.16;
@@ -548,7 +549,7 @@ function exitTunnelToCorridor() {
   }
   
   // If a hallway is there, handle normal hallway transition logic
-  if (doesMainHallwayExistAtTunnelTerminal(activeTunnel, viewOrientation)) {
+  if (doesMainHallwayExistAtTunnelTerminal(activeTunnel, tunnelExitView)) {
     let targetHallwayIdx = activeTunnel.fromHallwayIndex;
     let localDoorIdx = activeTunnel.doorIndex;
 
@@ -591,7 +592,7 @@ function exitTunnelToCorridor() {
 
     // Prefer the direct forward chain link created by createChainedTunnelFromDeadEnd()
     let chainedTunnel = null;
-    if (viewOrientation === 'forward'
+    if (tunnelExitView === 'forward'
         && activeTunnel.forwardChainIndex !== undefined
         && activeTunnel.forwardChainIndex >= 0) {
       chainedTunnel = state.WorldGrid.interconnectingHallways[activeTunnel.forwardChainIndex] || null;
@@ -604,7 +605,7 @@ function exitTunnelToCorridor() {
         const exitGlobalX = (activeTunnel.chainGlobalX !== undefined)
           ? activeTunnel.chainGlobalX
           : fromHallway.startOffsetFromS + activeTunnel.doorIndex;
-        const relevantSideIdx = viewOrientation === 'forward'
+        const relevantSideIdx = tunnelExitView === 'forward'
           ? activeTunnel.toHallwayIndex
           : activeTunnel.fromHallwayIndex;
         chainedTunnel = state.WorldGrid.interconnectingHallways.find(otherTunnel => {
@@ -629,7 +630,7 @@ function exitTunnelToCorridor() {
     }
 
     const chainedTunnelIdx = state.WorldGrid.interconnectingHallways.indexOf(chainedTunnel);
-    const relevantSideIndex = viewOrientation === 'forward'
+    const relevantSideIndex = tunnelExitView === 'forward'
       ? activeTunnel.toHallwayIndex
       : activeTunnel.fromHallwayIndex;
 
@@ -652,6 +653,7 @@ function exitTunnelToCorridor() {
       chainedTunnel.exitDoorTarget     = 1;
       chainedTunnel.exitDoorOpenStatus = 1.0;
     }
+    user.chainHopOriginProgress = 18;
   }
 }
 
