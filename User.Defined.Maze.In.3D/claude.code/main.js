@@ -220,24 +220,146 @@ function animationLoop() {
 
   // === ROLLING BALL UPDATE ===
   if (state.rollingBall) {
-    state.rollingBall.offset -= state.rollingBall.speed;
-    state.rollingBall.rotation += state.rollingBall.speed * 18;
-
     const ball = state.rollingBall;
-    const ballZ = ball.offset - user.forwardOffset;
 
-    if (window.MazeAudioController) {
-      window.MazeAudioController.updateBallRollingSoundVolume(ballZ);
-    }
+    // Initialise AI fields on legacy ball objects
+    if (ball.direction === undefined)       ball.direction = -1;
+    if (ball.targetDoorIndex === undefined) ball.targetDoorIndex = null;
+    if (ball.movementMode === undefined)    ball.movementMode = 'hallway';
+    if (ball.tunnelLink === undefined)      ball.tunnelLink = null;
+    if (ball.tunnelProgress === undefined)  ball.tunnelProgress = 0;
 
-    const ballInActiveHall = state.activeHallway && ball.hallwayId === state.activeHallway.id;
-    if (user.movementMode === 'normal' && ballInActiveHall && ball.offset <= user.forwardOffset + 0.4) {
-      if (window.MazeAudioController) window.MazeAudioController.stopBallRollingSound();
-      state.rollingBall = null;
-      user.flashFrames = 5;
-    } else if (ball.offset < -1.0) {
-      if (window.MazeAudioController) window.MazeAudioController.stopBallRollingSound();
-      state.rollingBall = null;
+    if (ball.movementMode === 'tunnel' && ball.tunnelLink) {
+      // --- TUNNEL TRAVERSAL ---
+      ball.tunnelProgress += ball.speed;
+      ball.rotation += ball.speed * 18;
+
+      if (ball.tunnelProgress >= 3.2) {
+        const currentLink = ball.tunnelLink;
+        const destIdx     = currentLink.toHallwayIndex;
+        const destHallway = WorldGrid.mainHallways[destIdx];
+
+        if (destHallway) {
+          // Resolve exit position using chainGlobalX (mirrors player exitTunnelToCorridor logic)
+          const fromHallway  = WorldGrid.mainHallways[currentLink.fromHallwayIndex];
+          const exitGlobalX  = (currentLink.chainGlobalX !== undefined)
+            ? currentLink.chainGlobalX
+            : (fromHallway ? fromHallway.startOffsetFromS + currentLink.doorIndex : 0);
+          const localDoorIdx = Math.round(exitGlobalX - destHallway.startOffsetFromS);
+          const doorNodeOffset = (destHallway.nodes && destHallway.nodes[localDoorIdx * 2] !== undefined)
+            ? destHallway.nodes[localDoorIdx * 2]
+            : 0;
+
+          // Find next chain segment — prefer forwardChainIndex pointer, fallback to globalX column search
+          let nextLink = null;
+          if (currentLink.forwardChainIndex !== undefined && currentLink.forwardChainIndex >= 0) {
+            nextLink = WorldGrid.interconnectingHallways[currentLink.forwardChainIndex] || null;
+          }
+          if (!nextLink) {
+            nextLink = WorldGrid.interconnectingHallways.find(c => {
+              if (c === currentLink) return false;
+              const cFrom    = WorldGrid.mainHallways[c.fromHallwayIndex];
+              if (!cFrom) return false;
+              const cGlobalX = (c.chainGlobalX !== undefined) ? c.chainGlobalX : cFrom.startOffsetFromS + c.doorIndex;
+              if (cGlobalX !== exitGlobalX) return false;
+              return c.fromHallwayIndex === destIdx || c.toHallwayIndex === destIdx;
+            }) || null;
+          }
+
+          ball.hallwayId = destHallway.id;
+          ball.offset    = doorNodeOffset;
+
+          if (nextLink) {
+            // Chain-hop: stay in tunnel mode, enter next segment immediately
+            ball.tunnelLink     = nextLink;
+            ball.tunnelProgress = 0;
+          } else {
+            // End of chain — arrive in destination hallway, resume random
+            ball.movementMode    = 'hallway';
+            ball.tunnelLink      = null;
+            ball.tunnelProgress  = 0;
+            ball.targetDoorIndex = null;
+            ball.direction       = -1;
+          }
+        } else {
+          if (window.MazeAudioController) window.MazeAudioController.stopBallRollingSound();
+          state.rollingBall = null;
+        }
+      }
+
+    } else {
+      // --- HALLWAY MOVEMENT ---
+      const currentHallway = WorldGrid.mainHallways.find(h => h.id === ball.hallwayId);
+
+      if (!currentHallway) {
+        if (window.MazeAudioController) window.MazeAudioController.stopBallRollingSound();
+        state.rollingBall = null;
+      } else {
+        const farWall = currentHallway.baseDistances[currentHallway.baseDistances.length - 1];
+
+        // Capture target when player enters a tunnel from this hallway (ball has LoS)
+        if (ball.targetDoorIndex === null &&
+            state.activeHallway && ball.hallwayId === state.activeHallway.id &&
+            user.movementMode === 'interconnecting') {
+          const activeLink = window.MazeInterface.findActiveTunnel();
+          if (activeLink) {
+            const hallIdx = WorldGrid.mainHallways.findIndex(h => h.id === ball.hallwayId);
+            if (activeLink.fromHallwayIndex === hallIdx) {
+              ball.targetDoorIndex = activeLink.doorIndex;
+            }
+          }
+        }
+
+        if (ball.targetDoorIndex !== null) {
+          // Chase mode: steer toward target door position each frame
+          const targetOffset = currentHallway.nodes[ball.targetDoorIndex * 2];
+          ball.direction = ball.offset > targetOffset ? -1 : 1;
+
+          if (Math.abs(ball.offset - targetOffset) < ball.speed * 3) {
+            // Reached door — enter tunnel if it exists and is open
+            const hallIdx = WorldGrid.mainHallways.findIndex(h => h.id === ball.hallwayId);
+            const link = WorldGrid.interconnectingHallways.find(
+              c => c.fromHallwayIndex === hallIdx && c.doorIndex === ball.targetDoorIndex
+            );
+            if (link && currentHallway.doorOpenStatus &&
+                currentHallway.doorOpenStatus[ball.targetDoorIndex] > 0.5) {
+              ball.movementMode   = 'tunnel';
+              ball.tunnelLink     = link;
+              ball.tunnelProgress = 0;
+              ball.offset         = targetOffset;
+            } else {
+              // Door closed or tunnel gone — fall back to random
+              ball.targetDoorIndex = null;
+            }
+          }
+        } else {
+          // Random mode: bounce between near wall and far wall
+          if (ball.direction === -1 && ball.offset - ball.speed <= 0.0) {
+            ball.direction = 1;
+          } else if (ball.direction === 1 && ball.offset + ball.speed >= farWall) {
+            ball.direction = -1;
+          }
+        }
+
+        // Apply movement
+        ball.offset   += ball.direction * ball.speed;
+        ball.rotation += ball.speed * 18;
+
+        // Audio
+        const ballZ = ball.offset - user.forwardOffset;
+        if (window.MazeAudioController) {
+          window.MazeAudioController.updateBallRollingSoundVolume(ballZ);
+        }
+
+        // Collision with player
+        const ballInActiveHall = state.activeHallway && ball.hallwayId === state.activeHallway.id;
+        if (user.movementMode === 'normal' && ballInActiveHall &&
+            Math.abs(ball.offset - user.forwardOffset) <= 0.4) {
+          if (window.MazeAudioController) window.MazeAudioController.stopBallRollingSound();
+          state.rollingBall = null;
+          user.flashFrames = 5;
+        }
+      }
     }
   }
   // ===========================
@@ -359,16 +481,28 @@ window.addEventListener('keydown', (e) => {
     }
   }
 
+  else if (e.key === 'm' || e.key === 'M') {
+    state.cheatMapVisible = !state.cheatMapVisible;
+  }
+
   else if (e.key === 'b' || e.key === 'B') {
-    if (user.movementMode === 'normal' && user.direction === 0 && !state.rollingBall && state.activeHallway) {
-      state.rollingBall = {
-        offset: 11.0,
-        speed: state.BASE_SPEED,
-        rotation: 0,
-        hallwayId: state.activeHallway.id
-      };
-      if (window.MazeAudioController) {
-        window.MazeAudioController.startBallRollingSound();
+    if (!state.rollingBall) {
+      const spawnHall = (window.MazeInterface && window.MazeInterface.getTrueActiveHallway()) || state.activeHallway;
+      if (spawnHall) {
+        state.rollingBall = {
+          offset: spawnHall.baseDistances[spawnHall.baseDistances.length - 1],
+          speed: state.BASE_SPEED,
+          rotation: 0,
+          hallwayId: spawnHall.id,
+          direction: -1,
+          targetDoorIndex: null,
+          movementMode: 'hallway',
+          tunnelLink: null,
+          tunnelProgress: 0,
+        };
+        if (window.MazeAudioController) {
+          window.MazeAudioController.startBallRollingSound();
+        }
       }
     }
   }

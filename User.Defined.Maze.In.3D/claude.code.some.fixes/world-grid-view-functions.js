@@ -76,36 +76,42 @@ function drawBirdseyeView(minimapCtx, minimapCanvas, worldGrid, activeHallway, u
   worldGrid.mainHallways.forEach((hallway, i) => {
     const hY = trackSpacingY * (i + 1);
 
+    // Layout vars computed for every hall — needed by the player dot even on unvisited halls
     const startX = 20 + (hallway.startOffsetFromS / totalGridWidthUnits) * availableRenderWidth;
     const totalVisualLineLength = (maxHallwayWidthUnits / totalGridWidthUnits) * availableRenderWidth;
     const endX = startX + totalVisualLineLength;
 
-    // Draw structural hallway vector track
-    minimapCtx.strokeStyle = hallway.nearWallColor;
-    minimapCtx.lineWidth = 4;
-    minimapCtx.beginPath();
-    minimapCtx.moveTo(startX, hY);
-    minimapCtx.lineTo(endX, hY);
-    minimapCtx.stroke();
+    const isVisited = worldGrid.visitedHallwayIds && worldGrid.visitedHallwayIds.includes(hallway.id);
 
-    minimapCtx.fillStyle = hallway.nearWallColor;
-    minimapCtx.fillRect(startX - 2, hY - 4, 4, 8);
-    minimapCtx.fillStyle = hallway.farWallColor;
-    minimapCtx.fillRect(endX - 2, hY - 4, 4, 8);
+    if (isVisited) {
+      // Draw structural hallway vector track
+      minimapCtx.strokeStyle = hallway.nearWallColor;
+      minimapCtx.lineWidth = 4;
+      minimapCtx.beginPath();
+      minimapCtx.moveTo(startX, hY);
+      minimapCtx.lineTo(endX, hY);
+      minimapCtx.stroke();
 
-    minimapCtx.fillStyle = '#ffffff';
-    minimapCtx.font = 'bold 8px sans-serif';
-    minimapCtx.fillText(hallway.nearWallLabel, startX - 14, hY + 3);
-    minimapCtx.fillText(hallway.farWallLabel, endX + 4, hY + 3);
+      minimapCtx.fillStyle = hallway.nearWallColor;
+      minimapCtx.fillRect(startX - 2, hY - 4, 4, 8);
+      minimapCtx.fillStyle = hallway.farWallColor;
+      minimapCtx.fillRect(endX - 2, hY - 4, 4, 8);
 
-    // Draw doors evenly spaced on the diagnostic grid
-    UNIFORM_2D_DOORS.forEach(val => {
-      const doorX = startX + ((val / maxHallwayWidthUnits) * totalVisualLineLength);
-      minimapCtx.fillStyle = '#00ffcc';
-      minimapCtx.fillRect(doorX - 1, hY - 3, 2, 6);
-    });
+      minimapCtx.fillStyle = '#ffffff';
+      minimapCtx.font = 'bold 8px sans-serif';
+      minimapCtx.fillText(hallway.nearWallLabel, startX - 14, hY + 3);
+      minimapCtx.fillText(hallway.farWallLabel, endX + 4, hY + 3);
 
-    // Render User Coordinates using uniform discrete step index translation or interconnecting progress
+      // Draw doors evenly spaced on the diagnostic grid
+      UNIFORM_2D_DOORS.forEach(val => {
+        const doorX = startX + ((val / maxHallwayWidthUnits) * totalVisualLineLength);
+        minimapCtx.fillStyle = '#00ffcc';
+        minimapCtx.fillRect(doorX - 1, hY - 3, 2, 6);
+      });
+    }
+
+    // Player dot is always checked — must render even when activeHallway is an unvisited hall
+    // (e.g. chain-hop transit sets activeHallway to an intermediate hall before it is visited)
     if (activeHallway && activeHallway.id === hallway.id) {
       let mappedUserX = 0;
       let mappedUserY = hY;
@@ -143,7 +149,28 @@ function drawBirdseyeView(minimapCtx, minimapCanvas, worldGrid, activeHallway, u
       // Delegate player aesthetic rendering to specialized utility function
       drawMinimapUser(minimapCtx, mappedUserX, mappedUserY, user.direction);
     }
+
+    // Ball avatar — shown on whichever hall the ball currently lives in
+    const ball = window.My3dMazeAppState && window.My3dMazeAppState.rollingBall;
+    if (ball && ball.hallwayId === hallway.id) {
+      const engineMax = hallway.nodes ? hallway.nodes[hallway.nodes.length - 1] : 5.75;
+      const ballRatio = Math.max(0, Math.min(1, ball.offset / engineMax));
+      const mappedBallX = startX + ballRatio * totalVisualLineLength;
+      drawMinimapBall(minimapCtx, mappedBallX, hY);
+    }
   });
+}
+
+function drawMinimapBall(ctx, x, y) {
+  ctx.fillStyle = '#ffcc00';
+  ctx.beginPath();
+  ctx.arc(x, y, 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#ff6600';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(x, y, 4, 0, Math.PI * 2);
+  ctx.stroke();
 }
 
 /**

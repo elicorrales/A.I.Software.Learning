@@ -37,6 +37,8 @@ window.My3dMazeAppState = {
 
   rollingBall: null,
 
+  cheatMapVisible: false,
+
   // UI Metrics
   UI_SCALE: {
     currentGridScale: 1.0,

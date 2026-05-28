@@ -8,19 +8,24 @@
 // =========================================================================
 
 function drawMainHallwayLeftAndRightWalls(ctx, x1, y1, x2, y2, w, h) {
-    // Draw Left Wall Mesh
-    ctx.fillStyle = '#e0e0e0';
+    // Left wall — fades darker toward vanishing point
+    const leftGrad = ctx.createLinearGradient(0, 0, x1, 0);
+    leftGrad.addColorStop(0, '#e8e8e8');
+    leftGrad.addColorStop(1, '#b0b0b0');
+    ctx.fillStyle = leftGrad;
     ctx.beginPath();
     ctx.moveTo(0, 0); ctx.lineTo(x1, y1); ctx.lineTo(x1, y2); ctx.lineTo(0, h);
     ctx.closePath(); ctx.fill();
 
-    // Draw Right Wall Mesh
-    ctx.fillStyle = '#e0e0e0';
+    // Right wall — mirror gradient
+    const rightGrad = ctx.createLinearGradient(w, 0, x2, 0);
+    rightGrad.addColorStop(0, '#e8e8e8');
+    rightGrad.addColorStop(1, '#b0b0b0');
+    ctx.fillStyle = rightGrad;
     ctx.beginPath();
     ctx.moveTo(w, 0); ctx.lineTo(x2, y1); ctx.lineTo(x2, y2); ctx.lineTo(w, h);
     ctx.closePath(); ctx.fill();
 
-    // Draw Outline Geometry Structural Guideliners
     ctx.strokeStyle = '#333333';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -42,17 +47,47 @@ function drawRecedingPerspectiveDoorPair(ctx, segX1, segY1, segX2, segY2, nextSe
     const doorBottomY2 = segY2 + (nextSegY2 - segY2) * t;
 
     if (segX1 < nextSegX1) {
-        ctx.fillStyle = leftDoorColor;
+        // Left door: fill → shade overlay clipped to panel → finish stroke
+        ctx.save();
         ctx.beginPath();
         ctx.moveTo(segX1, segY2); ctx.lineTo(segX1, doorTopY1);
         ctx.lineTo(leftDoorWidthX, doorTopY2); ctx.lineTo(leftDoorWidthX, doorBottomY2);
-        ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.closePath();
+        ctx.fillStyle = leftDoorColor;
+        ctx.fill();
+        ctx.clip();
+        const leftShade = ctx.createLinearGradient(0, doorTopY1, 0, segY2);
+        leftShade.addColorStop(0, 'rgba(255, 255, 255, 0.30)');
+        leftShade.addColorStop(0.35, 'rgba(255, 255, 255, 0)');
+        leftShade.addColorStop(1, 'rgba(0, 0, 0, 0.25)');
+        ctx.fillStyle = leftShade;
+        ctx.fillRect(Math.min(segX1, leftDoorWidthX), doorTopY1, Math.abs(leftDoorWidthX - segX1) + 1, segY2 - doorTopY1 + 1);
+        ctx.restore();
+        ctx.beginPath();
+        ctx.moveTo(segX1, segY2); ctx.lineTo(segX1, doorTopY1);
+        ctx.lineTo(leftDoorWidthX, doorTopY2); ctx.lineTo(leftDoorWidthX, doorBottomY2);
+        ctx.closePath(); ctx.stroke();
 
-        ctx.fillStyle = rightDoorColor;
+        // Right door: fill → shade overlay clipped to panel → finish stroke
+        ctx.save();
         ctx.beginPath();
         ctx.moveTo(segX2, segY2); ctx.lineTo(segX2, doorTopY1);
         ctx.lineTo(rightDoorWidthX, doorTopY2); ctx.lineTo(rightDoorWidthX, doorBottomY2);
-        ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.closePath();
+        ctx.fillStyle = rightDoorColor;
+        ctx.fill();
+        ctx.clip();
+        const rightShade = ctx.createLinearGradient(0, doorTopY1, 0, segY2);
+        rightShade.addColorStop(0, 'rgba(255, 255, 255, 0.30)');
+        rightShade.addColorStop(0.35, 'rgba(255, 255, 255, 0)');
+        rightShade.addColorStop(1, 'rgba(0, 0, 0, 0.25)');
+        ctx.fillStyle = rightShade;
+        ctx.fillRect(Math.min(segX2, rightDoorWidthX), doorTopY1, Math.abs(rightDoorWidthX - segX2) + 1, segY2 - doorTopY1 + 1);
+        ctx.restore();
+        ctx.beginPath();
+        ctx.moveTo(segX2, segY2); ctx.lineTo(segX2, doorTopY1);
+        ctx.lineTo(rightDoorWidthX, doorTopY2); ctx.lineTo(rightDoorWidthX, doorBottomY2);
+        ctx.closePath(); ctx.stroke();
     }
 }
 
@@ -75,17 +110,62 @@ function drawMainHallwayPerspective(ctx, canvas, hallwayData, offset, isLookingB
     const leftDoorColor = isLookingBackward ? hallwayData.rightSideDoorColor : hallwayData.leftSideDoorColor;
     const rightDoorColor = isLookingBackward ? hallwayData.leftSideDoorColor : hallwayData.rightSideDoorColor;
 
-    // Draw Base Floor
-    ctx.fillStyle = '#888888';
+    // Draw Floor with depth gradient — lighter near player, darker at far end
+    const floorGrad = ctx.createLinearGradient(0, h, 0, y2);
+    floorGrad.addColorStop(0, '#aaaaaa');
+    floorGrad.addColorStop(1, '#555555');
+    ctx.fillStyle = floorGrad;
     ctx.beginPath();
     ctx.moveTo(0, h); ctx.lineTo(x1, y2); ctx.lineTo(x2, y2); ctx.lineTo(w, h);
     ctx.closePath(); ctx.fill();
 
+    // Draw Ceiling with depth gradient
+    const ceilGrad = ctx.createLinearGradient(0, 0, 0, y1);
+    ceilGrad.addColorStop(0, '#d0d0d0');
+    ceilGrad.addColorStop(1, '#b8b8b8');
+    ctx.fillStyle = ceilGrad;
+    ctx.beginPath();
+    ctx.moveTo(0, 0); ctx.lineTo(x1, y1); ctx.lineTo(x2, y1); ctx.lineTo(w, 0);
+    ctx.closePath(); ctx.fill();
+
     drawMainHallwayLeftAndRightWalls(ctx, x1, y1, x2, y2, w, h);
+
+    // Fluorescent ceiling light fixture
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(0, 0); ctx.lineTo(x1, y1); ctx.lineTo(x2, y1); ctx.lineTo(w, 0);
+    ctx.closePath();
+    ctx.clip();
+    // Soft bloom glow radiating from center of ceiling
+    const bloomGrad = ctx.createLinearGradient(cx - w * 0.38, 0, cx + w * 0.38, 0);
+    bloomGrad.addColorStop(0,    'rgba(255, 255, 235, 0)');
+    bloomGrad.addColorStop(0.38, 'rgba(255, 255, 235, 0)');
+    bloomGrad.addColorStop(0.5,  'rgba(255, 255, 235, 0.38)');
+    bloomGrad.addColorStop(0.62, 'rgba(255, 255, 235, 0)');
+    bloomGrad.addColorStop(1,    'rgba(255, 255, 235, 0)');
+    ctx.fillStyle = bloomGrad;
+    ctx.fillRect(0, 0, w, y1 + 1);
+    // Perspective-correct fixture strip (same proportional width near and far)
+    const fRatio = 0.065;
+    ctx.fillStyle = '#fffff0';
+    ctx.beginPath();
+    ctx.moveTo(cx - fRatio * w,           0);
+    ctx.lineTo(cx + fRatio * w,           0);
+    ctx.lineTo(cx + fRatio * (x2 - x1),   y1);
+    ctx.lineTo(cx - fRatio * (x2 - x1),   y1);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
 
     // Draw Back Termination Wall Patch
     if (backWallZ > 0) {
         ctx.fillStyle = wallColor;
+        ctx.fillRect(x1, y1, x2 - x1, y2 - y1);
+        // Radial shading: lighter center, darker edges
+        const wallShade = ctx.createRadialGradient(cx, cy, 0, cx, cy, (x2 - x1) * 0.7);
+        wallShade.addColorStop(0, 'rgba(255, 255, 255, 0.15)');
+        wallShade.addColorStop(1, 'rgba(0, 0, 0, 0.35)');
+        ctx.fillStyle = wallShade;
         ctx.fillRect(x1, y1, x2 - x1, y2 - y1);
         ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
 
@@ -109,10 +189,9 @@ function drawMainHallwayPerspective(ctx, canvas, hallwayData, offset, isLookingB
         const segY1 = cy - (cy * scale);
         const segY2 = cy + ((h - cy) * scale);
 
+        // Floor and ceiling horizon lines only — no full-height verticals
         ctx.beginPath();
-        ctx.moveTo(segX1, segY1); ctx.lineTo(segX1, segY2);
-        ctx.moveTo(segX2, segY1); ctx.lineTo(segX2, segY2);
-        ctx.lineTo(segX1, segY2);
+        ctx.moveTo(segX1, segY2); ctx.lineTo(segX2, segY2);
         ctx.moveTo(segX1, segY1); ctx.lineTo(segX2, segY1);
         ctx.stroke();
 
@@ -128,6 +207,13 @@ function drawMainHallwayPerspective(ctx, canvas, hallwayData, offset, isLookingB
 
             const doorDataIdx = isLookingBackward ? (hallwayData.baseDistances.length - 2 - index) : index;
             const doorOpenValue = hallwayData.doorOpenStatus[doorDataIdx];
+
+            // Short jamb lines: floor to door-top only (no line floating above the door)
+            const doorTopAtSeg = segY2 - (segY2 - segY1) * 0.75;
+            ctx.beginPath();
+            ctx.moveTo(segX1, segY2); ctx.lineTo(segX1, doorTopAtSeg);
+            ctx.moveTo(segX2, segY2); ctx.lineTo(segX2, doorTopAtSeg);
+            ctx.stroke();
 
             drawRecedingPerspectiveDoorPair(ctx, segX1, segY1, segX2, segY2, nextSegX1, nextSegY1, nextSegX2, nextSegY2, doorOpenValue, leftDoorColor, rightDoorColor);
         }
@@ -425,12 +511,25 @@ function drawInterconnectingPerspective(ctx, canvas, currentUser) {
     ctx.clip(); // Ensure fake hall lines do not bleed outside the door frame cavity
 
     // Query facade layout environment without processing numerical arrays local context
-    if (activeLink && window.MazeInterface.doesMainHallwayExistAtTunnelTerminal(activeLink, view)) {
+    if (activeLink && window.MazeInterface.doesAnyStructureExistAtTunnelTerminal(activeLink, view)) {
         drawFakeCrossHallwayCavityFacade(ctx, doorX, doorY, doorW, doorH, scale);
     } else {
         // Just fill the canvas door cavity with the far wall background color if no hallway exists
         ctx.fillStyle = '#111111';
         ctx.fillRect(doorX, doorY, doorW, doorH);
+
+        // Draw universe boundary red X when tunnel terminal faces the edge of the known world
+        if (activeLink && window.MazeInterface.isTunnelTerminalVoid(activeLink, view)) {
+            const inset = doorW * 0.12;
+            ctx.strokeStyle = '#ff0000';
+            ctx.lineWidth = Math.max(2, scale * 8);
+            ctx.beginPath();
+            ctx.moveTo(doorX + inset, doorY + inset);
+            ctx.lineTo(doorX + doorW - inset, doorY + doorH - inset);
+            ctx.moveTo(doorX + doorW - inset, doorY + inset);
+            ctx.lineTo(doorX + inset, doorY + doorH - inset);
+            ctx.stroke();
+        }
 
         // --- RENDER DYNAMIC SMOKE PARTICLES IF DOOR OPEN ---
         if (openStatus > 0 && window.My3dMazeAppState.smokeParticles) {
@@ -598,6 +697,14 @@ function drawInterconnectingView(ctx, canvas, currentUser) {
     } else {
         // Looking flatly at the structural side walls of the tube link
         drawInterconnectingSideView(ctx, canvas);
+    }
+
+    // Chain-hop flash: alpha-blend the transition view briefly when crossing segment boundaries
+    if (currentUser.chainHopOriginProgress > 0) {
+        ctx.save();
+        ctx.globalAlpha = currentUser.chainHopOriginProgress / 18;
+        drawTransitionView(ctx, canvas, { transitionProgress: 0.20 });
+        ctx.restore();
     }
 }
 

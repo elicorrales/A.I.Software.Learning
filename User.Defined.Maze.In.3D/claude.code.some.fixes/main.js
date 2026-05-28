@@ -203,6 +203,14 @@ function animationLoop() {
     });
   }
 
+  // Tick down the chain-hop flash counter; clear it if the player leaves interconnecting mode
+  if (user.movementMode !== 'interconnecting') {
+    user.chainHopOriginProgress = -1;
+  } else if (user.chainHopOriginProgress > 0) {
+    user.chainHopOriginProgress -= 1;
+    if (user.chainHopOriginProgress === 0) user.chainHopOriginProgress = -1;
+  }
+
   // === INSERT THE SMOKE UPDATE STEP HERE ===
   // Animates the physical smoke particles if they exist in state
   if (typeof window.MazeInterface.updateVoidSmokeState === 'function') {
@@ -352,15 +360,18 @@ window.addEventListener('keydown', (e) => {
   }
 
   else if (e.key === 'b' || e.key === 'B') {
-    if (user.movementMode === 'normal' && user.direction === 0 && !state.rollingBall && state.activeHallway) {
-      state.rollingBall = {
-        offset: 11.0,
-        speed: state.BASE_SPEED,
-        rotation: 0,
-        hallwayId: state.activeHallway.id
-      };
-      if (window.MazeAudioController) {
-        window.MazeAudioController.startBallRollingSound();
+    if (!state.rollingBall) {
+      const spawnHall = (window.MazeInterface && window.MazeInterface.getTrueActiveHallway()) || state.activeHallway;
+      if (spawnHall) {
+        state.rollingBall = {
+          offset: spawnHall.baseDistances[spawnHall.baseDistances.length - 1],
+          speed: state.BASE_SPEED,
+          rotation: 0,
+          hallwayId: spawnHall.id
+        };
+        if (window.MazeAudioController) {
+          window.MazeAudioController.startBallRollingSound();
+        }
       }
     }
   }
