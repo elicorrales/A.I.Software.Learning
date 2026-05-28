@@ -432,6 +432,19 @@ function drawInterconnectingPerspective(ctx, canvas, currentUser) {
         ctx.fillStyle = '#111111';
         ctx.fillRect(doorX, doorY, doorW, doorH);
 
+        // Draw universe boundary red X when tunnel terminal faces the edge of the known world
+        if (activeLink && window.MazeInterface.isTunnelTerminalVoid(activeLink, view)) {
+            const inset = doorW * 0.12;
+            ctx.strokeStyle = '#ff0000';
+            ctx.lineWidth = Math.max(2, scale * 8);
+            ctx.beginPath();
+            ctx.moveTo(doorX + inset, doorY + inset);
+            ctx.lineTo(doorX + doorW - inset, doorY + doorH - inset);
+            ctx.moveTo(doorX + doorW - inset, doorY + inset);
+            ctx.lineTo(doorX + inset, doorY + doorH - inset);
+            ctx.stroke();
+        }
+
         // --- RENDER DYNAMIC SMOKE PARTICLES IF DOOR OPEN ---
         if (openStatus > 0 && window.My3dMazeAppState.smokeParticles) {
             window.My3dMazeAppState.smokeParticles.forEach(p => {

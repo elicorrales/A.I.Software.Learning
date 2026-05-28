@@ -749,6 +749,32 @@ function initializeStartupDirection() {
 
 
 
+/**
+ * Returns true if the given tunnel terminal faces the hard edge of the universe —
+ * i.e., the adjacent hallway slot that a chain would need to occupy is out of bounds.
+ * Used to show the red X instead of void smoke on dead-end tunnel exits.
+ */
+function isTunnelTerminalVoid(activeLink, view) {
+  const state = window.My3dMazeAppState;
+  if (!activeLink || !state || !state.WorldGrid) return false;
+
+  if (view === 'forward') {
+    const nextIdx = activeLink.direction === 1
+      ? activeLink.toHallwayIndex + 1
+      : activeLink.toHallwayIndex - 1;
+    return nextIdx < 0 || nextIdx >= state.WorldGrid.mainHallways.length;
+  }
+
+  if (view === 'backward') {
+    const nextIdx = activeLink.direction === 1
+      ? activeLink.fromHallwayIndex - 1
+      : activeLink.fromHallwayIndex + 1;
+    return nextIdx < 0 || nextIdx >= state.WorldGrid.mainHallways.length;
+  }
+
+  return false;
+}
+
 // Global window exposure updated with the newly established callers!
 window.MazeInterface = {
   isTunnel: isTunnelStructure,
@@ -774,5 +800,6 @@ window.MazeInterface = {
   doesMainHallwayExistAtTunnelTerminal: doesMainHallwayExistAtTunnelTerminal,
   exitTunnelToCorridor: exitTunnelToCorridor,
   updateUserDirection: updateUserDirection,
-  initializeStartupDirection: initializeStartupDirection
+  initializeStartupDirection: initializeStartupDirection,
+  isTunnelTerminalVoid: isTunnelTerminalVoid
 };
