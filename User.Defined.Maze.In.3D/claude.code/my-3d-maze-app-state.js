@@ -26,6 +26,7 @@ window.My3dMazeAppState = {
   WorldGrid: {
     mainHallways: [],
     interconnectingHallways: [],
+    visitedHallwayIds: [],
     name: "DiagnosticWorldGridMonitor"
   },
 

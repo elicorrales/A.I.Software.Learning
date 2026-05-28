@@ -253,6 +253,17 @@ function getNormalizedTunnelContext(tunnel, rawContext) {
 }
 
 /**
+ * Records a hallway as visited so the 2D minimap can reveal it.
+ */
+function markHallwayVisited(hallwayId) {
+  const state = window.My3dMazeAppState;
+  if (!state || !state.WorldGrid || !hallwayId) return;
+  if (!state.WorldGrid.visitedHallwayIds.includes(hallwayId)) {
+    state.WorldGrid.visitedHallwayIds.push(hallwayId);
+  }
+}
+
+/**
  * Safely updates the active hallway context tracking state via index parameters,
  * isolating main.js from direct global object state mutations.
  * @param {number} hallwayIndex - The index of the hallway in the world registry array.
@@ -260,8 +271,9 @@ function getNormalizedTunnelContext(tunnel, rawContext) {
 function setActiveHallwayByIndex(hallwayIndex) {
   const state = window.My3dMazeAppState;
   if (!state || !state.WorldGrid.mainHallways[hallwayIndex]) return;
-  
+
   state.activeHallway = state.WorldGrid.mainHallways[hallwayIndex];
+  markHallwayVisited(state.activeHallway.id);
 }
 
 /**
@@ -574,6 +586,7 @@ function exitTunnelToCorridor() {
     activeTunnel.exitDoorOpenStatus = 0;
 
     state.activeHallway = targetHallway;
+    markHallwayVisited(targetHallway.id);
     user.movementMode = 'normal';
     user.interconnectingProgress = 0.0;
     user.transitionProgress = 0.0;
