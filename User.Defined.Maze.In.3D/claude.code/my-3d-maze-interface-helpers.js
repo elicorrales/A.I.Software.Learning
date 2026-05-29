@@ -585,6 +585,16 @@ function exitTunnelToCorridor() {
     activeTunnel.exitDoorTarget = 0;
     activeTunnel.exitDoorOpenStatus = 0;
 
+    // Close the door in the hallway the player just left.
+    // Forward exit: fromHallway's door at doorIndex was opened when the player entered.
+    // Backward exit: fill(0) below already resets all of fromHallway's doors.
+    if (exitingFromFarEnd) {
+      const srcHallway = state.WorldGrid.mainHallways[activeTunnel.fromHallwayIndex];
+      if (srcHallway) {
+        setDoorStateImmediate(srcHallway, activeTunnel.doorIndex, 0);
+      }
+    }
+
     state.activeHallway = targetHallway;
     markHallwayVisited(targetHallway.id);
     user.movementMode = 'normal';
@@ -788,6 +798,34 @@ function isTunnelTerminalVoid(activeLink, view) {
   return false;
 }
 
+/**
+ * Immediately forces a door to a target value (0 = closed, 1 = open),
+ * setting both the target and the current open status with no animation.
+ * @param {Object} structure - Main hallway or tunnel link.
+ * @param {string|number} context - 'entrance'/'exit' for tunnels; numeric index for hallways.
+ * @param {number} value - 0 to close, 1 to open.
+ */
+function setDoorStateImmediate(structure, context, value) {
+  if (!structure) return;
+  const v = value ? 1 : 0;
+
+  if (isTunnelStructure(structure)) {
+    if (context === 'exit') {
+      structure.exitDoorTarget = v;
+      structure.exitDoorOpenStatus = v;
+    } else {
+      structure.entranceDoorTarget = v;
+      structure.entranceDoorOpenStatus = v;
+    }
+    return;
+  }
+
+  if (structure.doorTargets && structure.doorOpenStatus && structure.doorTargets[context] !== undefined) {
+    structure.doorTargets[context] = v;
+    structure.doorOpenStatus[context] = v;
+  }
+}
+
 // Global window exposure updated with the newly established callers!
 window.MazeInterface = {
   isTunnel: isTunnelStructure,
@@ -814,5 +852,6 @@ window.MazeInterface = {
   exitTunnelToCorridor: exitTunnelToCorridor,
   updateUserDirection: updateUserDirection,
   initializeStartupDirection: initializeStartupDirection,
-  isTunnelTerminalVoid: isTunnelTerminalVoid
+  isTunnelTerminalVoid: isTunnelTerminalVoid,
+  setDoorStateImmediate: setDoorStateImmediate
 };

@@ -81,6 +81,14 @@
     <div class="panel-content" id="historyPanelContent"></div>
 </div>
 
+<div class="diagnostic-modal-panel" id="mapOverlay" tabindex="0">
+    <div class="panel-header">
+        <span>Maze Map</span>
+        <button class="panel-copy-btn" id="copyMapBtn">Copy All</button>
+    </div>
+    <div class="panel-content" id="mapPanelContent" style="font-family: monospace; white-space: pre;"></div>
+</div>
+
         <canvas id="myCanvas"></canvas>
 
         <div class="controls-container">
@@ -88,6 +96,8 @@
             <button class="menu-btn" id="menuToggleBtn" title="Toggle Bird's Eye View">☰</button>
             <button class="menu-btn" id="stateToggleBtn" title="Toggle State Monitor">S</button>
             <button class="menu-btn" id="historyToggleBtn" title="Toggle History Tracker">H</button>
+            <button class="menu-btn" id="mapToggleBtn" title="Toggle Maze Map">M</button>
+            <button class="menu-btn" id="bToggleBtn" title="">B</button>
         </div>
     </div>
 
@@ -96,6 +106,7 @@
 <script src="my-3d-maze-interface-helpers.js"></script>
 <script src="maze-audio-controller.js"></script>
 <script src="player-movement-controller.js"></script>
+<script src="ball-movement-controller.js"></script>
 <script src="world-grid-view-functions.js"></script>
 <script src="hallway-perspective-renderer.js"></script>
 <script src="main.js"></script>

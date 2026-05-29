@@ -110,8 +110,26 @@
                 
                 if (activeLink && currentHallwayIdx === activeLink.toHallwayIndex) {
                     user.interconnectingProgress = 3.20;
+                    // Close both the hallway door and tunnel exit door (to-side entry)
+                    const fh = WorldGrid.mainHallways[activeLink.fromHallwayIndex];
+                    const th = WorldGrid.mainHallways[activeLink.toHallwayIndex];
+                    if (fh && th && state.activeHallway) {
+                        const gX = (activeLink.chainGlobalX !== undefined)
+                            ? activeLink.chainGlobalX
+                            : fh.startOffsetFromS + activeLink.doorIndex;
+                        const localIdx = gX - th.startOffsetFromS;
+                        if (localIdx >= 0 && localIdx <= 4) {
+                            window.MazeInterface.setDoorStateImmediate(state.activeHallway, localIdx, 0);
+                        }
+                    }
+                    window.MazeInterface.setDoorStateImmediate(activeLink, 'exit', 0);
                 } else {
                     user.interconnectingProgress = 0.0;
+                    if (activeLink) {
+                        // Close both the hallway door and tunnel entrance door (from-side entry)
+                        window.MazeInterface.setDoorStateImmediate(state.activeHallway, activeLink.doorIndex, 0);
+                        window.MazeInterface.setDoorStateImmediate(activeLink, 'entrance', 0);
+                    }
                 }
                 window.MazeAudioController.handleMovementAudioCadence(user.isShiftPressed ? 'run' : 'walk');
             }

@@ -129,3 +129,169 @@ window.My3dMazeDiagnostics.logHistoryEvent = function(symbol) {
         counterEl.textContent = `(${chain.length}/${HISTORY_CHAIN_LENGTH})`;
     }
 };
+
+/**
+ * Builds a character-art top-down map of the current maze state.
+ * Each hallway is a horizontal row; tunnels are vertical | connectors.
+ * P = player, B = ball, * = both, ● = closed door, ○ = open door, ★ = active hallway.
+ */
+window.My3dMazeDiagnostics.getMazeMapDiagram = function() {
+    const wState   = window.My3dMazeAppState;
+    const hallways = wState.WorldGrid.mainHallways;
+    const tunnels  = wState.WorldGrid.interconnectingHallways;
+    const ball     = wState.rollingBall;
+    const u        = wState.user;
+    const activeH  = wState.activeHallway;
+
+    if (!hallways || hallways.length === 0) return '(no hallways yet)';
+
+    const COL_W = 5;
+    const CONN  = '─'.repeat(COL_W - 1);
+    let maxGx = 0;
+    hallways.forEach(h => { maxGx = Math.max(maxGx, h.startOffsetFromS + 4); });
+    tunnels.forEach(t => { if (t.chainGlobalX !== undefined) maxGx = Math.max(maxGx, t.chainGlobalX); });
+
+    function tunnelGx(t) {
+        if (t.chainGlobalX !== undefined) return t.chainGlobalX;
+        const fh = hallways[t.fromHallwayIndex];
+        return fh ? fh.startOffsetFromS + t.doorIndex : t.doorIndex;
+    }
+
+    // slotMap: {gx→char}, connMap: {gx→(COL_W-1)-char string after that slot}
+    function buildRow(prefix, slotMap, connMap) {
+        let row = prefix;
+        for (let gx = 0; gx <= maxGx; gx++) {
+            row += (slotMap[gx] !== undefined ? slotMap[gx] : ' ');
+            if (gx < maxGx) row += (connMap[gx] !== undefined ? connMap[gx] : ' '.repeat(COL_W - 1));
+        }
+        return row;
+    }
+
+    function nearestDoor(offset, hallway) {
+        let best = 0, diff = Infinity;
+        for (let di = 0; di < 5; di++) {
+            const nd = hallway.nodes ? hallway.nodes[di * 2] : di;
+            const d  = Math.abs(offset - nd);
+            if (d < diff) { diff = d; best = di; }
+        }
+        return best;
+    }
+
+    // Returns the character index within a fully-built hallway row where the
+    // player should appear, interpolating forwardOffset between door nodes.
+    function playerCharOffset(prefix, h, offset) {
+        const nodes = h.nodes;
+        for (let di = 0; di < 4; di++) {
+            const nd  = nodes ? nodes[di * 2]       : di;
+            const nd1 = nodes ? nodes[(di + 1) * 2] : di + 1;
+            if (offset >= nd && offset <= nd1) {
+                const f  = nd1 > nd ? (offset - nd) / (nd1 - nd) : 0;
+                const gx = h.startOffsetFromS + di;
+                return prefix.length + gx * COL_W + Math.round(f * COL_W);
+            }
+        }
+        return prefix.length + (h.startOffsetFromS + nearestDoor(offset, h)) * COL_W;
+    }
+
+    const playerHallwayId = (activeH && u.movementMode !== 'interconnecting') ? activeH.id : null;
+    const playerTunnelIdx = u.movementMode === 'interconnecting' ? u.activeTunnelIndex : -1;
+
+    let ballHallwayId = null, ballDoorIdx = -1, ballTunnelRef = null;
+    if (ball) {
+        if (ball.movementMode === 'hallway') {
+            const bh = hallways.find(h => h.id === ball.hallwayId);
+            if (bh) { ballHallwayId = bh.id; ballDoorIdx = nearestDoor(ball.offset, bh); }
+        } else if (ball.movementMode === 'tunnel' && ball.tunnelLink) {
+            ballTunnelRef = ball.tunnelLink;
+        }
+    }
+
+    const lines = [];
+
+    // Header
+    const hSlots = {}, hConn = {};
+    for (let gx = 0; gx <= maxGx; gx++) { hSlots[gx] = String(gx); hConn[gx] = ' '.repeat(COL_W - 1); }
+    lines.push(buildRow('  gX: ', hSlots, hConn));
+    lines.push('  ' + '─'.repeat(maxGx * COL_W + 5));
+
+    for (let hi = 0; hi < hallways.length; hi++) {
+        const h        = hallways[hi];
+        const isActive = activeH && h.id === activeH.id;
+        const prefix   = '  ' + h.id + ': ';
+
+        // Hallway row — player omitted from slotMap, spliced at exact char offset below
+        const slotMap = {}, connMap = {};
+        for (let di = 0; di < 5; di++) {
+            const gx     = h.startOffsetFromS + di;
+            const isOpen = h.doorOpenStatus && h.doorOpenStatus[di] > 0.5;
+            const hasB   = ballHallwayId === h.id && ballDoorIdx === di;
+            slotMap[gx]  = hasB ? 'B' : (isOpen ? '○' : '●');
+            if (di < 4) connMap[gx] = CONN;
+        }
+
+        let rowStr = buildRow(prefix, slotMap, connMap)
+            + '   ' + h.nearWallLabel + '►' + h.farWallLabel
+            + (isActive ? '  ★' : '');
+
+        if (playerHallwayId === h.id) {
+            const ci  = playerCharOffset(prefix, h, u.forwardOffset);
+            const cur = rowStr[ci];
+            rowStr = rowStr.slice(0, ci) + (cur === 'B' ? '*' : 'P') + rowStr.slice(ci + 1);
+        }
+
+        // Chained tunnel pass-through: when a tunnel ends at this hallway and
+        // continues via forwardChainIndex, the shaft passes through — mark it.
+        tunnels.forEach(t => {
+            if (t.toHallwayIndex === hi && t.forwardChainIndex !== undefined) {
+                const ci = prefix.length + tunnelGx(t) * COL_W;
+                if (ci < rowStr.length && rowStr[ci] === ' ') {
+                    rowStr = rowStr.slice(0, ci) + '|' + rowStr.slice(ci + 1);
+                }
+            }
+        });
+
+        lines.push(rowStr);
+
+        // Tunnel gap to next hallway
+        if (hi < hallways.length - 1) {
+            const gapSlots = {};
+            tunnels
+                .filter(t => {
+                    const lo  = Math.min(t.fromHallwayIndex, t.toHallwayIndex);
+                    const hi2 = Math.max(t.fromHallwayIndex, t.toHallwayIndex);
+                    return lo === hi && hi2 === hi + 1;
+                })
+                .forEach(t => {
+                    const gx   = tunnelGx(t);
+                    const tIdx = tunnels.indexOf(t);
+                    const hasP = playerTunnelIdx === tIdx;
+                    const hasB = ballTunnelRef   === t;
+                    const cur  = gapSlots[gx];
+                    if (cur === '*') return;
+                    if ((cur === 'P' && hasB) || (cur === 'B' && hasP)) { gapSlots[gx] = '*'; return; }
+                    if      (hasP && hasB) gapSlots[gx] = '*';
+                    else if (hasP)         gapSlots[gx] = 'P';
+                    else if (hasB)         gapSlots[gx] = 'B';
+                    else if (!cur)         gapSlots[gx] = '|';
+                });
+
+            // Chain continuations: a tunnel ending at hi with forwardChainIndex
+            // means the shaft continues into this next gap at the same gX.
+            tunnels.forEach(t => {
+                if (t.toHallwayIndex === hi && t.forwardChainIndex !== undefined) {
+                    const gx = tunnelGx(t);
+                    if (!gapSlots[gx]) gapSlots[gx] = '|';
+                }
+            });
+
+            if (Object.keys(gapSlots).length > 0) {
+                lines.push(buildRow('      ', gapSlots, {}));
+            }
+        }
+    }
+
+    lines.push('  ' + '─'.repeat(maxGx * COL_W + 5));
+    lines.push('');
+    lines.push('  ● closed  ○ open  P player  B ball  * both  ★ active  | tunnel');
+    return lines.join('\n');
+};
