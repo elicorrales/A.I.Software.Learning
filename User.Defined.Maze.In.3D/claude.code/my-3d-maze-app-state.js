@@ -21,6 +21,7 @@ window.My3dMazeAppState = {
     interconnectingProgress: 0.0,
     activeTunnelIndex: -1,
     chainHopOriginProgress: -1,
+    relativeFacingIndex: 0,
   },
 
   WorldGrid: {

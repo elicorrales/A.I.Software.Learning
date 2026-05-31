@@ -81,7 +81,7 @@ function drawBirdseyeView(minimapCtx, minimapCanvas, worldGrid, activeHallway, u
     const totalVisualLineLength = (maxHallwayWidthUnits / totalGridWidthUnits) * availableRenderWidth;
     const endX = startX + totalVisualLineLength;
 
-    const cheatOn = window.My3dMazeAppState && window.My3dMazeAppState.cheatMapVisible;
+    const cheatOn = window.MazeInterface.getCheatMapVisible();
     const isVisited = cheatOn || (worldGrid.visitedHallwayIds && worldGrid.visitedHallwayIds.includes(hallway.id));
 
     if (isVisited) {
@@ -152,7 +152,7 @@ function drawBirdseyeView(minimapCtx, minimapCanvas, worldGrid, activeHallway, u
     }
 
     // Ball avatar — only when not inside a tunnel (tunnel mode draws after the loop)
-    const ball = window.My3dMazeAppState && window.My3dMazeAppState.rollingBall;
+    const ball = window.MazeInterface.getRollingBall();
     if (ball && ball.movementMode !== 'tunnel' && ball.hallwayId === hallway.id) {
       const engineMax = hallway.nodes ? hallway.nodes[hallway.nodes.length - 1] : 5.75;
       const ballRatio = Math.max(0, Math.min(1, ball.offset / engineMax));
@@ -162,7 +162,7 @@ function drawBirdseyeView(minimapCtx, minimapCanvas, worldGrid, activeHallway, u
   });
 
   // Ball in tunnel — animate the dot along the tunnel line in the 2D view
-  const tunnelBall = window.My3dMazeAppState && window.My3dMazeAppState.rollingBall;
+  const tunnelBall = window.MazeInterface.getRollingBall();
   if (tunnelBall && tunnelBall.movementMode === 'tunnel' && tunnelBall.tunnelLink) {
     const link   = tunnelBall.tunnelLink;
     const fromH  = worldGrid.mainHallways[link.fromHallwayIndex];

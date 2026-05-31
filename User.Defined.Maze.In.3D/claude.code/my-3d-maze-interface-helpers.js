@@ -826,6 +826,145 @@ function setDoorStateImmediate(structure, context, value) {
   }
 }
 
+// =========================================================================
+// SHARED UTILITIES
+// =========================================================================
+
+function snapToNearestNodeIndex(offset, hallwayModel) {
+  let closestIdx = 0;
+  let minDiff = Math.abs(offset - hallwayModel.nodes[0]);
+  for (let i = 1; i < hallwayModel.nodes.length; i++) {
+    const diff = Math.abs(offset - hallwayModel.nodes[i]);
+    if (diff < minDiff) { minDiff = diff; closestIdx = i; }
+  }
+  return closestIdx;
+}
+
+// =========================================================================
+// MAZE WORLD BUILDERS
+// =========================================================================
+
+function createHallway(id, farLabel, nearLabel, farColor, nearColor, leftDoorColor, rightDoorColor) {
+  const state = window.My3dMazeAppState;
+  return {
+    id: id,
+    farWallLabel: farLabel,
+    nearWallLabel: nearLabel,
+    farWallColor: farColor,
+    nearWallColor: nearColor,
+    leftSideDoorColor: leftDoorColor,
+    rightSideDoorColor: rightDoorColor,
+    baseDistances: [1.1, 1.6, 2.4, 3.8, 6.5, 12.0],
+    nodes: [...state.ENGINE_3D_NODES],
+    doorOpenStatus: [0, 0, 0, 0, 0],
+    doorTargets: [0, 0, 0, 0, 0],
+    startOffsetFromS: 0
+  };
+}
+
+function createMainHallway(id, orderIndex) {
+  const state = window.My3dMazeAppState;
+  const numLabel = orderIndex + 1;
+  const labelA = numLabel + "a";
+  const labelB = numLabel + "b";
+  const colorScheme = state.UNIQUE_HALLWAY_COLORS[orderIndex];
+
+  const newHallway = createHallway(
+    id, labelB, labelA,
+    colorScheme.far, colorScheme.near,
+    colorScheme.near, colorScheme.far
+  );
+
+  const maxGridShiftUnits = 4;
+  newHallway.startOffsetFromS = Math.floor(Math.random() * (maxGridShiftUnits + 1));
+  return newHallway;
+}
+
+function initializeAllMainHallways() {
+  const WorldGrid = window.My3dMazeAppState.WorldGrid;
+  WorldGrid.mainHallways = [];
+  for (let i = 0; i < 7; i++) {
+    WorldGrid.mainHallways.push(createMainHallway('H' + (i + 1), i));
+  }
+}
+
+function createInterconnectingHallway() {
+  const state = window.My3dMazeAppState;
+  const user = state.user;
+  const WorldGrid = state.WorldGrid;
+
+  if (!state.activeHallway || (user.direction !== 1 && user.direction !== 3)) return;
+
+  const currentDoorIdx = window.MazeInterface.getCurrentNodeIndex();
+  if (currentDoorIdx === -1) return;
+
+  const currentHallwayIdx = WorldGrid.mainHallways.findIndex(h => h.id === state.activeHallway.id);
+  const targetHallwayIdx = user.direction === 3 ? currentHallwayIdx - 1 : currentHallwayIdx + 1;
+
+  if (targetHallwayIdx < 0 || targetHallwayIdx >= WorldGrid.mainHallways.length) return;
+
+  if (window.MazeInterface.hasTunnelAtCurrentNode()) return;
+
+  WorldGrid.interconnectingHallways.push({
+    fromHallwayIndex: currentHallwayIdx,
+    toHallwayIndex: targetHallwayIdx,
+    doorIndex: currentDoorIdx,
+    direction: user.direction,
+    entranceDoorTarget: 1,
+    entranceDoorOpenStatus: 1.0,
+    exitDoorTarget: 0,
+    exitDoorOpenStatus: 0.0
+  });
+}
+
+function createChainedTunnelFromDeadEnd() {
+  const state = window.My3dMazeAppState;
+  const user = state.user;
+  const WorldGrid = state.WorldGrid;
+
+  const activeTunnel = window.MazeInterface.findActiveTunnel();
+  if (!activeTunnel) return;
+
+  if (user.direction !== activeTunnel.direction) return;
+  if (user.interconnectingProgress < 3.10) return;
+  if (activeTunnel.exitDoorOpenStatus <= 0.95) return;
+  if (window.MazeInterface.doesMainHallwayExistAtTunnelTerminal(activeTunnel, 'forward')) return;
+  if (activeTunnel.forwardChainIndex !== undefined && activeTunnel.forwardChainIndex >= 0) return;
+
+  const newFromIdx = activeTunnel.toHallwayIndex;
+  const newToIdx = activeTunnel.direction === 1 ? newFromIdx + 1 : newFromIdx - 1;
+
+  if (newToIdx < 0 || newToIdx >= WorldGrid.mainHallways.length) {
+    user.flashFrames = 5;
+    return;
+  }
+
+  const newDoorIdx = activeTunnel.doorIndex;
+  const originHallway = WorldGrid.mainHallways[activeTunnel.fromHallwayIndex];
+  const chainGlobalX = (activeTunnel.chainGlobalX !== undefined)
+    ? activeTunnel.chainGlobalX
+    : (originHallway ? originHallway.startOffsetFromS + activeTunnel.doorIndex : newDoorIdx);
+
+  const newTunnel = {
+    fromHallwayIndex:       newFromIdx,
+    toHallwayIndex:         newToIdx,
+    doorIndex:              newDoorIdx,
+    direction:              activeTunnel.direction,
+    chainGlobalX:           chainGlobalX,
+    entranceDoorTarget:     0,
+    entranceDoorOpenStatus: 0.0,
+    exitDoorTarget:         0,
+    exitDoorOpenStatus:     0.0
+  };
+
+  WorldGrid.interconnectingHallways.push(newTunnel);
+  activeTunnel.forwardChainIndex = WorldGrid.interconnectingHallways.length - 1;
+
+  if (window.My3dMazeDiagnostics && typeof window.My3dMazeDiagnostics.logHistoryEvent === 'function') {
+    window.My3dMazeDiagnostics.logHistoryEvent('🛠️⛓️');
+  }
+}
+
 // Global window exposure updated with the newly established callers!
 window.MazeInterface = {
   isTunnel: isTunnelStructure,
@@ -861,5 +1000,13 @@ window.MazeInterface = {
   getSmokeParticles: function() {
     const state = window.My3dMazeAppState;
     return state ? state.smokeParticles : null;
-  }
+  },
+  getCheatMapVisible: function() {
+    const state = window.My3dMazeAppState;
+    return state ? !!state.cheatMapVisible : false;
+  },
+  initializeAllMainHallways: initializeAllMainHallways,
+  createInterconnectingHallway: createInterconnectingHallway,
+  createChainedTunnelFromDeadEnd: createChainedTunnelFromDeadEnd,
+  snapToNearestNodeIndex: snapToNearestNodeIndex
 };

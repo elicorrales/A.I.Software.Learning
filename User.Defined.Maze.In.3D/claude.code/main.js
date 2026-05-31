@@ -25,6 +25,16 @@ const historyOverlay = document.getElementById('historyOverlay');
 const mapOverlay = document.getElementById('mapOverlay');
 const ballOverlay = document.getElementById('ballOverlay');
 
+const historyCounterEl = document.getElementById('historyCounter');
+const ballCounterEl    = document.getElementById('ballHistoryCounter');
+
+window.My3dMazeDiagnostics.onHistoryUpdate = (count, max) => {
+  if (historyCounterEl) historyCounterEl.textContent = `(${count}/${max})`;
+};
+window.My3dMazeDiagnostics.onBallUpdate = (count, max) => {
+  if (ballCounterEl) ballCounterEl.textContent = `(${count}/${max})`;
+};
+
 // Interactive Dragging Core UI State Trackers
 let isDraggingGrid = false;
 let dragStartX = 0;
@@ -36,150 +46,8 @@ let movementFrameThrottle = 0;
 const FRAMES_PER_STEP = 12;
 
 // =========================================================================
-// 3. PROCEDURAL CONSTRUCTORS & UTILITIES
+// 3. UTILITIES
 // =========================================================================
-
-function createHallway(id, farLabel, nearLabel, farColor, nearColor, leftDoorColor, rightDoorColor) {
-  return {
-    id: id,
-    farWallLabel: farLabel,
-    nearWallLabel: nearLabel,
-    farWallColor: farColor,
-    nearWallColor: nearColor,
-    leftSideDoorColor: leftDoorColor,
-    rightSideDoorColor: rightDoorColor,
-    baseDistances: [1.1, 1.6, 2.4, 3.8, 6.5, 12.0],
-    nodes: [...state.ENGINE_3D_NODES], // Clean single point of cloning here
-    doorOpenStatus: [0, 0, 0, 0, 0],
-    doorTargets: [0, 0, 0, 0, 0],
-    startOffsetFromS: 0
-  };
-}
-
-function createMainHallway(id, orderIndex) {
-  const numLabel = orderIndex + 1;
-  const labelA = numLabel + "a";
-  const labelB = numLabel + "b";
-  const colorScheme = state.UNIQUE_HALLWAY_COLORS[orderIndex];
-
-  const newHallway = createHallway(
-    id, labelB, labelA,
-    colorScheme.far, colorScheme.near,
-    colorScheme.near, colorScheme.far
-  );
-
-  const maxGridShiftUnits = 4;
-  newHallway.startOffsetFromS = Math.floor(Math.random() * (maxGridShiftUnits + 1));
-  return newHallway;
-}
-
-function initializeAllMainHallways() {
-  WorldGrid.mainHallways = [];
-  for (let i = 0; i < 7; i++) {
-    const hallwayInstance = createMainHallway('H' + (i + 1), i);
-    WorldGrid.mainHallways.push(hallwayInstance);
-  }
-}
-
-function createChainedTunnelFromDeadEnd() {
-  const activeTunnel = window.MazeInterface.findActiveTunnel();
-  if (!activeTunnel) return;
-
-  // Only chain in the tunnel's forward direction
-  if (user.direction !== activeTunnel.direction) return;
-  // Must be at the dead-end wall (player gets pinned at 3.16 when hitting a void)
-  if (user.interconnectingProgress < 3.10) return;
-  // Exit door must be open — consistent with normal tunnel creation requiring open door
-  if (activeTunnel.exitDoorOpenStatus <= 0.95) return;
-  // Forward terminal must be empty (true dead end)
-  if (window.MazeInterface.doesMainHallwayExistAtTunnelTerminal(activeTunnel, 'forward')) return;
-  // A chain must not already be linked from this tunnel
-  if (activeTunnel.forwardChainIndex !== undefined && activeTunnel.forwardChainIndex >= 0) return;
-
-  const newFromIdx = activeTunnel.toHallwayIndex;
-  const newToIdx = activeTunnel.direction === 1 ? newFromIdx + 1 : newFromIdx - 1;
-
-  // Universe boundary — cannot chain past the outermost hallway row
-  if (newToIdx < 0 || newToIdx >= WorldGrid.mainHallways.length) {
-    user.flashFrames = 5;
-    return;
-  }
-
-  // Reuse the same relative door slot (0–4) — always valid, avoids globalX alignment issues
-  const newDoorIdx = activeTunnel.doorIndex;
-
-  // Preserve the visual X column from the originating tunnel for the 2D minimap.
-  // Each hallway has a random startOffsetFromS, so doorIndex alone shifts the column.
-  // chainGlobalX pins all segments in the chain to the same rendered X.
-  const originHallway = WorldGrid.mainHallways[activeTunnel.fromHallwayIndex];
-  const chainGlobalX = (activeTunnel.chainGlobalX !== undefined)
-    ? activeTunnel.chainGlobalX
-    : (originHallway ? originHallway.startOffsetFromS + activeTunnel.doorIndex : newDoorIdx);
-
-  const newTunnel = {
-    fromHallwayIndex:       newFromIdx,
-    toHallwayIndex:         newToIdx,
-    doorIndex:              newDoorIdx,
-    direction:              activeTunnel.direction,
-    chainGlobalX:           chainGlobalX,
-    entranceDoorTarget:     0,
-    entranceDoorOpenStatus: 0.0,
-    exitDoorTarget:         0,
-    exitDoorOpenStatus:     0.0
-  };
-
-  WorldGrid.interconnectingHallways.push(newTunnel);
-  const newTunnelIdx = WorldGrid.interconnectingHallways.length - 1;
-
-  // Directly link this tunnel to its forward chain segment — transition code uses this
-  activeTunnel.forwardChainIndex = newTunnelIdx;
-
-  if (window.My3dMazeDiagnostics && typeof window.My3dMazeDiagnostics.logHistoryEvent === 'function') {
-    window.My3dMazeDiagnostics.logHistoryEvent('🛠️⛓️');
-  }
-}
-
-function createInterconnectingHallway() {
-  // Read target exclusively from our structured application state
-  if (!state.activeHallway || (user.direction !== 1 && user.direction !== 3)) return;
-
-  const currentDoorIdx = window.MazeInterface.getCurrentNodeIndex();
-  if (currentDoorIdx === -1) return;
-
-  const currentHallwayIdx = WorldGrid.mainHallways.findIndex(h => h.id === state.activeHallway.id);
-  const targetHallwayIdx = user.direction === 3 ? currentHallwayIdx - 1 : currentHallwayIdx + 1;
-
-  if (targetHallwayIdx < 0 || targetHallwayIdx >= WorldGrid.mainHallways.length) return;
-
-  // Leverage the facade to determine if a tunnel already exists here
-  if (window.MazeInterface.hasTunnelAtCurrentNode()) return;
-
-  WorldGrid.interconnectingHallways.push({
-    fromHallwayIndex: currentHallwayIdx,
-    toHallwayIndex: targetHallwayIdx,
-    doorIndex: currentDoorIdx,
-    direction: user.direction,
-    entranceDoorTarget: 1,      // Starts open because you just walked out of a main hallway door
-    entranceDoorOpenStatus: 1.0,
-    exitDoorTarget: 0,          // Starts closed at the far end of the tube
-    exitDoorOpenStatus: 0.0
-  });
-}
-
-function snapToNearestNode(offset, hallwayModel) {
-  let closestOffset = hallwayModel.nodes[0];
-  let minDiff = Math.abs(offset - closestOffset);
-
-  for (let i = 1; i < hallwayModel.nodes.length; i++) {
-    let diff = Math.abs(offset - hallwayModel.nodes[i]);
-    if (diff < minDiff) {
-      minDiff = diff;
-      closestOffset = hallwayModel.nodes[i];
-    }
-  }
-  return closestOffset;
-}
-
 
 // =========================================================================
 // 4. ANIMATION LOGIC ENGINE & ENGINE CONTROLLER
@@ -190,7 +58,7 @@ function animationLoop() {
   const trueHallway = window.MazeInterface.getTrueActiveHallway();
 
   if (trueHallway && user.movementMode === 'normal') {
-    user.nodeIndex = snapToNearestNodeIndex(user.forwardOffset, trueHallway);
+    user.nodeIndex = window.MazeInterface.snapToNearestNodeIndex(user.forwardOffset, trueHallway);
   }
 
   if (state.activeHallway) {
@@ -249,22 +117,6 @@ function resizeCanvas() {
   minimapCanvas.width = minimapCanvas.parentElement.clientWidth;
   minimapCanvas.height = minimapCanvas.parentElement.clientHeight;
 }
-
-function snapToNearestNodeIndex(offset, hallwayModel) {
-  let closestIdx = 0;
-  let minDiff = Math.abs(offset - hallwayModel.nodes[0]);
-
-  for (let i = 1; i < hallwayModel.nodes.length; i++) {
-    let diff = Math.abs(offset - hallwayModel.nodes[i]);
-    if (diff < minDiff) {
-      minDiff = diff;
-      closestIdx = i;
-    }
-  }
-  return closestIdx;
-}
-
-
 
 // =========================================================================
 // 5. USER CONTEXT EVENT CAPTURE MANAGERS
@@ -363,14 +215,14 @@ window.addEventListener('keydown', (e) => {
       if (nodeIndex !== -1) {
         // Use facade to check standard door visibility state cleanly
         if (window.MazeInterface.getOpenStatus(state.activeHallway, nodeIndex) > 0.95) {
-          createInterconnectingHallway();
+          window.MazeInterface.createInterconnectingHallway();
           if (window.My3dMazeDiagnostics && typeof window.My3dMazeDiagnostics.logHistoryEvent === 'function') {
             window.My3dMazeDiagnostics.logHistoryEvent('🛠️');
           }
         }
       }
     } else if (user.movementMode === 'interconnecting') {
-      createChainedTunnelFromDeadEnd();
+      window.MazeInterface.createChainedTunnelFromDeadEnd();
     }
   }
 
@@ -426,7 +278,7 @@ window.addEventListener('mouseup', () => {
 
 window.addEventListener('load', () => {
   resizeCanvas();
-  initializeAllMainHallways();
+  window.MazeInterface.initializeAllMainHallways();
 
   // Clean initialization passing index boundary logic off to the interface helper
   window.MazeInterface.setActiveHallwayByIndex(0);

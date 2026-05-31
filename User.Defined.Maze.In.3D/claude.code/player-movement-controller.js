@@ -360,7 +360,7 @@
         window.MazeInterface.resetAllDoors();
 
         if (user.movementMode === 'normal' && state.activeHallway) {
-            user.nodeIndex = snapToNearestNodeIndex(user.forwardOffset, state.activeHallway);
+            user.nodeIndex = window.MazeInterface.snapToNearestNodeIndex(user.forwardOffset, state.activeHallway);
             user.forwardOffset = state.activeHallway.nodes[user.nodeIndex];
             //window.MazeInterface.resetAllDoors(state.activeHallway);
         }
@@ -385,7 +385,7 @@
         window.MazeInterface.resetAllDoors();
 
         if (user.movementMode === 'normal' && state.activeHallway) {
-            user.nodeIndex = snapToNearestNodeIndex(user.forwardOffset, state.activeHallway);
+            user.nodeIndex = window.MazeInterface.snapToNearestNodeIndex(user.forwardOffset, state.activeHallway);
             user.forwardOffset = state.activeHallway.nodes[user.nodeIndex];
             //window.MazeInterface.resetAllDoors(state.activeHallway);
         }
@@ -405,16 +405,4 @@
         window.MazeInterface.updateUserDirection(targetDirection); 
     };
 
-    function snapToNearestNodeIndex(offset, hallwayModel) {
-        let closestIdx = 0;
-        let minDiff = Math.abs(offset - hallwayModel.nodes[0]);
-        for (let i = 1; i < hallwayModel.nodes.length; i++) {
-            let diff = Math.abs(offset - hallwayModel.nodes[i]);
-            if (diff < minDiff) {
-                minDiff = diff;
-                closestIdx = i;
-            }
-        }
-        return closestIdx;
-    }
 })();

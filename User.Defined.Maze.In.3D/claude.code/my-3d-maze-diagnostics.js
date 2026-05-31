@@ -24,8 +24,6 @@ window.My3dMazeDiagnostics = {
     _ballSeq:       0
 };
 
-window.My3dMazeAppState.user.relativeFacingIndex = 0; // Always starts at 0 (UP / ▲)
-
 
 /**
  * Primary Facade Entry Point.
@@ -124,12 +122,8 @@ window.My3dMazeDiagnostics.logHistoryEvent = function(symbol) {
         chain.shift();
     }
 
-    // =========================================================================
-    // LIVE UI PANEL COUNTER UPDATE HOOK
-    // =========================================================================
-    const counterEl = document.getElementById('historyCounter');
-    if (counterEl) {
-        counterEl.textContent = `(${chain.length}/${HISTORY_CHAIN_LENGTH})`;
+    if (typeof window.My3dMazeDiagnostics.onHistoryUpdate === 'function') {
+        window.My3dMazeDiagnostics.onHistoryUpdate(chain.length, HISTORY_CHAIN_LENGTH);
     }
 };
 
@@ -331,8 +325,9 @@ window.My3dMazeDiagnostics.logBallEvent = function(evt, loc, detail) {
     diags.ballEventLog.push(line);
     if (diags.ballEventLog.length > BALL_EVENT_MAX) diags.ballEventLog.shift();
 
-    const el = document.getElementById('ballHistoryCounter');
-    if (el) el.textContent = `(${diags.ballEventLog.length}/${BALL_EVENT_MAX})`;
+    if (typeof window.My3dMazeDiagnostics.onBallUpdate === 'function') {
+        window.My3dMazeDiagnostics.onBallUpdate(diags.ballEventLog.length, BALL_EVENT_MAX);
+    }
 };
 
 /**
