@@ -315,11 +315,10 @@ function drawMainHallwaySideView(ctx, canvas, hallwayData, offset) {
 }
 
 function drawRollingBallInPerspective(ctx, canvas, offset) {
-    const state = window.My3dMazeAppState;
-    if (!state || !state.rollingBall) return;
-    if (!state.activeHallway || state.rollingBall.hallwayId !== state.activeHallway.id) return;
-
-    const ball = state.rollingBall;
+    const ball = window.MazeInterface.getRollingBall();
+    if (!ball) return;
+    const activeHallway = window.MazeInterface.getTrueActiveHallway();
+    if (!activeHallway || ball.hallwayId !== activeHallway.id) return;
     const ballZ = ball.offset - offset;
     if (ballZ <= 0.2) return;
 
@@ -532,8 +531,8 @@ function drawInterconnectingPerspective(ctx, canvas, currentUser) {
         }
 
         // --- RENDER DYNAMIC SMOKE PARTICLES IF DOOR OPEN ---
-        if (openStatus > 0 && window.My3dMazeAppState.smokeParticles) {
-            window.My3dMazeAppState.smokeParticles.forEach(p => {
+        if (openStatus > 0 && window.MazeInterface.getSmokeParticles()) {
+            window.MazeInterface.getSmokeParticles().forEach(p => {
                 // Map normalized 0-1 properties back to absolute pixel values
                 const px = doorX + (p.x * doorW);
                 const py = doorY + (p.y * doorH);

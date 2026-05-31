@@ -18,7 +18,10 @@ window.My3dMazeDiagnostics = {
         label: "Bucket B",
         snapshot: null
     },
-    historyChain: []
+    historyChain: [],
+    ballEventLog:   [],
+    _ballSpawnTime: null,
+    _ballSeq:       0
 };
 
 window.My3dMazeAppState.user.relativeFacingIndex = 0; // Always starts at 0 (UP / ▲)
@@ -294,4 +297,51 @@ window.My3dMazeDiagnostics.getMazeMapDiagram = function() {
     lines.push('');
     lines.push('  ● closed  ○ open  P player  B ball  * both  ★ active  | tunnel');
     return lines.join('\n');
+};
+
+// =========================================================================
+// BALL TRAVEL HISTORY LOG
+// =========================================================================
+
+const BALL_EVENT_MAX = 500;
+
+/**
+ * Appends one terse event line to the ball travel log.
+ * @param {string} evt    3-char code: SPN BNC STP ENT CHP ARV ABO SEE COI KIL
+ * @param {string} loc    location string, e.g. "H1:gx3" or "H1→H2 gx3"
+ * @param {string} detail free-form tail: direction, speed, delta, flags
+ */
+window.My3dMazeDiagnostics.logBallEvent = function(evt, loc, detail) {
+    const diags = window.My3dMazeDiagnostics;
+    const now   = Date.now();
+
+    if (evt === 'SPN') {
+        diags._ballSpawnTime = now;
+        diags._ballSeq       = 0;
+    }
+
+    const tSec = diags._ballSpawnTime
+        ? ((now - diags._ballSpawnTime) / 1000).toFixed(3)
+        : '?.???';
+
+    diags._ballSeq++;
+    const seq  = String(diags._ballSeq).padStart(3, '0');
+    const line = `${seq}  ${String(tSec).padStart(7)}s  ${evt.padEnd(3)}  ${(loc || '').padEnd(18)} ${detail || ''}`.trimEnd();
+
+    diags.ballEventLog.push(line);
+    if (diags.ballEventLog.length > BALL_EVENT_MAX) diags.ballEventLog.shift();
+
+    const el = document.getElementById('ballHistoryCounter');
+    if (el) el.textContent = `(${diags.ballEventLog.length}/${BALL_EVENT_MAX})`;
+};
+
+/**
+ * Returns the full formatted ball history string for display or copy.
+ */
+window.My3dMazeDiagnostics.getBallHistoryText = function() {
+    const log = window.My3dMazeDiagnostics.ballEventLog;
+    if (!log || log.length === 0) return 'No ball events recorded yet. Spawn the ball to begin.';
+    const header = '#    T(s)       EVT  LOC                DETAIL';
+    const sep    = '─'.repeat(header.length);
+    return [header, sep, ...log].join('\n');
 };

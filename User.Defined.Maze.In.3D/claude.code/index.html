@@ -89,6 +89,21 @@
     <div class="panel-content" id="mapPanelContent" style="font-family: monospace; white-space: pre;"></div>
 </div>
 
+<div class="diagnostic-modal-panel" id="ballOverlay" tabindex="0">
+    <div class="panel-header">
+        <div style="display: flex; gap: 8px; align-items: baseline;">
+            <span>Ball Travel History</span>
+            <span id="ballHistoryCounter" style="font-size: 11px; font-weight: normal; color: #888; font-family: monospace;"></span>
+        </div>
+        <button class="panel-copy-btn" id="copyBallBtn">Copy All</button>
+    </div>
+    <div class="history-legend" style="font-size: 11px; line-height: 1.4; color: #aaa; background: #222; padding: 6px 10px; border-bottom: 1px solid #444; margin-bottom: 6px; user-select: none;">
+        <strong>EVENTS:</strong> SPN spawn &nbsp; BNC wall-bounce &nbsp; STP wait-at-door &nbsp; ENT enter-tunnel &nbsp; CHP chain-hop &nbsp; ARV arrive &nbsp; ABO timeout-give-up &nbsp; SEE same-space-as-player &nbsp; COI position-overlap &nbsp; KIL destroyed<br>
+        <strong>LOC:</strong> H=hallway &nbsp; gx=global-column &nbsp; near/far=walls &nbsp; TUN=tunnel &nbsp; Δ=distance &nbsp; !KIL=overlap without collision
+    </div>
+    <div class="panel-content" id="ballPanelContent" style="font-family: monospace; white-space: pre; font-size: 11px;"></div>
+</div>
+
         <canvas id="myCanvas"></canvas>
 
         <div class="controls-container">
@@ -97,7 +112,7 @@
             <button class="menu-btn" id="stateToggleBtn" title="Toggle State Monitor">S</button>
             <button class="menu-btn" id="historyToggleBtn" title="Toggle History Tracker">H</button>
             <button class="menu-btn" id="mapToggleBtn" title="Toggle Maze Map">M</button>
-            <button class="menu-btn" id="bToggleBtn" title="">B</button>
+            <button class="menu-btn" id="bToggleBtn" title="Toggle Ball Travel History">B</button>
         </div>
     </div>
 

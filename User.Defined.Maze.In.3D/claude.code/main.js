@@ -23,6 +23,7 @@ const bToggleBtn = document.getElementById('bToggleBtn');
 const stateOverlay = document.getElementById('stateOverlay');
 const historyOverlay = document.getElementById('historyOverlay');
 const mapOverlay = document.getElementById('mapOverlay');
+const ballOverlay = document.getElementById('ballOverlay');
 
 // Interactive Dragging Core UI State Trackers
 let isDraggingGrid = false;
@@ -454,6 +455,7 @@ stateToggleBtn.addEventListener('click', () => {
   } else {
     historyOverlay.style.display = 'none';
     mapOverlay.style.display = 'none';
+    ballOverlay.style.display = 'none';
     const contentArea = document.getElementById('statePanelContent');
     if (contentArea && typeof window.My3dMazeDiagnostics.getSerializedStateData === 'function') {
       contentArea.textContent = window.My3dMazeDiagnostics.getSerializedStateData();
@@ -469,6 +471,7 @@ historyToggleBtn.addEventListener('click', () => {
   } else {
     stateOverlay.style.display = 'none';
     mapOverlay.style.display = 'none';
+    ballOverlay.style.display = 'none';
     historyOverlay.style.display = 'flex';
 
     if (window.My3dMazeDiagnostics && Array.isArray(window.My3dMazeDiagnostics.historyChain)) {
@@ -488,6 +491,7 @@ mapToggleBtn.addEventListener('click', () => {
   } else {
     stateOverlay.style.display = 'none';
     historyOverlay.style.display = 'none';
+    ballOverlay.style.display = 'none';
     const contentArea = document.getElementById('mapPanelContent');
     if (contentArea && typeof window.My3dMazeDiagnostics.getMazeMapDiagram === 'function') {
       contentArea.textContent = window.My3dMazeDiagnostics.getMazeMapDiagram();
@@ -496,8 +500,20 @@ mapToggleBtn.addEventListener('click', () => {
   }
 });
 
+// Toggle Ball History Overlay
 bToggleBtn.addEventListener('click', () => {
-  // reserved
+  if (ballOverlay.style.display === 'flex') {
+    ballOverlay.style.display = 'none';
+  } else {
+    stateOverlay.style.display = 'none';
+    historyOverlay.style.display = 'none';
+    mapOverlay.style.display = 'none';
+    const contentArea = document.getElementById('ballPanelContent');
+    if (contentArea && typeof window.My3dMazeDiagnostics.getBallHistoryText === 'function') {
+      contentArea.textContent = window.My3dMazeDiagnostics.getBallHistoryText();
+    }
+    ballOverlay.style.display = 'flex';
+  }
 });
 
 // Clipboard functionality for State Overlay panel (Scrapes literal visible UI text)
@@ -559,6 +575,18 @@ document.getElementById('copyMapBtn').addEventListener('click', (e) => {
       .catch(err => { console.error("Could not copy map:", err); alert("Clipboard error. Check browser console."); });
   } else {
     alert("Error: Map panel content element could not be found.");
+  }
+});
+
+document.getElementById('copyBallBtn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const contentArea = document.getElementById('ballPanelContent');
+  if (contentArea) {
+    navigator.clipboard.writeText(contentArea.textContent)
+      .then(() => { alert("Ball history copied to clipboard."); })
+      .catch(err => { console.error("Could not copy ball history:", err); alert("Clipboard error. Check browser console."); });
+  } else {
+    alert("Error: Ball history panel content element could not be found.");
   }
 });
 

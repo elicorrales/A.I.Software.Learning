@@ -853,5 +853,13 @@ window.MazeInterface = {
   updateUserDirection: updateUserDirection,
   initializeStartupDirection: initializeStartupDirection,
   isTunnelTerminalVoid: isTunnelTerminalVoid,
-  setDoorStateImmediate: setDoorStateImmediate
+  setDoorStateImmediate: setDoorStateImmediate,
+  getRollingBall: function() {
+    const state = window.My3dMazeAppState;
+    return state ? state.rollingBall : null;
+  },
+  getSmokeParticles: function() {
+    const state = window.My3dMazeAppState;
+    return state ? state.smokeParticles : null;
+  }
 };
