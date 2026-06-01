@@ -145,35 +145,40 @@
       return;
     }
 
-    const fromHallway    = WorldGrid.mainHallways[currentLink.fromHallwayIndex];
-    const exitGlobalX    = (currentLink.chainGlobalX !== undefined)
+    const fromHallway = WorldGrid.mainHallways[currentLink.fromHallwayIndex];
+    const exitGlobalX = (currentLink.chainGlobalX !== undefined)
       ? currentLink.chainGlobalX
       : (fromHallway ? fromHallway.startOffsetFromS + currentLink.doorIndex : 0);
-    const rawDoorIdx     = Math.round(exitGlobalX - destHallway.startOffsetFromS);
-    const localDoorIdx   = Math.max(0, Math.min(4, rawDoorIdx));
-    const doorNodeOffset = (destHallway.nodes && destHallway.nodes[localDoorIdx * 2] !== undefined)
-      ? destHallway.nodes[localDoorIdx * 2]
-      : 0;
+    const rawDoorIdx  = Math.round(exitGlobalX - destHallway.startOffsetFromS);
 
-    // Find next chain segment (prefer direct forwardChainIndex pointer)
+    // Find next chain segment via explicit forwardChainIndex only.
+    // Verify the candidate actually originates from destHallway — a mismatched pointer
+    // would send the ball into a tunnel that doesn't connect from here.
     let nextLink = null;
     if (currentLink.forwardChainIndex !== undefined && currentLink.forwardChainIndex >= 0) {
-      nextLink = WorldGrid.interconnectingHallways[currentLink.forwardChainIndex] || null;
-    }
-    if (!nextLink) {
-      nextLink = WorldGrid.interconnectingHallways.find(c => {
-        if (c === currentLink) return false;
-        const cFrom   = WorldGrid.mainHallways[c.fromHallwayIndex];
-        if (!cFrom) return false;
-        const cGlobalX = (c.chainGlobalX !== undefined) ? c.chainGlobalX : cFrom.startOffsetFromS + c.doorIndex;
-        if (cGlobalX !== exitGlobalX) return false;
-        return c.fromHallwayIndex === destIdx || c.toHallwayIndex === destIdx;
-      }) || null;
+      const candidate = WorldGrid.interconnectingHallways[currentLink.forwardChainIndex] || null;
+      if (candidate && candidate.fromHallwayIndex === destIdx) {
+        nextLink = candidate;
+      }
     }
 
     // Close the exit door behind the ball
     currentLink.exitDoorTarget     = 0;
     currentLink.exitDoorOpenStatus = 0;
+
+    // Final-destination guard: the shaft must exit through a real door slot (rawDoorIdx 0–4).
+    // Intermediate chain-hop hallways are exempt — the shaft passes through their walls.
+    // If the column doesn't land on an actual door in the destination hallway, refuse entry.
+    if (!nextLink && (rawDoorIdx < 0 || rawDoorIdx > 4)) {
+      _logBall('KIL', `TUN:gx${exitGlobalX}`, `no door in ${destHallway.id} (col ${rawDoorIdx})`);
+      destroy();
+      return;
+    }
+
+    const localDoorIdx   = Math.max(0, Math.min(4, rawDoorIdx));
+    const doorNodeOffset = (destHallway.nodes && destHallway.nodes[localDoorIdx * 2] !== undefined)
+      ? destHallway.nodes[localDoorIdx * 2]
+      : 0;
 
     ball.hallwayId = destHallway.id;
     ball.offset    = doorNodeOffset;
@@ -327,8 +332,10 @@
         _enterTunnel(ball, link, hallway, di);
       } else {
         // Closed door with tunnel — stop and wait (ball will open it next frame)
-        const gx = hallway.startOffsetFromS + di;
+        const gx    = hallway.startOffsetFromS + di;
+        const destHw = WorldGrid.mainHallways[link.toHallwayIndex];
         _logBall('STP', `${hallway.id}:gx${gx}`, '●');
+        if (window.BallMemory && destHw) window.BallMemory.recordBlock(hallway.id, gx, destHw.id);
         ball.waitingAtNode = di;
         ball.waitFrames    = 0;
       }
@@ -354,6 +361,7 @@
     const destId      = destHallway ? destHallway.id : '?';
     const gx          = hallway.startOffsetFromS + di;
     _logBall('ENT', `${hallway.id}→${destId} gx${gx}`, `○ ${ball.waitFrames}f`);
+    if (window.BallMemory && destHallway) window.BallMemory.recordEntry(hallway.id, gx, destId);
     hallway.doorTargets[di]     = 0;
     hallway.doorOpenStatus[di]  = 0;
     link.entranceDoorTarget     = 0;

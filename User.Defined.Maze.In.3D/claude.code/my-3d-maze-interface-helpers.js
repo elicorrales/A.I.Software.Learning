@@ -965,6 +965,64 @@ function createChainedTunnelFromDeadEnd() {
   }
 }
 
+// =========================================================================
+// BALL SESSION MEMORY ACCESSORS
+// =========================================================================
+
+function _ballMemKey(hallwayId, gx, toHallwayId) {
+  return `${hallwayId}:gx${gx}→${toHallwayId}`;
+}
+
+function recordBallEntry(hallwayId, gx, toHallwayId) {
+  const state = window.My3dMazeAppState;
+  if (!state || !state.ballMemory) return;
+  const k = _ballMemKey(hallwayId, gx, toHallwayId);
+  state.ballMemory.opened[k] = (state.ballMemory.opened[k] || 0) + 1;
+}
+
+function recordBallBlock(hallwayId, gx, toHallwayId) {
+  const state = window.My3dMazeAppState;
+  if (!state || !state.ballMemory) return;
+  const k = _ballMemKey(hallwayId, gx, toHallwayId);
+  state.ballMemory.blocked[k] = (state.ballMemory.blocked[k] || 0) + 1;
+}
+
+function getBallEntryCount(hallwayId, gx, toHallwayId) {
+  const state = window.My3dMazeAppState;
+  if (!state || !state.ballMemory) return 0;
+  return state.ballMemory.opened[_ballMemKey(hallwayId, gx, toHallwayId)] || 0;
+}
+
+function getBallBlockCount(hallwayId, gx, toHallwayId) {
+  const state = window.My3dMazeAppState;
+  if (!state || !state.ballMemory) return 0;
+  return state.ballMemory.blocked[_ballMemKey(hallwayId, gx, toHallwayId)] || 0;
+}
+
+function getBallMemorySnapshot() {
+  const state = window.My3dMazeAppState;
+  if (!state || !state.ballMemory) return { opened: {}, blocked: {} };
+  return {
+    opened:  Object.assign({}, state.ballMemory.opened),
+    blocked: Object.assign({}, state.ballMemory.blocked)
+  };
+}
+
+function getBallMemorySummaryText() {
+  const state = window.My3dMazeAppState;
+  if (!state || !state.ballMemory) return '(no ball memory)';
+  const allKeys = new Set([
+    ...Object.keys(state.ballMemory.opened),
+    ...Object.keys(state.ballMemory.blocked)
+  ]);
+  if (allKeys.size === 0) return '(no door interactions recorded yet)';
+  return Array.from(allKeys).sort().map(k => {
+    const o = state.ballMemory.opened[k]  || 0;
+    const b = state.ballMemory.blocked[k] || 0;
+    return `${k}  ✓${o}  ✗${b}`;
+  }).join('\n');
+}
+
 // Global window exposure updated with the newly established callers!
 window.MazeInterface = {
   isTunnel: isTunnelStructure,
@@ -1008,5 +1066,11 @@ window.MazeInterface = {
   initializeAllMainHallways: initializeAllMainHallways,
   createInterconnectingHallway: createInterconnectingHallway,
   createChainedTunnelFromDeadEnd: createChainedTunnelFromDeadEnd,
-  snapToNearestNodeIndex: snapToNearestNodeIndex
+  snapToNearestNodeIndex: snapToNearestNodeIndex,
+  recordBallEntry: recordBallEntry,
+  recordBallBlock: recordBallBlock,
+  getBallEntryCount: getBallEntryCount,
+  getBallBlockCount: getBallBlockCount,
+  getBallMemorySnapshot: getBallMemorySnapshot,
+  getBallMemorySummaryText: getBallMemorySummaryText
 };

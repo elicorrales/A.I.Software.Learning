@@ -38,6 +38,14 @@ window.My3dMazeAppState = {
 
   rollingBall: null,
 
+  // Ball session memory — persists across all spawns for the full session.
+  // Max ~280 entries (10 doors × 2 directions × 7 halls × opened+blocked).
+  // Written only via MazeInterface — never touched directly by upper layers.
+  ballMemory: {
+    opened:  {},
+    blocked: {}
+  },
+
   cheatMapVisible: false,
 
   // UI Metrics
