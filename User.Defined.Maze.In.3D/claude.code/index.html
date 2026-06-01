@@ -83,18 +83,32 @@
 
 <div class="diagnostic-modal-panel" id="mapOverlay" tabindex="0">
     <div class="panel-header">
-        <span>Maze Map</span>
+        <div style="display: flex; gap: 8px; align-items: baseline;">
+            <span class="zoom-target-title">Maze Map</span>
+        </div>
+
+        <div class="panel-zoom-controls" style="display: flex; gap: 8px; align-items: center; user-select: none;">
+            <button class="panel-copy-btn" id="zoomOutMapBtn" title="Decrease Font Size" style="padding: 4px 8px;">🔍⁻</button>
+            <button class="panel-copy-btn" id="zoomInMapBtn" title="Increase Font Size" style="padding: 4px 8px;">🔍⁺</button>
+        </div>
+
         <button class="panel-copy-btn" id="copyMapBtn">Copy All</button>
     </div>
-    <div class="panel-content" id="mapPanelContent" style="font-family: monospace; white-space: pre;"></div>
+    <div class="panel-content" id="mapPanelContent" style="font-family: monospace; white-space: pre; font-size: 11px;"></div>
 </div>
 
 <div class="diagnostic-modal-panel" id="ballOverlay" tabindex="0">
     <div class="panel-header">
         <div style="display: flex; gap: 8px; align-items: baseline;">
-            <span>Ball Travel History</span>
+            <span class="zoom-target-title">Ball Travel History</span>
             <span id="ballHistoryCounter" style="font-size: 11px; font-weight: normal; color: #888; font-family: monospace;"></span>
         </div>
+
+        <div class="panel-zoom-controls" style="display: flex; gap: 8px; align-items: center; user-select: none;">
+            <button class="panel-copy-btn" id="zoomOutBallBtn" title="Decrease Font Size" style="padding: 4px 8px;">🔍⁻</button>
+            <button class="panel-copy-btn" id="zoomInBallBtn" title="Increase Font Size" style="padding: 4px 8px;">🔍⁺</button>
+        </div>
+
         <button class="panel-copy-btn" id="copyBallBtn">Copy All</button>
     </div>
     <div class="history-legend" style="font-size: 11px; line-height: 1.4; color: #aaa; background: #222; padding: 6px 10px; border-bottom: 1px solid #444; margin-bottom: 6px; user-select: none;">

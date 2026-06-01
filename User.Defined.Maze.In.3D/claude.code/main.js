@@ -517,5 +517,103 @@ document.getElementById('copyBallBtn').addEventListener('click', (e) => {
     });
 })();
 
+// =========================================================================
+// MAZE MAP PANEL DYNAMIC FONT ZOOM ENGINE
+// =========================================================================
+(function() {
+    let currentMapZoomScale = 1.0;
+    const ZOOM_STEP = 0.1;
+    const MIN_ZOOM_SCALE = 0.7;
+    const MAX_ZOOM_SCALE = 2.5;
+
+    const BASE_SIZES = {
+        title:   14,
+        buttons: 12,
+        content: 11
+    };
+
+    const mapOverlayEl = document.getElementById('mapOverlay');
+
+    function applyMapPanelFontScale() {
+        if (!mapOverlayEl) return;
+
+        const titleSpan     = mapOverlayEl.querySelector('.zoom-target-title');
+        const actionButtons = mapOverlayEl.querySelectorAll('.panel-copy-btn');
+        const mapContent    = document.getElementById('mapPanelContent');
+
+        if (titleSpan)  titleSpan.style.fontSize  = (BASE_SIZES.title   * currentMapZoomScale) + 'px';
+        actionButtons.forEach(btn => { btn.style.fontSize = (BASE_SIZES.buttons * currentMapZoomScale) + 'px'; });
+        if (mapContent) mapContent.style.fontSize  = (BASE_SIZES.content * currentMapZoomScale) + 'px';
+    }
+
+    document.getElementById('zoomInMapBtn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (currentMapZoomScale < MAX_ZOOM_SCALE) {
+            currentMapZoomScale += ZOOM_STEP;
+            applyMapPanelFontScale();
+        }
+    });
+
+    document.getElementById('zoomOutMapBtn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (currentMapZoomScale > MIN_ZOOM_SCALE) {
+            currentMapZoomScale -= ZOOM_STEP;
+            applyMapPanelFontScale();
+        }
+    });
+})();
+
+// =========================================================================
+// BALL TRAVEL HISTORY PANEL DYNAMIC FONT ZOOM ENGINE
+// =========================================================================
+(function() {
+    let currentBallZoomScale = 1.0;
+    const ZOOM_STEP = 0.1;
+    const MIN_ZOOM_SCALE = 0.7;
+    const MAX_ZOOM_SCALE = 2.5;
+
+    const BASE_SIZES = {
+        title:   14,
+        buttons: 12,
+        legend:  11,
+        counter: 11,
+        content: 11
+    };
+
+    const ballOverlayEl = document.getElementById('ballOverlay');
+
+    function applyBallPanelFontScale() {
+        if (!ballOverlayEl) return;
+
+        const titleSpan      = ballOverlayEl.querySelector('.zoom-target-title');
+        const actionButtons  = ballOverlayEl.querySelectorAll('.panel-copy-btn');
+        const legendContainer = ballOverlayEl.querySelector('.history-legend');
+        const ballCounter    = document.getElementById('ballHistoryCounter');
+        const ballContent    = document.getElementById('ballPanelContent');
+
+        if (titleSpan)       titleSpan.style.fontSize       = (BASE_SIZES.title   * currentBallZoomScale) + 'px';
+        actionButtons.forEach(btn => { btn.style.fontSize   = (BASE_SIZES.buttons * currentBallZoomScale) + 'px'; });
+        if (legendContainer) legendContainer.style.fontSize = (BASE_SIZES.legend  * currentBallZoomScale) + 'px';
+        if (ballCounter)     ballCounter.style.fontSize     = (BASE_SIZES.counter * currentBallZoomScale) + 'px';
+        if (ballContent)     ballContent.style.fontSize     = (BASE_SIZES.content * currentBallZoomScale) + 'px';
+    }
+
+    document.getElementById('zoomInBallBtn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (currentBallZoomScale < MAX_ZOOM_SCALE) {
+            currentBallZoomScale += ZOOM_STEP;
+            applyBallPanelFontScale();
+        }
+    });
+
+    document.getElementById('zoomOutBallBtn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (currentBallZoomScale > MIN_ZOOM_SCALE) {
+            currentBallZoomScale -= ZOOM_STEP;
+            applyBallPanelFontScale();
+        }
+    });
+})();
+
 
 window.addEventListener('resize', resizeCanvas);
