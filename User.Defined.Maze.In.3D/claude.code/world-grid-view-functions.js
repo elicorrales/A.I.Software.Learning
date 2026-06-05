@@ -154,8 +154,7 @@ function drawBirdseyeView(minimapCtx, minimapCanvas, worldGrid, activeHallway, u
     // Ball avatar — only when not inside a tunnel (tunnel mode draws after the loop)
     const ball = window.MazeInterface.getRollingBall();
     if (ball && ball.movementMode !== 'tunnel' && ball.hallwayId === hallway.id) {
-      const engineMax = hallway.nodes ? hallway.nodes[hallway.nodes.length - 1] : 5.75;
-      const ballRatio = Math.max(0, Math.min(1, ball.offset / engineMax));
+      const ballRatio  = _ballOffsetToUniformRatio(ball.offset, hallway);
       const mappedBallX = startX + ballRatio * totalVisualLineLength;
       drawMinimapBall(minimapCtx, mappedBallX, hY);
     }
@@ -192,6 +191,22 @@ function drawMinimapBall(ctx, x, y) {
   ctx.beginPath();
   ctx.arc(x, y, 4, 0, Math.PI * 2);
   ctx.stroke();
+}
+
+// Maps ball.offset (nodes space, non-linear 0–5.75) to a 0–1 uniform ratio
+// for 2D rendering, so the ball dot aligns with the evenly-spaced door markers.
+function _ballOffsetToUniformRatio(offset, hallway) {
+  if (!hallway || !hallway.nodes) return 0;
+  const n = [0, 2, 4, 6, 8].map(i => hallway.nodes[i]); // door node offsets
+  if (offset <= n[0]) return 0;
+  if (offset >= n[4]) return 1;
+  for (let i = 0; i < 4; i++) {
+    if (offset >= n[i] && offset <= n[i + 1]) {
+      const t = (offset - n[i]) / (n[i + 1] - n[i]);
+      return (i + t) / 4; // uniform door index (0–4) divided by maxHallwayWidthUnits
+    }
+  }
+  return 1;
 }
 
 /**

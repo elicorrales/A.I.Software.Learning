@@ -1,14 +1,15 @@
 // ball-movement-controller.js
 // =========================================================================
 // BALL AI & KINEMATICS CONTROLLER
+// All world/state queries and mutations go through window.MazeInterface.
 // =========================================================================
 
 (function() {
-  const state     = window.My3dMazeAppState;
-  const WorldGrid = state.WorldGrid;
+  const MI   = window.MazeInterface;
+  const BMem = window.BallMemory;
 
   // -------------------------------------------------------------------------
-  // Diagnostics emit helpers
+  // Diagnostics emit
   // -------------------------------------------------------------------------
 
   function _logBall(evt, loc, detail) {
@@ -17,7 +18,7 @@
     }
   }
 
-  // Returns the gX (global column) nearest to ball.offset within a hallway.
+  // Returns the nearest door gX for a given ball offset within a hallway.
   function _nearestGx(ball, hallway) {
     if (!hallway || !hallway.nodes) return '?';
     let bestDi = 0, diff = Infinity;
@@ -30,29 +31,22 @@
     return hallway.startOffsetFromS + bestDi;
   }
 
-  // Returns the gX of a tunnel link.
-  function _tunnelGx(link) {
-    if (link.chainGlobalX !== undefined) return link.chainGlobalX;
-    const fh = WorldGrid.mainHallways[link.fromHallwayIndex];
-    return fh ? fh.startOffsetFromS + link.doorIndex : link.doorIndex;
-  }
-
   // -------------------------------------------------------------------------
   // Public API
   // -------------------------------------------------------------------------
 
   function update() {
-    const ball = state.rollingBall;
+    const ball = MI.getRollingBall();
     if (!ball) return;
 
-    // Animate this hallway's doors when ball is somewhere the player isn't,
-    // so the ball can open them independently.
+    // Always animate the ball's hallway doors — no active-hallway guard.
+    // The guard caused a gap when getTrueActiveHallway() returned the ball's hall
+    // while state.activeHallway (used by main.js) still pointed elsewhere (e.g.
+    // during a chain hop), leaving the ball's doors animated by nobody.
     if (ball.movementMode === 'hallway') {
-      const ballHallway = WorldGrid.mainHallways.find(h => h.id === ball.hallwayId);
-      if (ballHallway && ballHallway !== state.activeHallway) {
-        for (let i = 0; i < 5; i++) {
-          window.MazeInterface.stepAnimation(ballHallway, i, 0.06);
-        }
+      const ballHallway = MI.getHallwayById(ball.hallwayId);
+      if (ballHallway) {
+        for (let i = 0; i < 5; i++) MI.stepAnimation(ballHallway, i, 0.06);
       }
     }
 
@@ -67,6 +61,7 @@
     if (ball._seenHallwayId === undefined)  ball._seenHallwayId = null;
     if (ball._seenTunnelIdx === undefined)  ball._seenTunnelIdx = -1;
     if (ball._coiCooldown === undefined)    ball._coiCooldown = 0;
+    if (ball.tunnelReverse === undefined)   ball.tunnelReverse = false;
 
     if (ball.movementMode === 'tunnel' && ball.tunnelLink) {
       _updateTunnel(ball);
@@ -76,32 +71,18 @@
   }
 
   function spawn(spawnHallway) {
-    if (state.rollingBall) return;
     if (!spawnHallway) return;
-    state.rollingBall = {
-      offset:          spawnHallway.baseDistances[spawnHallway.baseDistances.length - 1],
-      speed:           state.BASE_SPEED,
-      rotation:        0,
-      hallwayId:       spawnHallway.id,
-      direction:       -1,
-      targetDoorIndex: null,
-      movementMode:    'hallway',
-      tunnelLink:      null,
-      tunnelProgress:  0,
-      waitingAtNode:   null,
-      waitFrames:      0,
-      _seenHallwayId:  null,
-      _seenTunnelIdx:  -1,
-      _coiCooldown:    0,
-    };
-    const gx = _nearestGx(state.rollingBall, spawnHallway);
-    _logBall('SPN', `${spawnHallway.id}:gx${gx}`, `← v=${state.BASE_SPEED.toFixed(3)}`);
+    MI.spawnBall(spawnHallway);
+    const ball = MI.getRollingBall();
+    if (!ball) return;
+    const gx = _nearestGx(ball, spawnHallway);
+    _logBall('SPN', `${spawnHallway.id}:gx${gx}`, `← v=${ball.speed.toFixed(3)}`);
     if (window.MazeAudioController) window.MazeAudioController.startBallRollingSound();
   }
 
   function destroy() {
     if (window.MazeAudioController) window.MazeAudioController.stopBallRollingSound();
-    state.rollingBall = null;
+    MI.destroyBall();
   }
 
   // -------------------------------------------------------------------------
@@ -112,21 +93,19 @@
     ball.tunnelProgress += ball.speed;
     ball.rotation       += ball.speed * 18;
 
-    // SEE / COI checks while traversing the tunnel
-    const user = state.user;
-    if (user.movementMode === 'interconnecting') {
-      const ballTunnelIdx = WorldGrid.interconnectingHallways.indexOf(ball.tunnelLink);
-      if (ballTunnelIdx === user.activeTunnelIndex) {
-        const gx = _tunnelGx(ball.tunnelLink);
+    // SEE / COI checks while traversing
+    if (MI.getUserMovementMode() === 'interconnecting') {
+      const ballTunnelIdx = MI.getTunnelIndex(ball.tunnelLink);
+      if (ballTunnelIdx === MI.getUserActiveTunnelIndex()) {
+        const gx = MI.getTunnelGlobalX(ball.tunnelLink);
         if (ball._seenTunnelIdx !== ballTunnelIdx) {
-          const pd = Math.abs(ball.tunnelProgress - user.interconnectingProgress).toFixed(1);
+          const pd = Math.abs(ball.tunnelProgress - MI.getUserInterconnectingProgress()).toFixed(1);
           _logBall('SEE', `TUN:gx${gx}`, `player Δ=${pd} (progress)`);
           ball._seenTunnelIdx = ballTunnelIdx;
         }
-        const pd = Math.abs(ball.tunnelProgress - user.interconnectingProgress);
+        const pd = Math.abs(ball.tunnelProgress - MI.getUserInterconnectingProgress());
         if (pd <= 0.5 && ball._coiCooldown <= 0) {
-          const gx2 = _tunnelGx(ball.tunnelLink);
-          _logBall('COI', `TUN:gx${gx2}`, `Δ=${pd.toFixed(2)} !KIL`);
+          _logBall('COI', `TUN:gx${gx}`, `Δ=${pd.toFixed(2)} !KIL`);
           ball._coiCooldown = 120;
         }
       }
@@ -136,39 +115,33 @@
     if (ball.tunnelProgress < 3.2) return;
 
     const currentLink = ball.tunnelLink;
-    const destIdx     = currentLink.toHallwayIndex;
-    const destHallway = WorldGrid.mainHallways[destIdx];
+    const reverse     = ball.tunnelReverse;
+
+    // Destination: forward → toHallwayIndex, reverse → fromHallwayIndex
+    const destIdx     = reverse ? currentLink.fromHallwayIndex : currentLink.toHallwayIndex;
+    const destHallway = MI.getHallwayByIndex(destIdx);
 
     if (!destHallway) {
-      _logBall('KIL', `TUN:gx${_tunnelGx(currentLink)}`, 'missing dest hallway');
+      _logBall('KIL', `TUN:gx${MI.getTunnelGlobalX(currentLink)}`, 'missing dest hallway');
       destroy();
       return;
     }
 
-    const fromHallway = WorldGrid.mainHallways[currentLink.fromHallwayIndex];
-    const exitGlobalX = (currentLink.chainGlobalX !== undefined)
-      ? currentLink.chainGlobalX
-      : (fromHallway ? fromHallway.startOffsetFromS + currentLink.doorIndex : 0);
+    const exitGlobalX = MI.getTunnelGlobalX(currentLink);
     const rawDoorIdx  = Math.round(exitGlobalX - destHallway.startOffsetFromS);
 
-    // Find next chain segment via explicit forwardChainIndex only.
-    // Verify the candidate actually originates from destHallway — a mismatched pointer
-    // would send the ball into a tunnel that doesn't connect from here.
+    // forwardChainIndex only valid when traversing forward
     let nextLink = null;
-    if (currentLink.forwardChainIndex !== undefined && currentLink.forwardChainIndex >= 0) {
-      const candidate = WorldGrid.interconnectingHallways[currentLink.forwardChainIndex] || null;
-      if (candidate && candidate.fromHallwayIndex === destIdx) {
+    if (!reverse && currentLink.forwardChainIndex !== undefined && currentLink.forwardChainIndex >= 0) {
+      const candidate = MI.getTunnelByIndex(currentLink.forwardChainIndex);
+      if (candidate && candidate.fromHallwayIndex === currentLink.toHallwayIndex) {
         nextLink = candidate;
       }
     }
 
-    // Close the exit door behind the ball
-    currentLink.exitDoorTarget     = 0;
-    currentLink.exitDoorOpenStatus = 0;
+    // Close the door we are exiting through
+    MI.setDoorStateImmediate(currentLink, reverse ? 'entrance' : 'exit', false);
 
-    // Final-destination guard: the shaft must exit through a real door slot (rawDoorIdx 0–4).
-    // Intermediate chain-hop hallways are exempt — the shaft passes through their walls.
-    // If the column doesn't land on an actual door in the destination hallway, refuse entry.
     if (!nextLink && (rawDoorIdx < 0 || rawDoorIdx > 4)) {
       _logBall('KIL', `TUN:gx${exitGlobalX}`, `no door in ${destHallway.id} (col ${rawDoorIdx})`);
       destroy();
@@ -184,23 +157,19 @@
     ball.offset    = doorNodeOffset;
 
     if (nextLink) {
-      // Chain-hop — stay in tunnel mode, enter next segment immediately
-      const gx = exitGlobalX;
-      _logBall('CHP', `${destHallway.id}:gx${gx}`, 'chain');
+      _logBall('CHP', `${destHallway.id}:gx${exitGlobalX}`, 'chain');
       ball.tunnelLink     = nextLink;
       ball.tunnelProgress = 0;
+      ball.tunnelReverse  = false; // chain hops always go forward
       ball._seenTunnelIdx = -1;
     } else {
-      // Arrived in destination hallway — close the landing door too
-      if (destHallway.doorOpenStatus) {
-        destHallway.doorOpenStatus[localDoorIdx] = 0;
-        destHallway.doorTargets[localDoorIdx]    = 0;
-      }
+      MI.setDoorStateImmediate(destHallway, localDoorIdx, false);
       const arrDir = ball.direction === -1 ? '←' : '→';
       _logBall('ARV', `${destHallway.id}:gx${exitGlobalX}`, `${arrDir} v=${ball.speed.toFixed(3)}`);
       ball.movementMode    = 'hallway';
       ball.tunnelLink      = null;
       ball.tunnelProgress  = 0;
+      ball.tunnelReverse   = false;
       ball.targetDoorIndex = null;
       ball.waitingAtNode   = null;
       ball.waitFrames      = 0;
@@ -215,18 +184,18 @@
   // -------------------------------------------------------------------------
 
   function _updateHallway(ball) {
-    const currentHallway = WorldGrid.mainHallways.find(h => h.id === ball.hallwayId);
+    const currentHallway = MI.getHallwayById(ball.hallwayId);
     if (!currentHallway) { destroy(); return; }
 
-    const hallIdx      = WorldGrid.mainHallways.findIndex(h => h.id === ball.hallwayId);
-    const farWall      = currentHallway.baseDistances[currentHallway.baseDistances.length - 1];
-    const WAIT_TIMEOUT = 600; // ~10 s at 60 fps
-    const user         = state.user;
+    const hallIdx      = MI.getHallwayIndex(ball.hallwayId);
+    const farWall      = currentHallway.nodes[currentHallway.nodes.length - 1];
+    const WAIT_TIMEOUT = 600;
 
     // SEE: ball entered the same hallway as the player for the first time this visit
-    const ballInActiveHall = state.activeHallway && ball.hallwayId === state.activeHallway.id;
-    if (ballInActiveHall && user.movementMode !== 'interconnecting' && ball._seenHallwayId !== ball.hallwayId) {
-      const dist = Math.abs(ball.offset - user.forwardOffset).toFixed(1);
+    const activeHallway    = MI.getTrueActiveHallway();
+    const ballInActiveHall = activeHallway && ball.hallwayId === activeHallway.id;
+    if (ballInActiveHall && MI.getUserMovementMode() !== 'interconnecting' && ball._seenHallwayId !== ball.hallwayId) {
+      const dist = Math.abs(ball.offset - MI.getUserForwardOffset()).toFixed(1);
       _logBall('SEE', ball.hallwayId, `player Δ=${dist}`);
       ball._seenHallwayId = ball.hallwayId;
     }
@@ -237,15 +206,13 @@
       _moveAndScanDoors(ball, currentHallway, hallIdx, farWall);
     }
 
-    // Audio — only audible when ball is in the same hallway as the player
-    const ballZ = ball.offset - user.forwardOffset;
-    if (window.MazeAudioController) {
-      window.MazeAudioController.updateBallRollingSoundVolume(ballZ);
-    }
+    // Audio — volume based on distance from player
+    const ballZ = ball.offset - MI.getUserForwardOffset();
+    if (window.MazeAudioController) window.MazeAudioController.updateBallRollingSoundVolume(ballZ);
 
     // COI + KIL: proximity and collision checks
-    if (ballInActiveHall && user.movementMode === 'normal') {
-      const dist = Math.abs(ball.offset - user.forwardOffset);
+    if (ballInActiveHall && MI.getUserMovementMode() === 'normal') {
+      const dist = Math.abs(ball.offset - MI.getUserForwardOffset());
       if (dist <= 0.5 && ball._coiCooldown <= 0) {
         const gx = _nearestGx(ball, currentHallway);
         _logBall('COI', `${ball.hallwayId}:gx${gx}`, `Δ=${dist.toFixed(2)}`);
@@ -255,7 +222,7 @@
         const gx = _nearestGx(ball, currentHallway);
         _logBall('KIL', `${ball.hallwayId}:gx${gx}`, 'player 💥');
         destroy();
-        user.flashFrames = 5;
+        MI.setUserFlashFrames(5);
         return;
       }
     }
@@ -263,35 +230,38 @@
     if (ball._coiCooldown > 0) ball._coiCooldown--;
   }
 
+  // Ball waits at a door node it stopped at, requests it open, and reacts to what it finds.
   function _waitAtDoor(ball, hallway, hallIdx, timeout) {
-    const di   = ball.waitingAtNode;
+    const di = ball.waitingAtNode;
     ball.offset = hallway.nodes[di * 2]; // keep pinned
 
-    const _rawLink = WorldGrid.interconnectingHallways.find(
-      c => c.fromHallwayIndex === hallIdx && c.doorIndex === di
-    );
-    const link = (() => {
-      if (!_rawLink) return null;
-      const _fromHw = WorldGrid.mainHallways[_rawLink.fromHallwayIndex];
-      const _linkGx = _rawLink.chainGlobalX !== undefined
-          ? _rawLink.chainGlobalX
-          : (_fromHw ? _fromHw.startOffsetFromS + _rawLink.doorIndex : _rawLink.doorIndex);
-      return _linkGx === hallway.startOffsetFromS + di ? _rawLink : null;
-    })();
+    // Ball always requests the door open — it has no prior knowledge of what's behind it
+    MI.requestDoorOpen(hallway, di);
 
-    if (link && hallway.doorOpenStatus && hallway.doorOpenStatus[di] > 0.5) {
-      // Door opened — enter and close it behind the ball
-      _enterTunnel(ball, link, hallway, di);
+    if (MI.getOpenStatus(hallway, di) > 0.5) {
+      // Door is open — bidirectional tunnel search, same logic as isSideViewFacingTunnel
+      const gx    = hallway.startOffsetFromS + di;
+      const found = MI.findTunnelAtDoor(hallIdx, gx);
+
+      if (found) {
+        _enterTunnel(ball, found.link, hallway, di, found.reverse);
+      } else {
+        // Empty door — ball learned this leads nowhere
+        _logBall('EMP', `${hallway.id}:gx${gx}`, '○ empty');
+        BMem.recordBlock(hallway.id, gx, null);
+        MI.requestDoorClose(hallway, di);
+        ball.waitingAtNode = null;
+        ball.waitFrames    = 0;
+        // Ball continues in current direction — no reversal needed
+      }
     } else {
-      // Still closed — ball requests the door to open, then waits
-      if (link && hallway.doorTargets) hallway.doorTargets[di] = 1;
+      // Door still closed — keep waiting
       ball.waitFrames++;
       if (ball.waitFrames >= timeout) {
-        // Nobody opened it in time — give up and reverse
-        const newDir = ball.direction === -1 ? 1 : -1;
         const gx     = hallway.startOffsetFromS + di;
-        const dirStr = newDir === 1 ? '→' : '←';
-        _logBall('ABO', `${ball.hallwayId}:gx${gx}`, `${dirStr} ${ball.waitFrames}f`);
+        const newDir = ball.direction === -1 ? 1 : -1;
+        _logBall('ABO', `${hallway.id}:gx${gx}`, `${newDir === 1 ? '→' : '←'} ${ball.waitFrames}f`);
+        MI.requestDoorClose(hallway, di);
         ball.waitingAtNode = null;
         ball.waitFrames    = 0;
         ball.direction     = newDir;
@@ -308,39 +278,35 @@
       const nodeOffset = hallway.nodes[di * 2];
       if (nodeOffset === undefined) continue;
 
-      // Did ball's path cross this door node this frame?
-      const crossed = (ball.direction ===  1 && ball.offset <= nodeOffset && nextOffset >= nodeOffset)
-                   || (ball.direction === -1 && ball.offset >= nodeOffset && nextOffset <= nodeOffset);
+      // Strict < / > prevents re-triggering when ball.offset === nodeOffset after reversal
+      const crossed = (ball.direction ===  1 && ball.offset <  nodeOffset && nextOffset >= nodeOffset)
+                   || (ball.direction === -1 && ball.offset >  nodeOffset && nextOffset <= nodeOffset);
       if (!crossed) continue;
 
-      const link = WorldGrid.interconnectingHallways.find(
-        c => c.fromHallwayIndex === hallIdx && c.doorIndex === di
-      );
-      if (!link) continue; // no tunnel at this node — pass through freely
+      const gx = hallway.startOffsetFromS + di;
 
-      // Reject chain-segment tunnels whose logical gX doesn't match this door's
-      // physical gX. These are shaft pass-throughs — no valid entry from this hallway.
-      const _fromHw = WorldGrid.mainHallways[link.fromHallwayIndex];
-      const _linkGx = link.chainGlobalX !== undefined
-          ? link.chainGlobalX
-          : (_fromHw ? _fromHw.startOffsetFromS + link.doorIndex : link.doorIndex);
-      if (_linkGx !== hallway.startOffsetFromS + di) continue;
+      // Skip doors the ball already opened and found empty
+      if (BMem.getBlockCount(hallway.id, gx, null) > 0) continue;
 
-      ball.offset = nodeOffset; // snap to exact node position
-
-      if (hallway.doorOpenStatus && hallway.doorOpenStatus[di] > 0.5) {
-        _enterTunnel(ball, link, hallway, di);
-      } else {
-        // Closed door with tunnel — stop and wait (ball will open it next frame)
-        const gx    = hallway.startOffsetFromS + di;
-        const destHw = WorldGrid.mainHallways[link.toHallwayIndex];
-        _logBall('STP', `${hallway.id}:gx${gx}`, '●');
-        if (window.BallMemory && destHw) window.BallMemory.recordBlock(hallway.id, gx, destHw.id);
-        ball.waitingAtNode = di;
-        ball.waitFrames    = 0;
+      // If this tunnel entrance was already used, only stop here as a last resort.
+      // If a fresher (unvisited, unblocked) door exists further in the current
+      // direction, skip this one so the ball explores deeper instead of looping.
+      if (BMem.getEntryCount(hallway.id, gx, null) > 0) {
+        let freshAhead = false;
+        for (let di2 = di + ball.direction; di2 >= 0 && di2 < 5; di2 += ball.direction) {
+          const gx2 = hallway.startOffsetFromS + di2;
+          if (BMem.getBlockCount(hallway.id, gx2, null) > 0) continue;
+          if (BMem.getEntryCount(hallway.id, gx2, null) === 0) { freshAhead = true; break; }
+        }
+        if (freshAhead) continue;
       }
+
+      ball.offset    = nodeOffset;
+      _logBall('STP', `${hallway.id}:gx${gx}`, '?');
+      ball.waitingAtNode = di;
+      ball.waitFrames    = 0;
       enteredTunnel = true;
-      break; // process only the first crossed door per frame
+      break;
     }
 
     if (!enteredTunnel) {
@@ -356,23 +322,23 @@
     }
   }
 
-  function _enterTunnel(ball, link, hallway, di) {
-    const destHallway = WorldGrid.mainHallways[link.toHallwayIndex];
+  // reverse=true means ball entered from the tunnel's exit side and will arrive at fromHallwayIndex.
+  function _enterTunnel(ball, link, hallway, di, reverse = false) {
+    const destHallway = MI.getHallwayByIndex(reverse ? link.fromHallwayIndex : link.toHallwayIndex);
     const destId      = destHallway ? destHallway.id : '?';
     const gx          = hallway.startOffsetFromS + di;
     _logBall('ENT', `${hallway.id}→${destId} gx${gx}`, `○ ${ball.waitFrames}f`);
-    if (window.BallMemory && destHallway) window.BallMemory.recordEntry(hallway.id, gx, destId);
-    hallway.doorTargets[di]     = 0;
-    hallway.doorOpenStatus[di]  = 0;
-    link.entranceDoorTarget     = 0;
-    link.entranceDoorOpenStatus = 0;
-    ball.movementMode   = 'tunnel';
-    ball.tunnelLink     = link;
-    ball.tunnelProgress = 0;
-    ball.waitingAtNode  = null;
-    ball.waitFrames     = 0;
-    ball._seenHallwayId = null;
-    ball._seenTunnelIdx = -1;
+    if (BMem && destHallway) BMem.recordEntry(hallway.id, gx, destId);
+    MI.setDoorStateImmediate(hallway, di, false);
+    MI.setDoorStateImmediate(link, reverse ? 'exit' : 'entrance', false);
+    ball.movementMode    = 'tunnel';
+    ball.tunnelLink      = link;
+    ball.tunnelProgress  = 0;
+    ball.tunnelReverse   = reverse;
+    ball.waitingAtNode   = null;
+    ball.waitFrames      = 0;
+    ball._seenHallwayId  = null;
+    ball._seenTunnelIdx  = -1;
   }
 
   window.BallController = { update, spawn, destroy };

@@ -969,6 +969,159 @@ function createChainedTunnelFromDeadEnd() {
 // BALL SESSION MEMORY ACCESSORS
 // =========================================================================
 
+// =========================================================================
+// BALL AI INTERFACE — world queries and mutations for ball-movement-controller
+// All direct state access lives here; the ball controller calls these only.
+// =========================================================================
+
+function getHallwayById(id) {
+  const state = window.My3dMazeAppState;
+  if (!state || !state.WorldGrid) return null;
+  return state.WorldGrid.mainHallways.find(h => h.id === id) || null;
+}
+
+function getHallwayIndex(id) {
+  const state = window.My3dMazeAppState;
+  if (!state || !state.WorldGrid) return -1;
+  return state.WorldGrid.mainHallways.findIndex(h => h.id === id);
+}
+
+function getHallwayByIndex(idx) {
+  const state = window.My3dMazeAppState;
+  if (!state || !state.WorldGrid) return null;
+  return state.WorldGrid.mainHallways[idx] || null;
+}
+
+function getTunnelFrom(hallwayIndex, doorIndex) {
+  const state = window.My3dMazeAppState;
+  if (!state || !state.WorldGrid) return null;
+  return state.WorldGrid.interconnectingHallways.find(
+    c => c.fromHallwayIndex === hallwayIndex && c.doorIndex === doorIndex
+  ) || null;
+}
+
+function getTunnelByIndex(idx) {
+  const state = window.My3dMazeAppState;
+  if (!state || !state.WorldGrid) return null;
+  return state.WorldGrid.interconnectingHallways[idx] || null;
+}
+
+function getTunnelIndex(link) {
+  const state = window.My3dMazeAppState;
+  if (!state || !state.WorldGrid || !link) return -1;
+  return state.WorldGrid.interconnectingHallways.indexOf(link);
+}
+
+function getTunnelGlobalX(link) {
+  if (!link) return 0;
+  if (link.chainGlobalX !== undefined) return link.chainGlobalX;
+  const fh = getHallwayByIndex(link.fromHallwayIndex);
+  return fh ? fh.startOffsetFromS + link.doorIndex : link.doorIndex;
+}
+
+function getUserForwardOffset() {
+  const state = window.My3dMazeAppState;
+  return (state && state.user) ? state.user.forwardOffset : 0;
+}
+
+function getUserMovementMode() {
+  const state = window.My3dMazeAppState;
+  return (state && state.user) ? state.user.movementMode : 'normal';
+}
+
+function getUserActiveTunnelIndex() {
+  const state = window.My3dMazeAppState;
+  return (state && state.user) ? state.user.activeTunnelIndex : -1;
+}
+
+function getUserInterconnectingProgress() {
+  const state = window.My3dMazeAppState;
+  return (state && state.user) ? state.user.interconnectingProgress : 0;
+}
+
+function setUserFlashFrames(n) {
+  const state = window.My3dMazeAppState;
+  if (state && state.user) state.user.flashFrames = n;
+}
+
+function requestDoorOpen(hallway, di) {
+  if (hallway && hallway.doorTargets) hallway.doorTargets[di] = 1;
+}
+
+function requestDoorClose(hallway, di) {
+  if (hallway && hallway.doorTargets) hallway.doorTargets[di] = 0;
+}
+
+function spawnBall(spawnHallway) {
+  const state = window.My3dMazeAppState;
+  if (!state || !spawnHallway || state.rollingBall) return;
+  state.rollingBall = {
+    offset:          spawnHallway.nodes[spawnHallway.nodes.length - 1],
+    speed:           state.BASE_SPEED,
+    rotation:        0,
+    hallwayId:       spawnHallway.id,
+    direction:       -1,
+    targetDoorIndex: null,
+    movementMode:    'hallway',
+    tunnelLink:      null,
+    tunnelProgress:  0,
+    waitingAtNode:   null,
+    waitFrames:      0,
+    _seenHallwayId:  null,
+    _seenTunnelIdx:  -1,
+    _coiCooldown:    0,
+    tunnelReverse:   false,
+  };
+}
+
+function destroyBall() {
+  const state = window.My3dMazeAppState;
+  if (state) state.rollingBall = null;
+}
+
+// Finds any tunnel whose mouth touches gx in hallwayIndex — from either the
+// entrance OR exit side, mirroring the bidirectional check in isSideViewFacingTunnel.
+// Returns { link, reverse: false } if ball is at the entrance,
+//         { link, reverse: true  } if ball is at the exit (reverse traversal needed),
+//         or null if no tunnel is present.
+function findTunnelAtDoor(hallwayIndex, gx) {
+  const state = window.My3dMazeAppState;
+  if (!state || !state.WorldGrid) return null;
+
+  for (const conn of state.WorldGrid.interconnectingHallways) {
+    if (conn.fromHallwayIndex !== hallwayIndex && conn.toHallwayIndex !== hallwayIndex) continue;
+
+    const fromHallway = state.WorldGrid.mainHallways[conn.fromHallwayIndex];
+    if (!fromHallway) continue;
+
+    const connGlobalX = (conn.chainGlobalX !== undefined)
+      ? conn.chainGlobalX
+      : fromHallway.startOffsetFromS + conn.doorIndex;
+
+    if (conn.fromHallwayIndex === hallwayIndex) {
+      // Entrance side: tunnel mouth is at connGlobalX in this hallway
+      if (connGlobalX === gx) return { link: conn, reverse: false };
+    } else {
+      // Exit side: derive where this tunnel lands in the toHallway
+      const toHallway = state.WorldGrid.mainHallways[conn.toHallwayIndex];
+      if (!toHallway) continue;
+      const rawIdx = Math.round(connGlobalX - toHallway.startOffsetFromS);
+      if (rawIdx >= 0 && rawIdx <= 4 && toHallway.startOffsetFromS + rawIdx === gx) {
+        // Guard: verify reverse arrival back at fromHallway is also a valid door slot.
+        // Chain hops with chainGlobalX outside fromHallway's range (e.g. gx2 vs H3.start=3)
+        // cannot be traversed backward — their entrance doesn't exist in that hallway.
+        const reverseArrivalIdx = Math.round(connGlobalX - fromHallway.startOffsetFromS);
+        if (reverseArrivalIdx >= 0 && reverseArrivalIdx <= 4) {
+          return { link: conn, reverse: true };
+        }
+      }
+    }
+  }
+  return null;
+}
+
+// =========================================================================
+
 function _ballMemKey(hallwayId, gx, toHallwayId) {
   return `${hallwayId}:gx${gx}→${toHallwayId}`;
 }
@@ -978,6 +1131,10 @@ function recordBallEntry(hallwayId, gx, toHallwayId) {
   if (!state || !state.ballMemory) return;
   const k = _ballMemKey(hallwayId, gx, toHallwayId);
   state.ballMemory.opened[k] = (state.ballMemory.opened[k] || 0) + 1;
+  // Also write a destination-agnostic key so getEntryCount(id, gx, null) works
+  // as a "was this door ever used as a tunnel entrance" check.
+  const kAny = _ballMemKey(hallwayId, gx, null);
+  state.ballMemory.opened[kAny] = (state.ballMemory.opened[kAny] || 0) + 1;
 }
 
 function recordBallBlock(hallwayId, gx, toHallwayId) {
@@ -1072,5 +1229,24 @@ window.MazeInterface = {
   getBallEntryCount: getBallEntryCount,
   getBallBlockCount: getBallBlockCount,
   getBallMemorySnapshot: getBallMemorySnapshot,
-  getBallMemorySummaryText: getBallMemorySummaryText
+  getBallMemorySummaryText: getBallMemorySummaryText,
+
+  // Ball AI interface
+  getHallwayById: getHallwayById,
+  getHallwayIndex: getHallwayIndex,
+  getHallwayByIndex: getHallwayByIndex,
+  getTunnelFrom: getTunnelFrom,
+  getTunnelByIndex: getTunnelByIndex,
+  getTunnelIndex: getTunnelIndex,
+  getTunnelGlobalX: getTunnelGlobalX,
+  getUserForwardOffset: getUserForwardOffset,
+  getUserMovementMode: getUserMovementMode,
+  getUserActiveTunnelIndex: getUserActiveTunnelIndex,
+  getUserInterconnectingProgress: getUserInterconnectingProgress,
+  setUserFlashFrames: setUserFlashFrames,
+  requestDoorOpen: requestDoorOpen,
+  requestDoorClose: requestDoorClose,
+  spawnBall: spawnBall,
+  destroyBall: destroyBall,
+  findTunnelAtDoor: findTunnelAtDoor,
 };
