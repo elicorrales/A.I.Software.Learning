@@ -143,8 +143,20 @@
     MI.setDoorStateImmediate(currentLink, reverse ? 'entrance' : 'exit', false);
 
     if (!nextLink && (rawDoorIdx < 0 || rawDoorIdx > 4)) {
-      _logBall('KIL', `TUN:gx${exitGlobalX}`, `no door in ${destHallway.id} (col ${rawDoorIdx})`);
-      destroy();
+      _logBall('BNC', `TUN:gx${exitGlobalX}`, `dead end in ${destHallway.id}`);
+      const predecessor = MI.getChainPredecessor(currentLink);
+      if (predecessor) {
+        // Chain dead-end — step backward through the chain rather than bouncing in place
+        ball.tunnelLink     = predecessor;
+        ball.tunnelProgress = 0;
+        ball.tunnelReverse  = true;
+        ball._seenTunnelIdx = -1;
+      } else {
+        // Single tunnel dead-end — reverse direction and ride back
+        ball.tunnelProgress = 0;
+        ball.tunnelReverse  = !reverse;
+        ball._seenTunnelIdx = -1;
+      }
       return;
     }
 
@@ -288,17 +300,18 @@
       // Skip doors the ball already opened and found empty
       if (BMem.getBlockCount(hallway.id, gx, null) > 0) continue;
 
-      // If this tunnel entrance was already used, only stop here as a last resort.
-      // If a fresher (unvisited, unblocked) door exists further in the current
-      // direction, skip this one so the ball explores deeper instead of looping.
-      if (BMem.getEntryCount(hallway.id, gx, null) > 0) {
-        let freshAhead = false;
+      // Prefer the least-tried door: skip this door if a less-visited, unblocked
+      // door exists further ahead in the current direction. Falls back to stopping
+      // here when this door is already the minimum (or all ahead are tied/worse).
+      const thisCount = BMem.getEntryCount(hallway.id, gx, null);
+      if (thisCount > 0) {
+        let betterAhead = false;
         for (let di2 = di + ball.direction; di2 >= 0 && di2 < 5; di2 += ball.direction) {
           const gx2 = hallway.startOffsetFromS + di2;
           if (BMem.getBlockCount(hallway.id, gx2, null) > 0) continue;
-          if (BMem.getEntryCount(hallway.id, gx2, null) === 0) { freshAhead = true; break; }
+          if (BMem.getEntryCount(hallway.id, gx2, null) < thisCount) { betterAhead = true; break; }
         }
-        if (freshAhead) continue;
+        if (betterAhead) continue;
       }
 
       ball.offset    = nodeOffset;
