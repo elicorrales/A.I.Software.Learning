@@ -21,6 +21,7 @@ window.My3dMazeAppState = {
     interconnectingProgress: 0.0,
     activeTunnelIndex: -1,
     chainHopOriginProgress: -1,
+    relativeFacingIndex: 0,
   },
 
   WorldGrid: {
@@ -36,6 +37,16 @@ window.My3dMazeAppState = {
   smokeParticles: [],
 
   rollingBall: null,
+
+  // Ball session memory — persists across all spawns for the full session.
+  // Max ~280 entries (10 doors × 2 directions × 7 halls × opened+blocked).
+  // Written only via MazeInterface — never touched directly by upper layers.
+  ballMemory: {
+    opened:  {},
+    blocked: {}
+  },
+
+  cheatMapVisible: false,
 
   // UI Metrics
   UI_SCALE: {

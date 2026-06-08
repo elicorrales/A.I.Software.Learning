@@ -81,7 +81,8 @@ function drawBirdseyeView(minimapCtx, minimapCanvas, worldGrid, activeHallway, u
     const totalVisualLineLength = (maxHallwayWidthUnits / totalGridWidthUnits) * availableRenderWidth;
     const endX = startX + totalVisualLineLength;
 
-    const isVisited = worldGrid.visitedHallwayIds && worldGrid.visitedHallwayIds.includes(hallway.id);
+    const cheatOn = window.MazeInterface.getCheatMapVisible();
+    const isVisited = cheatOn || (worldGrid.visitedHallwayIds && worldGrid.visitedHallwayIds.includes(hallway.id));
 
     if (isVisited) {
       // Draw structural hallway vector track
@@ -150,15 +151,34 @@ function drawBirdseyeView(minimapCtx, minimapCanvas, worldGrid, activeHallway, u
       drawMinimapUser(minimapCtx, mappedUserX, mappedUserY, user.direction);
     }
 
-    // Ball avatar — shown on whichever hall the ball currently lives in
-    const ball = window.My3dMazeAppState && window.My3dMazeAppState.rollingBall;
-    if (ball && ball.hallwayId === hallway.id) {
-      const engineMax = hallway.nodes ? hallway.nodes[hallway.nodes.length - 1] : 5.75;
-      const ballRatio = Math.max(0, Math.min(1, ball.offset / engineMax));
+    // Ball avatar — only when not inside a tunnel (tunnel mode draws after the loop)
+    const ball = window.MazeInterface.getRollingBall();
+    if (ball && ball.movementMode !== 'tunnel' && ball.hallwayId === hallway.id) {
+      const ballRatio  = _ballOffsetToUniformRatio(ball.offset, hallway);
       const mappedBallX = startX + ballRatio * totalVisualLineLength;
       drawMinimapBall(minimapCtx, mappedBallX, hY);
     }
   });
+
+  // Ball in tunnel — animate the dot along the tunnel line in the 2D view
+  const tunnelBall = window.MazeInterface.getRollingBall();
+  if (tunnelBall && tunnelBall.movementMode === 'tunnel' && tunnelBall.tunnelLink) {
+    const link   = tunnelBall.tunnelLink;
+    const fromH  = worldGrid.mainHallways[link.fromHallwayIndex];
+    if (fromH) {
+      const fromY   = trackSpacingY * (link.fromHallwayIndex + 1);
+      const toY     = trackSpacingY * (link.toHallwayIndex + 1);
+      const percent = Math.min(1.0, tunnelBall.tunnelProgress / 3.2);
+      const ballY   = fromY + (toY - fromY) * percent;
+
+      const fromStartX = 20 + (fromH.startOffsetFromS / totalGridWidthUnits) * availableRenderWidth;
+      const doorX = (link.chainGlobalX !== undefined)
+        ? 20 + (link.chainGlobalX / totalGridWidthUnits) * availableRenderWidth
+        : fromStartX + ((UNIFORM_2D_DOORS[link.doorIndex] / totalGridWidthUnits) * availableRenderWidth);
+
+      drawMinimapBall(minimapCtx, doorX, ballY);
+    }
+  }
 }
 
 function drawMinimapBall(ctx, x, y) {
@@ -171,6 +191,22 @@ function drawMinimapBall(ctx, x, y) {
   ctx.beginPath();
   ctx.arc(x, y, 4, 0, Math.PI * 2);
   ctx.stroke();
+}
+
+// Maps ball.offset (nodes space, non-linear 0–5.75) to a 0–1 uniform ratio
+// for 2D rendering, so the ball dot aligns with the evenly-spaced door markers.
+function _ballOffsetToUniformRatio(offset, hallway) {
+  if (!hallway || !hallway.nodes) return 0;
+  const n = [0, 2, 4, 6, 8].map(i => hallway.nodes[i]); // door node offsets
+  if (offset <= n[0]) return 0;
+  if (offset >= n[4]) return 1;
+  for (let i = 0; i < 4; i++) {
+    if (offset >= n[i] && offset <= n[i + 1]) {
+      const t = (offset - n[i]) / (n[i + 1] - n[i]);
+      return (i + t) / 4; // uniform door index (0–4) divided by maxHallwayWidthUnits
+    }
+  }
+  return 1;
 }
 
 /**
