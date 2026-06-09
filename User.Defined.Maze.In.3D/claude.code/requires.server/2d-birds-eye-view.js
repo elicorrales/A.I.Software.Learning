@@ -58,15 +58,14 @@ export const BirdsEyeView = {
       ctx.font = 'bold 11px monospace';
       ctx.fillText(hall.id, 12, startPos.y + 4);
 
-      // Draw Intersecting Opening Portal Nodes (Cross Tunnel Indicators)
+      // FIX: Render Intersecting Opening Portal Volumes (1-Unit Wide Cross-Tunnel Zones)
       hall.openings.forEach(opZ => {
         const portalGlobalX = hall.worldXOffset + opZ;
-        const pt = this.worldToScreen(portalGlobalX, hIdx);
+        const ptStart = this.worldToScreen(portalGlobalX, hIdx);
 
+        // Render opening as a 1-unit-wide bounding box segment (SCALE_X wide) instead of a dot
         ctx.fillStyle = '#ffcc44';
-        ctx.beginPath();
-        ctx.arc(pt.x, pt.y, 4, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.fillRect(ptStart.x, ptStart.y - 4, SCALE_X, 8); // Slightly taller than corridor line to pop out
       });
     });
 
