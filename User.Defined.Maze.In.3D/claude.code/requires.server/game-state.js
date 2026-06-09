@@ -16,21 +16,19 @@ export const GameState = {
   player: new GameEntity(0, 0.0), // Starts in H1 (index 0) at the West entrance
   ball: new GameEntity(0, 4.5),   // Starts in H1 halfway down the corridor
 
-  // Define the 7 Horizontal Main Hallways
+  // Define the 7 Horizontal Main Hallways Snapped to a Unified Even-Integer Grid
   halls: [
-    { id: "H1", worldXOffset: 0.0,   openings: [1, 3, 5, 7] }, // Northmost Hall
-    { id: "H2", worldXOffset: 1.5,   openings: [1, 3, 5, 7] }, // Shifted Eastward
-    { id: "H3", worldXOffset: -0.5,  openings: [1, 3, 5, 7] }, // Shifted Westward
-    { id: "H4", worldXOffset: 0.5,   openings: [1, 3, 5, 7] },
-    { id: "H5", worldXOffset: -1.0,  openings: [1, 3, 5, 7] },
-    { id: "H6", worldXOffset: 2.0,   openings: [1, 3, 5, 7] },
-    { id: "H7", worldXOffset: 0.0,   openings: [1, 3, 5, 7] }  // Southmost Hall
+    { id: "H1", worldXOffset: 0.0,   openings: [1, 3, 5, 7] }, // Global X: 1, 3, 5, 7
+    { id: "H2", worldXOffset: 2.0,   openings: [1, 3, 5, 7] }, // Global X: 3, 5, 7, 9
+    { id: "H3", worldXOffset: 0.0,   openings: [1, 3, 5, 7] }, // Aligned with H1
+    { id: "H4", worldXOffset: -2.0,  openings: [1, 3, 5, 7] }, // Global X: -1, 1, 3, 5
+    { id: "H5", worldXOffset: 0.0,   openings: [1, 3, 5, 7] }, // Aligned with H1
+    { id: "H6", worldXOffset: 2.0,   openings: [1, 3, 5, 7] }, // Global X: 3, 5, 7, 9
+    { id: "H7", worldXOffset: 0.0,   openings: [1, 3, 5, 7] }  // Global X: 1, 3, 5, 7
   ],
 
   constants: {
     hallLength: 9.0,
     maxHalls: 7
   }
-
-
 };
