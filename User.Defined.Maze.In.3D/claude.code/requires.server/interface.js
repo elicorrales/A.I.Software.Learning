@@ -1,14 +1,18 @@
 // GEMINI.3 interface.js
 import { GameState } from './game-state.js';
+import { GameDiagnostics } from './game-diagnostics.js';
 
-// Sequential clockwise indexing loop representing looking directions around a compass
 const DIRECTIONS = ['EAST', 'SOUTH', 'WEST', 'NORTH'];
+let wasBlocked = false;
 
 export const GameInterface = {
   // --- Structural Space Translators ---
   getLocalZToGlobalX(hallIndex, localZ) {
+    if (GameState.player.inTunnel && hallIndex === GameState.player.currentHall) {
+      return GameState.player.tunnelGlobalX;
+    }
     const hall = GameState.halls[hallIndex];
-    return hall.worldXOffset + localZ;
+    return hall ? (hall.worldXOffset + localZ) : localZ;
   },
 
   getGlobalXToLocalZ(targetHallIndex, globalX) {
@@ -20,7 +24,7 @@ export const GameInterface = {
   isOpeningAt(hallIndex, localZ) {
     const roundedZ = Math.floor(localZ);
     const hall = GameState.halls[hallIndex];
-    return hall.openings.includes(roundedZ);
+    return hall ? hall.openings.includes(roundedZ) : false;
   },
 
   checkTunnelConnection(sourceHallIndex, sourceLocalZ, direction) {
@@ -43,7 +47,6 @@ export const GameInterface = {
     return null;
   },
 
-  // ── INJECTED DISCRETE COMPASS ROTATION MATRIX MACHINE ──────────────────────
   turnPlayer(side) {
     const currentIndex = DIRECTIONS.indexOf(GameState.player.orientation);
     let newIndex = currentIndex;
@@ -57,32 +60,138 @@ export const GameInterface = {
     const nextOrientation = DIRECTIONS[newIndex];
     GameState.player.orientation = nextOrientation;
 
-    // IMPLEMENTATION: Automatically snap to segment center-line upon entering 90-deg angles
     if (nextOrientation === 'NORTH' || nextOrientation === 'SOUTH') {
       GameState.player.localZ = Math.floor(GameState.player.localZ) + 0.5;
     }
   },
 
-  // --- Entity Movement Processing ---
   attemptEntityMovement(entityId, deltaZ) {
     const entity = entityId === 'player' ? GameState.player : GameState.ball;
     if (!entity) return;
 
-    // RULE IMPLEMENTATION: If player is looking North/South, completely block step displacement for now
-    if (entityId === 'player' && (entity.orientation === 'NORTH' || entity.orientation === 'SOUTH')) {
-      return; 
+    if (deltaZ === 0) {
+      wasBlocked = false;
+      return;
     }
 
+    const hallId = this.getEntityHallId(entityId);
+
+    // ── CASE A: ENTITY IS WALKING INSIDE A VERTICAL TUNNEL PIPELINE ──
+    if (entity.inTunnel) {
+      if (entity.orientation === 'EAST' || entity.orientation === 'WEST') {
+        if (!wasBlocked && entityId === 'player') {
+          GameDiagnostics.logPlayer('BLKD', 'SOLID_WLL', hallId, entity.localZ);
+          GameDiagnostics.captureSnapshot();
+          wasBlocked = true;
+        }
+        return;
+      }
+
+      const movementSign = (entity.orientation === 'NORTH') ? -1 : 1;
+      let targetZ = entity.localZ + deltaZ * movementSign;
+
+      // ── FIXED: PROCEDURAL TUNNEL EXIT EXIT HANDOFF GATES ──
+      if (targetZ <= 0.0) {
+        // Exiting out of the North mouth of the tunnel back into the source hallway
+        const targetHallIdx = entity.currentHall;
+        const hallLocalZ = this.getGlobalXToLocalZ(targetHallIdx, entity.tunnelGlobalX);
+        
+        entity.inTunnel = false;
+        entity.currentTunnelId = null;
+        entity.localZ = hallLocalZ; // Snap cleanly to the hallway centerline door coordinate
+        
+        if (entityId === 'player') {
+          GameDiagnostics.logPlayer('EXT', 'EXT_TUN_N', this.getEntityHallId(entityId), entity.localZ);
+          GameDiagnostics.captureSnapshot();
+        }
+        return;
+      }
+
+      if (targetZ >= GameState.constants.hallLength) {
+        // Exiting out of the South mouth of the tunnel into the adjacent hallway level
+        const targetHallIdx = entity.currentHall + 1;
+        
+        if (targetHallIdx < GameState.constants.maxHalls) {
+          const hallLocalZ = this.getGlobalXToLocalZ(targetHallIdx, entity.tunnelGlobalX);
+          entity.currentHall = targetHallIdx;
+          entity.inTunnel = false;
+          entity.currentTunnelId = null;
+          entity.localZ = hallLocalZ; // Snap cleanly to the new hallway centerline door coordinate
+          
+          if (entityId === 'player') {
+            GameDiagnostics.logPlayer('EXT', 'EXT_TUN_S', this.getEntityHallId(entityId), entity.localZ);
+            GameDiagnostics.captureSnapshot();
+          }
+        } else {
+          entity.localZ = GameState.constants.hallLength; // Universe edge clamp
+        }
+        return;
+      }
+
+      entity.localZ = targetZ;
+      return;
+    }
+
+    // ── CASE B: ENTITY IS WALKING LATERALLY WHILE FACING NORTH OR SOUTH ──
+    if (entity.orientation === 'NORTH' || entity.orientation === 'SOUTH') {
+      const globalX = this.getLocalZToGlobalX(entity.currentHall, entity.localZ);
+      const hasOpening = this.isOpeningAt(entity.currentHall, entity.localZ);
+
+      let headingDirection = entity.orientation;
+      if (deltaZ < 0) {
+        headingDirection = (entity.orientation === 'SOUTH') ? 'NORTH' : 'SOUTH';
+      }
+
+      if (!hasOpening) {
+        if (!wasBlocked && entityId === 'player') {
+          GameDiagnostics.logPlayer('BLKD', 'SOLID_WLL', hallId, entity.localZ);
+          GameDiagnostics.captureSnapshot();
+          wasBlocked = true;
+        }
+        return;
+      }
+
+      if (headingDirection === 'NORTH' && entity.currentHall === 0) {
+        if (!wasBlocked && entityId === 'player') {
+          GameDiagnostics.logPlayer('BLKD', 'NORTH_OOB', hallId, entity.localZ);
+          GameDiagnostics.captureSnapshot();
+          wasBlocked = true;
+        }
+        return;
+      }
+
+      if (headingDirection === 'SOUTH' && entity.currentHall === GameState.constants.maxHalls - 1) {
+        if (!wasBlocked && entityId === 'player') {
+          GameDiagnostics.logPlayer('BLKD', 'SOUTH_OOB', hallId, entity.localZ);
+          GameDiagnostics.captureSnapshot();
+          wasBlocked = true;
+        }
+        return;
+      }
+
+      entity.inTunnel = true;
+      entity.tunnelGlobalX = globalX; 
+      entity.tunnelDirection = headingDirection;
+
+      if (headingDirection === 'SOUTH') {
+        entity.currentTunnelId = `X${globalX.toFixed(1)}_H${entity.currentHall + 1}_H${entity.currentHall + 2}`;
+        entity.localZ = 0.0 + Math.abs(deltaZ); 
+        if (entityId === 'player') GameDiagnostics.logPlayer('ENT', 'ENT_TUN_S', hallId, entity.localZ);
+      } else {
+        entity.currentTunnelId = `X${globalX.toFixed(1)}_H${entity.currentHall}_H${entity.currentHall + 1}`;
+        entity.localZ = GameState.constants.hallLength - Math.abs(deltaZ); 
+        if (entityId === 'player') GameDiagnostics.logPlayer('ENT', 'ENT_TUN_N', hallId, entity.localZ);
+      }
+      GameDiagnostics.captureSnapshot();
+      return;
+    }
+
+    // ── CASE C: STANDARD HORIZONTAL EAST / WEST CORRIDOR DISPLACEMENT ──
     let targetZ = entity.localZ + deltaZ;
-
-    if (targetZ < 0 || targetZ > GameState.constants.hallLength) {
-      return; // Cap hard boundaries
-    }
-
-    entity.localZ = targetZ; // Safely modifies true state point references
+    if (targetZ < 0 || targetZ > GameState.constants.hallLength) return;
+    entity.localZ = targetZ;
   },
 
-  // Packaging method tailored for the 3D first-person renderer
   getSceneRenderContext() {
     return {
       player: GameState.player,
@@ -91,7 +200,6 @@ export const GameInterface = {
     };
   },
 
-  // ── DIAGNOSTIC LOGGING UTILITIES ──────────────────────────────────────────
   getEntityHallId(entityId) {
     const entity = entityId === 'player' ? GameState.player : GameState.ball;
     if (!entity) return '??';
@@ -99,22 +207,38 @@ export const GameInterface = {
     return hall ? hall.id : '??';
   },
 
-  // ── ARCHITECTURAL EXTENSION ───────────────────────────────────────────────
   getBirdsEyeContext() {
+    const player = GameState.player;
+    const ball = GameState.ball;
+
+    let playerGlobalX = player.inTunnel ? player.tunnelGlobalX : this.getLocalZToGlobalX(player.currentHall, player.localZ);
+    let playerHallContinuous = player.currentHall;
+    if (player.inTunnel) {
+      const progress = player.localZ / GameState.constants.hallLength;
+      playerHallContinuous = (player.tunnelDirection === 'SOUTH') ? (player.currentHall + progress) : (player.currentHall - 1.0 + progress);
+    }
+
+    let ballGlobalX = ball.inTunnel ? ball.tunnelGlobalX : this.getLocalZToGlobalX(ball.currentHall, ball.localZ);
+    let ballHallContinuous = ball.currentHall;
+    if (ball.inTunnel) {
+      const progress = ball.localZ / GameState.constants.hallLength;
+      ballHallContinuous = (ball.tunnelDirection === 'SOUTH') ? (ball.currentHall + progress) : (ball.currentHall - 1.0 + progress);
+    }
+
     return {
       halls: GameState.halls.map(h => ({ id: h.id, worldXOffset: h.worldXOffset, openings: [...h.openings] })),
       constants: { ...GameState.constants },
       player: {
-        hall: GameState.player.currentHall,
-        localZ: GameState.player.localZ,
-        orientation: GameState.player.orientation, // Passed down to draw orientation indicators
-        globalX: this.getLocalZToGlobalX(GameState.player.currentHall, GameState.player.localZ)
+        hall: playerHallContinuous,
+        localZ: player.localZ,
+        orientation: player.orientation,
+        globalX: playerGlobalX
       },
       ball: {
-        hall: GameState.ball.currentHall,
-        localZ: GameState.ball.localZ,
-        globalX: this.getLocalZToGlobalX(GameState.ball.currentHall, GameState.ball.localZ),
-        isAlive: GameState.ball.isAlive
+        hall: ballHallContinuous,
+        localZ: ball.localZ,
+        globalX: ballGlobalX,
+        isAlive: ball.isAlive
       }
     };
   }

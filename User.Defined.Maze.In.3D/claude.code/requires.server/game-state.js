@@ -9,6 +9,10 @@ class GameEntity {
     this.orientation = 'EAST';   // Snapped Compass Heading: 'EAST', 'SOUTH', 'WEST', 'NORTH'
     this.speed = 0.0;            // Current travel velocity
     this.isAlive = true;         // State flag
+    
+    // ── ADDED FOR STEP 2: CONTINUOUS TUNNEL DISPLACEMENT TRACKERS ──
+    this.inTunnel = false;        // Binary state controller: true flags active vertical navigation
+    this.currentTunnelId = null;  // Unique coordinate string key matching the active tunnel object
   }
 }
 
@@ -30,6 +34,9 @@ export const GameState = {
     { id: "H7", worldXOffset: 0.0,   openings: [1, 3, 5, 7] }  // Southmost Hall
   ],
 
+  // ── ADDED FOR STEP 2: PROCEDURAL PERSISTENT TUNNEL STORAGE MATRIX ──
+  tunnels: {}, // Key syntax will look like: "X3.0_H1_H2" to persistently map segments
+
   constants: {
     hallLength: 9.0,
     maxHalls: 7
@@ -47,6 +54,9 @@ export const GameState = {
     this.player.localZ = 0.0;
     this.player.orientation = 'EAST';
     this.ball.localZ = 4.5;
+    
+    // Clear out any stale session tunnel objects upon hot reload resets
+    this.tunnels = {};
   }
 };
 

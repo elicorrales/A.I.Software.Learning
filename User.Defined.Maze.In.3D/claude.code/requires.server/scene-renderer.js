@@ -30,36 +30,51 @@ export function initRenderer(canvasElement) {
   VPY = CY - H * 0.04;
 }
 
-// ── MAIN DRAW INTERFACE CONTROL CONTEXT ───────────────────────────────────────
 export function drawScene(ctx, renderContext, time) {
   const player = renderContext.player;
   const orientation = player.orientation;
   const playerZ = player.localZ;
-  const activeOpenings = renderContext.activeHallLayout.openings;
 
   const metrics = { NUM_SEGMENTS, Z_NEAR, LEFT, RIGHT, TOP, BOTTOM, VPX, VPY, HALL_WIDTH, HALL_HEIGHT, CX, CY, W, H };
 
-  // ── ROUTER DIRECTION CONTROLLER ──
-  if (orientation === 'NORTH' || orientation === 'SOUTH') {
-    renderLateralScene(ctx, renderContext, metrics, time);
+  // FIX: Setup situational lateral checking rules (Hall: N/S is side. Tunnel: E/W is side)
+  const isLateralView = (!player.inTunnel && (orientation === 'NORTH' || orientation === 'SOUTH')) ||
+                        (player.inTunnel && (orientation === 'EAST' || orientation === 'WEST'));
+
+  // ── DYNAMIC THRESHOLD COMPILER FOR THE 3-ZONE ILLUSION PIPELINE ──
+  let activeOpenings = [];
+  
+  if (player.inTunnel) {
+    if (orientation === 'SOUTH') {
+      if (playerZ < 1.5) activeOpenings.push(0); 
+      if (playerZ > 7.5) activeOpenings.push(8); 
+    } else if (orientation === 'NORTH') {
+      if (playerZ > 7.5) activeOpenings.push(0); 
+      if (playerZ < 1.5) activeOpenings.push(8); 
+    }
+  } else {
+    activeOpenings = renderContext.activeHallLayout.openings;
+  }
+
+  // FIX: Pass the compiled layout array directly down to the side view mapper
+  if (isLateralView) {
+    renderLateralScene(ctx, renderContext, metrics, time, activeOpenings);
     return;
   }
 
-  // ── FORWARD PERSPECTIVE PIPELINE (EAST / WEST) ──
   const dynamicSegs = getSegmentEdges(playerZ, orientation, metrics);
 
   ctx.clearRect(0, 0, W, H);
   ctx.fillStyle = '#1c140a'; ctx.fillRect(0, 0, W, H);
 
-  // Structural wall mapping
-  renderForwardScene(ctx, renderContext, dynamicSegs, metrics);
+  // FIX: Pass compiled openings downstream to prevent ghost openings on walls
+  renderForwardScene(ctx, renderContext, dynamicSegs, metrics, activeOpenings);
 
-  // Environmental atmospherics & layers
   const fxMetrics = { NUM_SEGMENTS, VPX, VPY, CX, CY, W, H };
   renderDepthFog(ctx, dynamicSegs, fxMetrics);
   renderTorchesAndLighting(ctx, dynamicSegs, activeOpenings, time, fxMetrics, orientation);
 
-  const isSameHall = renderContext.ball.currentHall === player.currentHall;
+  const isSameHall = !player.inTunnel && (renderContext.ball.currentHall === player.currentHall);
   if (isSameHall) {
     const entityMetrics = { Z_NEAR, HALL_WIDTH, CX, BOTTOM, VPY };
     render3DBall(ctx, renderContext, entityMetrics);

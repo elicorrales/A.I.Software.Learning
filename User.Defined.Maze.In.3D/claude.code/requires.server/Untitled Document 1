@@ -1,0 +1,15 @@
+[HALL A CENTERLINE] 
+       │
+       ▼ (Player turns SOUTH and presses 'W')
+ 0.0 ──┼───────────────────────────  ▲
+       │  NORTH THRESHOLD ZONE        │
+ 1.5 ──┼───────────────────────────  │ 
+       │                              │
+       │  DEEP TUNNEL CORE            │  TUNNEL LOCAL Z (0.0 to 9.0)
+       │  (Pure walls & torches)      │
+       │                              │
+ 7.5 ──┼───────────────────────────  │
+       │  SOUTH THRESHOLD ZONE        │
+ 9.0 ──┼───────────────────────────  ▼
+       │
+       ▼ (Player hits 9.0: snaps cleanly to HALL B CENTERLINE)

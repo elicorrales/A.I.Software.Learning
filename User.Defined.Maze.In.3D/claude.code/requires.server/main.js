@@ -72,14 +72,14 @@ zoomOutBtn.addEventListener('click', () => {
   if (activePanel) GameDiagnostics.adjustZoom(activePanel, 'OUT');
 });
 
-// ── PLAYER INERTIAL BOUNDARY STATE INTERCEPTORS ──────────────────────────────
+// ── PLAYER INERTIAL BOUNDARY STATE INTERCEPTORS ──
 let isMovingForward = false;
 let isMovingBackward = false;
 
 window.addEventListener('keydown', (e) => {
   const key = e.key.toLowerCase();
-  const up = key === 'w' || key === 'arrowup';
-  const down = key === 's' || key === 'arrowdown';
+  const up = key === 'arrowup';      // Cleaned: Removed 'w'
+  const down = key === 'arrowdown';  // Cleaned: Removed 's'
 
   if (up || down) {
     const wasMoving = isMovingForward || isMovingBackward;
@@ -111,14 +111,14 @@ window.addEventListener('keydown', (e) => {
 
 window.addEventListener('keyup', (e) => {
   const key = e.key.toLowerCase();
-  const up = key === 'w' || key === 'arrowup';
-  const down = key === 's' || key === 'arrowdown';
+  const up = key === 'arrowup';      // Cleaned: Removed 'w'
+  const down = key === 'arrowdown';  // Cleaned: Removed 's'
 
   if (up || down) {
     setTimeout(() => {
       const keys = PlayerMovementSystem.keysPressed;
-      const stillMovingUp = keys['w'] || keys['arrowup'];
-      const stillMovingDown = keys['s'] || keys['arrowdown'];
+      const stillMovingUp = keys['arrowup'];      // Cleaned: Removed 'w'
+      const stillMovingDown = keys['arrowdown'];  // Cleaned: Removed 's'
 
       if (!stillMovingUp && !stillMovingDown && (isMovingForward || isMovingBackward)) {
         isMovingForward = false;

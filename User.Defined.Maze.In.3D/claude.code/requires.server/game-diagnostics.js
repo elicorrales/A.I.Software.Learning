@@ -55,7 +55,11 @@ export const GameDiagnostics = {
 
   // --- Assembly Style Chronological Logging Methods ---
   logPlayer(opcode, actionText, hallId, localZ) {
-    const logLine = `${opcode.padEnd(4)} ${actionText.padEnd(8)} ${hallId} Z${localZ.toFixed(4)}`;
+    const context = GameInterface.getSceneRenderContext();
+    // Dynamically query the structural state boundary to calculate true global positioning coordinates
+    const globalX = GameInterface.getLocalZToGlobalX(context.player.currentHall, localZ);
+    
+    const logLine = `${opcode.padEnd(4)} ${actionText.padEnd(9)} ${hallId} Z:${localZ.toFixed(3).padEnd(7)} X:${globalX.toFixed(3)}`;
     DiagnosticData.playerHistory.unshift(logLine); // Inserts at the top of the feed stack
     
     // Enforce 500 entry limit ceiling constraint caps
@@ -67,7 +71,11 @@ export const GameDiagnostics = {
   },
 
   logBall(opcode, actionText, hallId, localZ) {
-    const logLine = `${opcode.padEnd(4)} ${actionText.padEnd(8)} ${hallId} Z${localZ.toFixed(4)}`;
+    const context = GameInterface.getSceneRenderContext();
+    // Dynamically query the structural state boundary to calculate true global positioning coordinates
+    const globalX = GameInterface.getLocalZToGlobalX(context.ball.currentHall, localZ);
+    
+    const logLine = `${opcode.padEnd(4)} ${actionText.padEnd(9)} ${hallId} Z:${localZ.toFixed(3).padEnd(7)} X:${globalX.toFixed(3)}`;
     DiagnosticData.ballHistory.unshift(logLine);
     
     if (DiagnosticData.ballHistory.length > 500) {
@@ -162,14 +170,14 @@ export const GameDiagnostics = {
     else if (panel === 'P') {
       titleEl.innerText = "PLAYER MOVEMENT REGISTRY [P]";
       scrollerEl.innerHTML = `
-        <div class="diag-legend">ASM LISTING: [OP] [ACTION] [HALL] [WORLD_COORD]</div>
+        <div class="diag-legend">ASM LISTING: [OP] [ACTION] [HALL] [LOCAL_Z] [WORLD_X]</div>
         <div class="assembly-feed">${DiagnosticData.playerHistory.join('\n') || '; NO ENTRIES RECORDED'}</div>
       `;
     } 
     else if (panel === 'B') {
       titleEl.innerText = "BALL TRACE METRICS [B]";
       scrollerEl.innerHTML = `
-        <div class="diag-legend">ASM LISTING: [OP] [ACTION] [HALL] [WORLD_COORD]</div>
+        <div class="diag-legend">ASM LISTING: [OP] [ACTION] [HALL] [LOCAL_Z] [WORLD_X]</div>
         <div class="assembly-feed" style="color:#ffaa44;">${DiagnosticData.ballHistory.join('\n') || '; NO ENTRIES RECORDED'}</div>
       `;
     } 

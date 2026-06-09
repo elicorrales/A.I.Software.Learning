@@ -1,5 +1,6 @@
 // GEMINI.3 player-movement.js
 import { GameInterface } from './interface.js';
+import { GameDiagnostics } from './game-diagnostics.js';
 
 export const PlayerMovementSystem = {
   keysPressed: {},
@@ -9,11 +10,21 @@ export const PlayerMovementSystem = {
       const key = e.key.toLowerCase();
       this.keysPressed[key] = true;
 
-      if (key === 'a' || key === 'arrowleft') {
+      if (key === 'arrowleft') {
         GameInterface.turnPlayer('LEFT');
+        
+        const hallId = GameInterface.getEntityHallId('player');
+        const localZ = GameInterface.getSceneRenderContext().player.localZ;
+        GameDiagnostics.logPlayer('ROT', 'TURN_LFT', hallId, localZ);
+        GameDiagnostics.captureSnapshot();
       }
-      if (key === 'd' || key === 'arrowright') {
+      if (key === 'arrowright') {
         GameInterface.turnPlayer('RIGHT');
+        
+        const hallId = GameInterface.getEntityHallId('player');
+        const localZ = GameInterface.getSceneRenderContext().player.localZ;
+        GameDiagnostics.logPlayer('ROT', 'TURN_RGT', hallId, localZ);
+        GameDiagnostics.captureSnapshot();
       }
     });
 
@@ -24,16 +35,20 @@ export const PlayerMovementSystem = {
 
   update(deltaTime) {
     const context = GameInterface.getSceneRenderContext();
-    const orientation = context.player.orientation;
+    const player = context.player;
+    const orientation = player.orientation;
     
-    // Reverse travel vector sign if looking WEST so forward goes toward Z=0
-    const directionModifier = (orientation === 'WEST') ? -1 : 1;
-    const moveSpeed = 2.5 * deltaTime * directionModifier;
+    // Removed all context-aware speed dampening/easing mechanics completely.
+    // Player maintains a crisp, uniform velocity across all environment structures.
+    const activeVelocity = 2.5; 
 
-    if (this.keysPressed['w'] || this.keysPressed['arrowup']) {
+    const directionModifier = (orientation === 'WEST') ? -1 : 1;
+    const moveSpeed = activeVelocity * deltaTime * directionModifier;
+
+    if (this.keysPressed['arrowup']) {
       GameInterface.attemptEntityMovement('player', moveSpeed);
     }
-    if (this.keysPressed['s'] || this.keysPressed['arrowdown']) {
+    if (this.keysPressed['arrowdown']) {
       GameInterface.attemptEntityMovement('player', -moveSpeed);
     }
   }

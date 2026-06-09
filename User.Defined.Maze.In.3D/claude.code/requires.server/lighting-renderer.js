@@ -60,11 +60,11 @@ export function drawWallLightPool(ctx, tx, ty, radius, brightness, time) {
 export function renderTorchesAndLighting(ctx, segs, openings, time, metrics, orientation) {
   const torchPositions = [];
   const { NUM_SEGMENTS } = metrics;
-  const isWest = (orientation === 'WEST');
-
-  // Adjust segment panel indexing targets to account for shifted depth perspective views
-  const startIdx = isWest ? -1 : 0;
-  const endIdx = isWest ? NUM_SEGMENTS - 1 : NUM_SEGMENTS;
+  
+  // FIX: Support inverted look segment indexes for BOTH West and North orientations
+  const isInvertedLook = (orientation === 'WEST' || orientation === 'NORTH');
+  const startIdx = isInvertedLook ? -1 : 0;
+  const endIdx = isInvertedLook ? NUM_SEGMENTS - 1 : NUM_SEGMENTS;
 
   for (let i = startIdx; i <= endIdx; i++) {
     const near = segs[i], far = segs[i + 1];

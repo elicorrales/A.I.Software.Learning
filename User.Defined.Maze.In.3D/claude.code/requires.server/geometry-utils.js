@@ -13,12 +13,12 @@ export function stoneNoise(x, y, scale, seed) {
 
 export function getSegmentEdges(playerZ, orientation, metrics) {
   const segments = [];
-  const isWest = (orientation === 'WEST');
+  // FIX: Treat NORTH camera alignment with the same depth logic as WEST orientation bounds
+  const isInvertedLook = (orientation === 'WEST' || orientation === 'NORTH');
   const { NUM_SEGMENTS, Z_NEAR, LEFT, RIGHT, TOP, BOTTOM, VPX, VPY } = metrics;
 
-  // Calculate from -2 to NUM_SEGMENTS + 2 to fully cover past-horizon clips for both directions
   for (let i = -2; i <= NUM_SEGMENTS + 2; i++) {
-    const worldZ = isWest ? (playerZ - i) : (i - playerZ);
+    const worldZ = isInvertedLook ? (playerZ - i) : (i - playerZ);
     const distance = worldZ + Z_NEAR;
     
     let depth;
