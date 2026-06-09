@@ -7,7 +7,6 @@ const BALL_BASE_RADIUS = 256;
 const TORCH_MAX_SIZE = 55; 
 const TORCH_MIN_SIZE = 12;  
 
-// Uniform 3D focal near-plane depth distance constant allocation
 const Z_NEAR = 1.0; 
 
 function lerp(a, b, t) { return a + (b - a) * t; }
@@ -18,34 +17,33 @@ export function initRenderer(canvasElement) {
 
   W = window.innerWidth - horizontalOverhead;
   H = window.innerHeight - verticalOverhead;
-  
   canvasElement.width = W;
   canvasElement.height = H;
 
   CX = W / 2;
   CY = H / 2;
-
   HALL_WIDTH = W * 0.72;
   HALL_HEIGHT = H * 0.78;
   LEFT = (W - HALL_WIDTH) / 2;
   RIGHT = LEFT + HALL_WIDTH;
   TOP = (H - HALL_HEIGHT) / 2;
   BOTTOM = TOP + HALL_HEIGHT;
-
   VPX = CX;
   VPY = CY - H * 0.04;
 }
 
-// ── 1. MATHEMATICAL & GEOMETRY GENERATORS ────────────────────────────────────
-function getSegmentEdges(playerZ) {
+// ── 1. MATHEMATICAL GEOMETRY PROJECTION GENERATOR ────────────────────────────
+function getSegmentEdges(playerZ, orientation) {
   const segments = [];
+  const isWest = (orientation === 'WEST');
+
   for (let i = 0; i <= NUM_SEGMENTS + 2; i++) {
-    const worldZ = i - playerZ;
+    const worldZ = isWest ? (playerZ - i) : (i - playerZ);
     const distance = worldZ + Z_NEAR;
     
     let depth;
     if (distance <= 0.05) {
-      depth = -3.0; // Pushed safely off-screen completely
+      depth = -3.0; 
     } else {
       const scale = Z_NEAR / distance;
       depth = 1.0 - scale;
@@ -69,16 +67,12 @@ function renderMainCeiling(ctx, segs, playerZ) {
   ctx.beginPath();
   ctx.moveTo(seg0.lx, seg0.ty); ctx.lineTo(seg0.rx, seg0.ty);
   ctx.lineTo(segN.rx, segN.ty); ctx.lineTo(segN.lx, segN.ty);
-  ctx.closePath();
-  ctx.clip();
+  ctx.closePath(); ctx.clip();
 
   const ceilGrad = ctx.createLinearGradient(CX, seg0.ty, CX, segN.ty);
-  ceilGrad.addColorStop(0, '#3c3428');
-  ceilGrad.addColorStop(1, '#231f15');
-  ctx.fillStyle = ceilGrad;
-  ctx.fillRect(seg0.lx, seg0.ty, seg0.rx - seg0.lx, seg0.by - seg0.ty);
+  ceilGrad.addColorStop(0, '#3c3428'); ceilGrad.addColorStop(1, '#231f15');
+  ctx.fillStyle = ceilGrad; ctx.fillRect(seg0.lx, seg0.ty, seg0.rx - seg0.lx, seg0.by - seg0.ty);
 
-  // Package global dimensions to maintain texture isolation
   const metrics = { NUM_SEGMENTS, Z_NEAR, LEFT, RIGHT, TOP, BOTTOM, VPX, VPY };
   drawPerspectiveSurface(ctx, playerZ, false, 60, 14, 8, metrics);
   ctx.restore();
@@ -90,21 +84,18 @@ function renderMainFloor(ctx, segs, playerZ) {
   ctx.beginPath();
   ctx.moveTo(seg0.lx, seg0.by); ctx.lineTo(seg0.rx, seg0.by);
   ctx.lineTo(segN.rx, segN.by); ctx.lineTo(segN.lx, segN.by);
-  ctx.closePath();
-  ctx.clip();
+  ctx.closePath(); ctx.clip();
 
   const floorGrad = ctx.createLinearGradient(CX, seg0.by, CX, BOTTOM + 50);
-  floorGrad.addColorStop(0, '#302c25');
-  floorGrad.addColorStop(1, '#1f1b17');
-  ctx.fillStyle = floorGrad;
-  ctx.fillRect(LEFT - 10, seg0.by, HALL_WIDTH + 20, BOTTOM - seg0.by + 10);
+  floorGrad.addColorStop(0, '#302c25'); floorGrad.addColorStop(1, '#1f1b17');
+  ctx.fillStyle = floorGrad; ctx.fillRect(LEFT - 10, seg0.by, HALL_WIDTH + 20, BOTTOM - seg0.by + 10);
 
   const metrics = { NUM_SEGMENTS, Z_NEAR, LEFT, RIGHT, TOP, BOTTOM, VPX, VPY };
   drawPerspectiveSurface(ctx, playerZ, true, 68, 18, 8, metrics);
   ctx.restore();
 }
 
-// ── 3. WALL PANEL STRUCTURE SCHEMA ───────────────────────────────────────────
+// ── 3. WALL PANEL STRUCTURE SCHEMAS ───────────────────────────────────────────
 function renderSolidWallPanel(ctx, near, far, isLeft, stoneBright, stoneVar) {
   const nearX = isLeft ? near.lx : near.rx;
   const farX  = isLeft ? far.lx  : far.rx;
@@ -113,28 +104,21 @@ function renderSolidWallPanel(ctx, near, far, isLeft, stoneBright, stoneVar) {
   ctx.beginPath();
   ctx.moveTo(nearX, near.ty); ctx.lineTo(farX, far.ty);
   ctx.lineTo(farX, far.by);   ctx.lineTo(nearX, near.by);
-  ctx.closePath();
-  ctx.clip();
+  ctx.closePath(); ctx.clip();
 
   const wallG = ctx.createLinearGradient(farX, 0, nearX, 0);
   const b0 = isLeft ? stoneBright - 8 : stoneBright + 10;
   const b1 = isLeft ? stoneBright + 10 : stoneBright - 8;
   wallG.addColorStop(0, `rgb(${b0},${Math.round(b0*0.9)},${Math.round(b0*0.78)})`);
   wallG.addColorStop(1, `rgb(${b1},${Math.round(b1*0.9)},${Math.round(b1*0.78)})`);
-  ctx.fillStyle = wallG;
-  ctx.fillRect(Math.min(nearX, farX) - 1, near.ty, Math.abs(nearX - farX) + 2, near.by - near.ty);
+  ctx.fillStyle = wallG; ctx.fillRect(Math.min(nearX, farX) - 1, near.ty, Math.abs(nearX - farX) + 2, near.by - near.ty);
   
-  // Transferred out to texture helper
   drawWallPanelStones(ctx, near, far, isLeft, stoneBright, stoneVar);
 
   const sw = Math.abs(nearX - farX);
-  const shadowG = isLeft
-    ? ctx.createLinearGradient(farX, 0, farX + sw * 0.4, 0)
-    : ctx.createLinearGradient(farX + sw, 0, farX + sw * 0.6, 0);
-  shadowG.addColorStop(0, 'rgba(0,0,0,0.45)');
-  shadowG.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = shadowG;
-  ctx.fillRect(Math.min(nearX, farX), near.ty, sw, near.by - near.ty);
+  const shadowG = isLeft ? ctx.createLinearGradient(farX, 0, farX + sw * 0.4, 0) : ctx.createLinearGradient(farX + sw, 0, farX + sw * 0.6, 0);
+  shadowG.addColorStop(0, 'rgba(0,0,0,0.45)'); shadowG.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = shadowG; ctx.fillRect(Math.min(nearX, farX), near.ty, sw, near.by - near.ty);
   ctx.restore();
 }
 
@@ -153,9 +137,7 @@ function renderBranchingCorridor(ctx, near, far, isLeft, stoneBright) {
   ctx.beginPath();
   ctx.moveTo(x2, far.ty); ctx.lineTo(x3, near.ty);
   ctx.lineTo(x3, near.by); ctx.lineTo(x2, far.by);
-  ctx.closePath();
-  ctx.fillStyle = '#0b0907';
-  ctx.fill();
+  ctx.closePath(); ctx.fillStyle = '#0b0907'; ctx.fill();
 
   ctx.beginPath();
   ctx.moveTo(x0, near.by); ctx.lineTo(x1, far.by);
@@ -208,98 +190,64 @@ function renderBranchingCorridor(ctx, near, far, isLeft, stoneBright) {
   ctx.restore();
 }
 
-// ── 4. 3D ENTITY RENDERERS (PERSPECTIVE PROJECTION) ──────────────────────────
+// ── 4. 3D ENTITY & ATMOSPHERICS SYSTEM ───────────────────────────────────────
 function render3DBall(ctx, renderContext) {
   const ball = renderContext.ball;
   const player = renderContext.player;
+  const isWest = (player.orientation === 'WEST');
 
-  const worldZBall = ball.localZ - player.localZ;
+  const worldZBall = isWest ? (player.localZ - ball.localZ) : (ball.localZ - player.localZ);
   const distBall = worldZBall + Z_NEAR;
-  
   if (distBall <= 0.05) return; 
 
   const scale = Z_NEAR / distBall;
   const depth = 1.0 - scale;
-
   const widthAtDepth = lerp(HALL_WIDTH, 0, depth);
   const ballX = CX + ball.localX * widthAtDepth;
   const ballFloorY = BOTTOM - (BOTTOM - VPY) * depth;
-
-  const baseRadius = BALL_BASE_RADIUS;
-  const radius = Math.max(2, baseRadius * (1 - depth));
+  const radius = Math.max(2, BALL_BASE_RADIUS * (1 - depth));
   const ballCenterY = ballFloorY - radius;
 
   ctx.save();
   const shadowGrad = ctx.createRadialGradient(ballX, ballFloorY, 0, ballX, ballFloorY, radius * 1.6);
-  shadowGrad.addColorStop(0, 'rgba(0,0,0,0.65)');
-  shadowGrad.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = shadowGrad;
-  ctx.beginPath();
-  ctx.ellipse(ballX, ballFloorY, radius * 1.6, radius * 0.4, 0, 0, Math.PI * 2);
-  ctx.fill();
+  shadowGrad.addColorStop(0, 'rgba(0,0,0,0.65)'); shadowGrad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = shadowGrad; ctx.beginPath(); ctx.ellipse(ballX, ballFloorY, radius * 1.6, radius * 0.4, 0, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 
   ctx.save();
-  const ballGrad = ctx.createRadialGradient(
-    ballX - radius * 0.3, ballCenterY - radius * 0.3, radius * 0.05,
-    ballX, ballCenterY, radius
-  );
-  ballGrad.addColorStop(0, '#fff2cc'); 
-  ballGrad.addColorStop(0.2, '#ffaa44');
-  ballGrad.addColorStop(0.7, '#994400');
-  ballGrad.addColorStop(1, '#260a00');
-
-  ctx.fillStyle = ballGrad;
-  ctx.beginPath();
-  ctx.arc(ballX, ballCenterY, radius, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.strokeStyle = 'rgba(0,0,0,0.45)';
-  ctx.lineWidth = Math.max(0.5, 1.5 * (1 - depth));
-  ctx.stroke();
+  const ballGrad = ctx.createRadialGradient(ballX - radius * 0.3, ballCenterY - radius * 0.3, radius * 0.05, ballX, ballCenterY, radius);
+  ballGrad.addColorStop(0, '#fff2cc'); ballGrad.addColorStop(0.2, '#ffaa44'); ballGrad.addColorStop(0.7, '#994400'); ballGrad.addColorStop(1, '#260a00');
+  ctx.fillStyle = ballGrad; ctx.beginPath(); ctx.arc(ballX, ballCenterY, radius, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = Math.max(0.5, 1.5 * (1 - depth)); ctx.stroke();
   ctx.restore();
 }
 
-// ── 5. DISTANT CAP & FOG OVERLAYS ────────────────────────────────────────────
 function renderDepthFog(ctx, segs) {
   const s0 = segs[0];
   ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(s0.lx, s0.ty); ctx.lineTo(s0.rx, s0.ty);
-  ctx.lineTo(s0.rx, s0.by); ctx.lineTo(s0.lx, s0.by);
+  ctx.beginPath(); ctx.moveTo(s0.lx, s0.ty); ctx.lineTo(s0.rx, s0.ty); ctx.lineTo(s0.rx, s0.by); ctx.lineTo(s0.lx, s0.by);
   ctx.closePath(); ctx.clip();
   const fogR = ctx.createRadialGradient(VPX, VPY, 0, VPX, VPY, Math.max(W, H) * 0.55);
-  fogR.addColorStop(0,   'rgba(0,0,0,0.58)');
-  fogR.addColorStop(0.18,'rgba(0,0,0,0.30)');
-  fogR.addColorStop(0.4, 'rgba(0,0,0,0.07)');
-  fogR.addColorStop(1,   'rgba(0,0,0,0)');
-  ctx.fillStyle = fogR;
-  ctx.fillRect(s0.lx, s0.ty, s0.rx - s0.lx, s0.by - s0.ty);
+  fogR.addColorStop(0, 'rgba(0,0,0,0.58)'); fogR.addColorStop(0.18,'rgba(0,0,0,0.30)'); fogR.addColorStop(0.4, 'rgba(0,0,0,0.07)'); fogR.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = fogR; ctx.fillRect(s0.lx, s0.ty, s0.rx - s0.lx, s0.by - s0.ty);
   ctx.restore();
 }
 
 function renderFarEndWall(ctx, segs) {
   const segN = segs[NUM_SEGMENTS];
   if (!segN) return;
-  const fw = segN.rx - segN.lx;
-  const fh = segN.by - segN.ty;
+  const fw = segN.rx - segN.lx; const fh = segN.by - segN.ty;
   ctx.save();
-  ctx.beginPath();
-  ctx.rect(segN.lx, segN.ty, fw, fh);
-  ctx.clip();
-  ctx.fillStyle = '#1e1514';
-  ctx.fillRect(segN.lx, segN.ty, fw, fh);
+  ctx.beginPath(); ctx.rect(segN.lx, segN.ty, fw, fh); ctx.clip();
+  ctx.fillStyle = '#1e1514'; ctx.fillRect(segN.lx, segN.ty, fw, fh);
   drawStonePattern(ctx, segN.lx, segN.ty, fw, fh, 46, 8, 14, 8);
   const farWallG = ctx.createLinearGradient(0, segN.ty, 0, segN.by);
-  farWallG.addColorStop(0, 'rgba(0,0,0,0.5)');
-  farWallG.addColorStop(0.45, 'rgba(0,0,0,0.08)');
-  farWallG.addColorStop(1, 'rgba(0,0,0,0.45)');
-  ctx.fillStyle = farWallG;
-  ctx.fillRect(segN.lx, segN.ty, fw, fh);
+  farWallG.addColorStop(0, 'rgba(0,0,0,0.5)'); farWallG.addColorStop(0.45, 'rgba(0,0,0,0.08)'); farWallG.addColorStop(1, 'rgba(0,0,0,0.45)');
+  ctx.fillStyle = farWallG; ctx.fillRect(segN.lx, segN.ty, fw, fh);
   ctx.restore();
 }
 
-// ── 6. ATMOSPHERICS & FLOATING TORCHES ────────────────────────────────────────
+// ── 5. ATMOSPHERICS & FLOATING TORCHES ────────────────────────────────────────
 function drawTorch(ctx, tx, ty, scale, brightness, time) {
   const s = scale;
   ctx.save();
@@ -355,15 +303,13 @@ function drawWallLightPool(ctx, tx, ty, radius, brightness, time) {
 
 function renderTorchesAndLighting(ctx, segs, openings, time) {
   const torchPositions = [];
+
   for (let i = 0; i <= NUM_SEGMENTS; i++) {
     const near = segs[i], far = segs[i + 1];
     if (!near || !far) continue;
-    
-    // FIX B: CULL TORCHES EXTENDING BEHIND CAMERA PLANE BOUNDARIES
     if (far.depth <= 0) continue;
 
-    const tlx = lerp(near.lx, far.lx, 0.5);
-    const trx = lerp(near.rx, far.rx, 0.5);
+    const tlx = lerp(near.lx, far.lx, 0.5); const trx = lerp(near.rx, far.rx, 0.5);
     const ty  = lerp(near.ty, far.ty, 0.5) + (lerp(near.by - near.ty, far.by - far.ty, 0.5)) * 0.30;
     const scale = lerp(TORCH_MAX_SIZE, TORCH_MIN_SIZE, Math.max(0, Math.min(1, near.t)));
     const brightness = lerp(1.0, 0.35, Math.max(0, Math.min(1, near.t)));
@@ -378,34 +324,60 @@ function renderTorchesAndLighting(ctx, segs, openings, time) {
   torchPositions.slice().reverse().forEach(tp => drawTorch(ctx, tp.x, tp.y, tp.scale, tp.brightness, time));
 }
 
+// ── 6. POST-PROCESSING OVERLAYS ──────────────────────────────────────────────
 function renderPostProcessingOverlays(ctx) {
   const vignette = ctx.createRadialGradient(CX, CY, H * 0.28, CX, CY, H * 0.82);
   vignette.addColorStop(0, 'rgba(0,0,0,0)'); vignette.addColorStop(1, 'rgba(0,0,0,0.18)');
   ctx.fillStyle = vignette; ctx.fillRect(0, 0, W, H);
 }
 
-// ── 7. MAIN DRAW ENTRYPOINT ──────────────────────────────────────────────────
+// ── 7. MAIN DRAW INTERFACE CONTROL CONTEXT ───────────────────────────────────
 export function drawScene(ctx, renderContext, time) {
-  const playerZ = renderContext.player.localZ;
+  const player = renderContext.player;
+  const orientation = player.orientation;
+  const playerZ = player.localZ;
   const activeOpenings = renderContext.activeHallLayout.openings;
 
-  const dynamicSegs = getSegmentEdges(playerZ);
+  // ── RULE COMPLIANCE: SIMPLIFIED PLACEHOLDER RENDERS FOR 90-DEGREE ANGLES ──
+  if (orientation === 'NORTH' || orientation === 'SOUTH') {
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#1c140a'; 
+    ctx.fillRect(0, 0, W, H);
+
+    const hasOpening = activeOpenings.includes(Math.floor(playerZ));
+
+    if (hasOpening) {
+      ctx.fillStyle = '#050403';
+      const boxW = W * 0.28; const boxH = H * 0.52;
+      ctx.fillRect(CX - boxW / 2, CY - boxH / 2, boxW, boxH);
+
+      ctx.fillStyle = '#ffaa44'; ctx.font = 'bold 13px monospace'; ctx.textAlign = 'center';
+      ctx.fillText(`[CROSS TUNNEL PORTAL - FACING ${orientation}]`, CX, CY + boxH / 2 + 32);
+    } else {
+      ctx.fillStyle = '#5c4d3c'; ctx.font = 'bold 13px monospace'; ctx.textAlign = 'center';
+      ctx.fillText(`[SOLID COMPACT BRICK WALL PANEL - FACING ${orientation}]`, CX, CY);
+    }
+    ctx.textAlign = 'left'; return; 
+  }
+
+  // ── CORE ENVIRONMENT GRAPH PIPELINE FOR 180 (EAST / WEST) ──
+  const dynamicSegs = getSegmentEdges(playerZ, orientation);
 
   ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = '#1c140a';
-  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#1c140a'; ctx.fillRect(0, 0, W, H);
 
   renderMainCeiling(ctx, dynamicSegs, playerZ);
   renderMainFloor(ctx, dynamicSegs, playerZ);
 
-  const isSameHall = renderContext.ball.currentHall === renderContext.player.currentHall;
+  const isSameHall = renderContext.ball.currentHall === player.currentHall;
+  const isWest = (orientation === 'WEST');
 
-  for (let i = NUM_SEGMENTS - 1; i >= 0; i--) {
-    const near = dynamicSegs[i];
-    const far  = dynamicSegs[i + 1];
+  for (let loopIdx = 0; loopIdx < NUM_SEGMENTS; loopIdx++) {
+    const i = isWest ? loopIdx : (NUM_SEGMENTS - 1 - loopIdx);
+    
+    const near = isWest ? dynamicSegs[i + 1] : dynamicSegs[i];
+    const far  = isWest ? dynamicSegs[i]     : dynamicSegs[i + 1];
     if (!near || !far) continue;
-
-    // FIX C: CULL SOLID WALL PANELS AND PORTALS PASSED BY CAMERA TO PREVENT OVERWRITE BLITS
     if (far.depth <= 0) continue;
 
     const isOpening = activeOpenings.includes(i);

@@ -1,6 +1,9 @@
 // GEMINI.3 interface.js
 import { GameState } from './game-state.js';
 
+// Sequential clockwise indexing loop representing looking directions around a compass
+const DIRECTIONS = ['EAST', 'SOUTH', 'WEST', 'NORTH'];
+
 export const GameInterface = {
   // --- Structural Space Translators ---
   getLocalZToGlobalX(hallIndex, localZ) {
@@ -40,10 +43,35 @@ export const GameInterface = {
     return null;
   },
 
+  // ── INJECTED DISCRETE COMPASS ROTATION MATRIX MACHINE ──────────────────────
+  turnPlayer(side) {
+    const currentIndex = DIRECTIONS.indexOf(GameState.player.orientation);
+    let newIndex = currentIndex;
+
+    if (side === 'LEFT') {
+      newIndex = (currentIndex - 1 + DIRECTIONS.length) % DIRECTIONS.length;
+    } else if (side === 'RIGHT') {
+      newIndex = (currentIndex + 1) % DIRECTIONS.length;
+    }
+
+    const nextOrientation = DIRECTIONS[newIndex];
+    GameState.player.orientation = nextOrientation;
+
+    // IMPLEMENTATION: Automatically snap to segment center-line upon entering 90-deg angles
+    if (nextOrientation === 'NORTH' || nextOrientation === 'SOUTH') {
+      GameState.player.localZ = Math.floor(GameState.player.localZ) + 0.5;
+    }
+  },
+
   // --- Entity Movement Processing ---
   attemptEntityMovement(entityId, deltaZ) {
     const entity = entityId === 'player' ? GameState.player : GameState.ball;
     if (!entity) return;
+
+    // RULE IMPLEMENTATION: If player is looking North/South, completely block step displacement for now
+    if (entityId === 'player' && (entity.orientation === 'NORTH' || entity.orientation === 'SOUTH')) {
+      return; 
+    }
 
     let targetZ = entity.localZ + deltaZ;
 
@@ -64,7 +92,6 @@ export const GameInterface = {
   },
 
   // ── DIAGNOSTIC LOGGING UTILITIES ──────────────────────────────────────────
-  // RULE 1: Allows diagnostics to get readable string labels (e.g. "H1") via index
   getEntityHallId(entityId) {
     const entity = entityId === 'player' ? GameState.player : GameState.ball;
     if (!entity) return '??';
@@ -73,15 +100,14 @@ export const GameInterface = {
   },
 
   // ── ARCHITECTURAL EXTENSION ───────────────────────────────────────────────
-  // RULE 1/1b: The 2D map module queries state STRICTLY through this façade door
   getBirdsEyeContext() {
     return {
-      // Maps a deep primitive copy to prevent downstream reference leak mutations
       halls: GameState.halls.map(h => ({ id: h.id, worldXOffset: h.worldXOffset, openings: [...h.openings] })),
       constants: { ...GameState.constants },
       player: {
         hall: GameState.player.currentHall,
         localZ: GameState.player.localZ,
+        orientation: GameState.player.orientation, // Passed down to draw orientation indicators
         globalX: this.getLocalZToGlobalX(GameState.player.currentHall, GameState.player.localZ)
       },
       ball: {
