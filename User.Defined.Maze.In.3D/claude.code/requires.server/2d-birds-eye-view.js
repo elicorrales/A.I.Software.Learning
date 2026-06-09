@@ -48,7 +48,23 @@ export const BirdsEyeView = {
     });
     ctx.textAlign = 'left';
 
-    // ── 2. RENDER HALLWAY PATHWAYS & PORTALS ─────────────────────────────────
+    // ── 2. RENDER PERSISTENT DISCOVERED TUNNELS (ONLY IF THEY EXIST) ──────────
+    if (mapData.tunnels) {
+      mapData.tunnels.forEach(tunnel => {
+        const startPos = this.worldToScreen(tunnel.globalX, tunnel.startHall);
+        const endPos = this.worldToScreen(tunnel.globalX, tunnel.endHall);
+
+        // Render discovered pathways in a distinct masonry blueprint color
+        ctx.strokeStyle = '#3a2f24'; 
+        ctx.lineWidth = 6; 
+        ctx.beginPath(); 
+        ctx.moveTo(startPos.x, startPos.y); 
+        ctx.lineTo(endPos.x, endPos.y); 
+        ctx.stroke();
+      });
+    }
+
+    // ── 3. RENDER HALLWAY PATHWAYS & PORTALS ─────────────────────────────────
     mapData.halls.forEach((hall, hIdx) => {
       const startPos = this.worldToScreen(hall.worldXOffset, hIdx);
       const endPos = this.worldToScreen(hall.worldXOffset + mapData.constants.hallLength, hIdx);
@@ -66,13 +82,12 @@ export const BirdsEyeView = {
       });
     });
 
-    // ── 3. DRAW DYNAMIC PLAYER COMPASS POINTER RADAR NODE ─────────────────────
+    // ── 4. DRAW DYNAMIC PLAYER COMPASS POINTER RADAR NODE ─────────────────────
     const pPt = this.worldToScreen(mapData.player.globalX, mapData.player.hall);
     
     ctx.strokeStyle = 'rgba(0, 255, 100, 0.15)'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(pPt.x, 0); ctx.lineTo(pPt.x, MAP_H); ctx.moveTo(0, pPt.y); ctx.lineTo(MAP_W, pPt.y); ctx.stroke();
 
-    // Injected direction arrow vector calculator
     ctx.strokeStyle = '#00ff66'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(pPt.x, pPt.y);
     let arrowDx = 0, arrowDy = 0;
     if (mapData.player.orientation === 'EAST')  arrowDx = 14;
@@ -85,7 +100,7 @@ export const BirdsEyeView = {
     ctx.beginPath(); ctx.arc(pPt.x, pPt.y, 5, 0, Math.PI * 2); ctx.fill();
     ctx.shadowBlur = 0; 
 
-    // ── 4. DRAW BALL TRAILING TRACE NODE ─────────────────────────────────────
+    // ── 5. DRAW BALL TRAILING TRACE NODE ─────────────────────────────────────
     if (mapData.ball.isAlive) {
       const bPt = this.worldToScreen(mapData.ball.globalX, mapData.ball.hall);
       ctx.fillStyle = '#ff7700'; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5;

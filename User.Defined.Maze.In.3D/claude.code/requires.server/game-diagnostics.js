@@ -56,17 +56,18 @@ export const GameDiagnostics = {
   // --- Assembly Style Chronological Logging Methods ---
   logPlayer(opcode, actionText, hallId, localZ) {
     const context = GameInterface.getSceneRenderContext();
-    // Dynamically query the structural state boundary to calculate true global positioning coordinates
-    const globalX = GameInterface.getLocalZToGlobalX(context.player.currentHall, localZ);
-    
-    const logLine = `${opcode.padEnd(4)} ${actionText.padEnd(9)} ${hallId} Z:${localZ.toFixed(3).padEnd(7)} X:${globalX.toFixed(3)}`;
-    DiagnosticData.playerHistory.unshift(logLine); // Inserts at the top of the feed stack
-    
-    // Enforce 500 entry limit ceiling constraint caps
-    if (DiagnosticData.playerHistory.length > 500) {
-      DiagnosticData.playerHistory.pop();
-    }
+    const player = context.player;
+    const globalX = GameInterface.getLocalZToGlobalX(player.currentHall, localZ);
+  
+    // Create conditional trailing flag alerts
+    let stateFlags = "";
+    if (player.inTunnel) stateFlags += ` [TUNNEL:${player.currentTunnelId}]`;
+    if (player.justExitedTunnel) stateFlags += ` [DECOUPLED]`;
 
+    const logLine = `${opcode.padEnd(4)} ${actionText.padEnd(9)} ${hallId} Z:${localZ.toFixed(3).padEnd(7)} X:${globalX.toFixed(3)}${stateFlags}`;
+    DiagnosticData.playerHistory.unshift(logLine);
+  
+    if (DiagnosticData.playerHistory.length > 500) DiagnosticData.playerHistory.pop();
     if (DiagnosticData.activePanel === 'P') this.renderActivePanelContent();
   },
 

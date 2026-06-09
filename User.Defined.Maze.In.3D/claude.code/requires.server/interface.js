@@ -60,6 +60,9 @@ export const GameInterface = {
     const nextOrientation = DIRECTIONS[newIndex];
     GameState.player.orientation = nextOrientation;
 
+    // FIX: Clear the decouple gate lock instantly if the player turns their gaze
+    GameState.player.justExitedTunnel = false;
+
     if (nextOrientation === 'NORTH' || nextOrientation === 'SOUTH') {
       GameState.player.localZ = Math.floor(GameState.player.localZ) + 0.5;
     }
@@ -69,8 +72,10 @@ export const GameInterface = {
     const entity = entityId === 'player' ? GameState.player : GameState.ball;
     if (!entity) return;
 
+    // FIX: Reset tracking blocks and clear the decouple gate the instant input rest velocity is hit
     if (deltaZ === 0) {
       wasBlocked = false;
+      entity.justExitedTunnel = false;
       return;
     }
 
@@ -90,15 +95,17 @@ export const GameInterface = {
       const movementSign = (entity.orientation === 'NORTH') ? -1 : 1;
       let targetZ = entity.localZ + deltaZ * movementSign;
 
-      // ── FIXED: PROCEDURAL TUNNEL EXIT EXIT HANDOFF GATES ──
+      // ── PROCEDURAL TUNNEL EXIT GATES ──
       if (targetZ <= 0.0) {
-        // Exiting out of the North mouth of the tunnel back into the source hallway
         const targetHallIdx = entity.currentHall;
         const hallLocalZ = this.getGlobalXToLocalZ(targetHallIdx, entity.tunnelGlobalX);
         
         entity.inTunnel = false;
         entity.currentTunnelId = null;
-        entity.localZ = hallLocalZ; // Snap cleanly to the hallway centerline door coordinate
+        entity.localZ = hallLocalZ; 
+        
+        // FIX: Arm the decouple filter gate to prevent instant vacuum-back loops
+        entity.justExitedTunnel = true;
         
         if (entityId === 'player') {
           GameDiagnostics.logPlayer('EXT', 'EXT_TUN_N', this.getEntityHallId(entityId), entity.localZ);
@@ -108,7 +115,6 @@ export const GameInterface = {
       }
 
       if (targetZ >= GameState.constants.hallLength) {
-        // Exiting out of the South mouth of the tunnel into the adjacent hallway level
         const targetHallIdx = entity.currentHall + 1;
         
         if (targetHallIdx < GameState.constants.maxHalls) {
@@ -116,14 +122,17 @@ export const GameInterface = {
           entity.currentHall = targetHallIdx;
           entity.inTunnel = false;
           entity.currentTunnelId = null;
-          entity.localZ = hallLocalZ; // Snap cleanly to the new hallway centerline door coordinate
+          entity.localZ = hallLocalZ; 
+          
+          // FIX: Arm the decouple filter gate to prevent instant vacuum-back loops
+          entity.justExitedTunnel = true;
           
           if (entityId === 'player') {
             GameDiagnostics.logPlayer('EXT', 'EXT_TUN_S', this.getEntityHallId(entityId), entity.localZ);
             GameDiagnostics.captureSnapshot();
           }
         } else {
-          entity.localZ = GameState.constants.hallLength; // Universe edge clamp
+          entity.localZ = GameState.constants.hallLength; 
         }
         return;
       }
@@ -134,6 +143,9 @@ export const GameInterface = {
 
     // ── CASE B: ENTITY IS WALKING LATERALLY WHILE FACING NORTH OR SOUTH ──
     if (entity.orientation === 'NORTH' || entity.orientation === 'SOUTH') {
+      // FIX: Reject tunnel initialization loops if the decouple gate lock is armed
+      if (entity.justExitedTunnel) return;
+
       const globalX = this.getLocalZToGlobalX(entity.currentHall, entity.localZ);
       const hasOpening = this.isOpeningAt(entity.currentHall, entity.localZ);
 
@@ -182,6 +194,16 @@ export const GameInterface = {
         entity.localZ = GameState.constants.hallLength - Math.abs(deltaZ); 
         if (entityId === 'player') GameDiagnostics.logPlayer('ENT', 'ENT_TUN_N', hallId, entity.localZ);
       }
+
+      if (entityId === 'player' && !GameState.tunnels[entity.currentTunnelId]) {
+        GameState.tunnels[entity.currentTunnelId] = {
+          id: entity.currentTunnelId,
+          globalX: globalX,
+          startHall: entity.currentHall,
+          endHall: headingDirection === 'SOUTH' ? (entity.currentHall + 1) : (entity.currentHall - 1)
+        };
+      }
+
       GameDiagnostics.captureSnapshot();
       return;
     }
@@ -227,18 +249,31 @@ export const GameInterface = {
 
     return {
       halls: GameState.halls.map(h => ({ id: h.id, worldXOffset: h.worldXOffset, openings: [...h.openings] })),
+      tunnels: Object.values(GameState.tunnels),
       constants: { ...GameState.constants },
       player: {
         hall: playerHallContinuous,
         localZ: player.localZ,
         orientation: player.orientation,
-        globalX: playerGlobalX
+        globalX: playerGlobalX,
+        // ── EXPANDED TELEMETRY TRACERS ──
+        inTunnel: player.inTunnel,
+        tunnelId: player.currentTunnelId,
+        tunnelX: player.tunnelGlobalX,
+        tunnelDir: player.tunnelDirection,
+        decoupleLock: player.justExitedTunnel
       },
       ball: {
         hall: ballHallContinuous,
         localZ: ball.localZ,
         globalX: ballGlobalX,
-        isAlive: ball.isAlive
+        isAlive: ball.isAlive,
+        // ── EXPANDED TELEMETRY TRACERS ──
+        inTunnel: ball.inTunnel,
+        tunnelId: ball.currentTunnelId,
+        tunnelX: ball.tunnelGlobalX,
+        tunnelDir: ball.tunnelDirection,
+        decoupleLock: ball.justExitedTunnel
       }
     };
   }
