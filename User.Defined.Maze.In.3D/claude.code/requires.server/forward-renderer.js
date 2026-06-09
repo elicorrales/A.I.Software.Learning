@@ -9,10 +9,14 @@ export function renderForwardScene(ctx, renderContext, dynamicSegs, metrics) {
   const activeOpenings = renderContext.activeHallLayout.openings;
   const { NUM_SEGMENTS } = metrics;
 
-  renderMainCeiling(ctx, dynamicSegs, playerZ, metrics);
-  renderMainFloor(ctx, dynamicSegs, playerZ, metrics);
-
   const isWest = (orientation === 'WEST');
+  
+  // FIX: Instead of simple negation, subtract from NUM_SEGMENTS to keep the coordinate
+  // strictly positive. This prevents modulo/floor tile calculations from collapsing into carpet.
+  const textureZ = isWest ? (NUM_SEGMENTS - playerZ) : playerZ;
+
+  renderMainCeiling(ctx, dynamicSegs, textureZ, metrics);
+  renderMainFloor(ctx, dynamicSegs, textureZ, metrics);
 
   for (let loopIdx = 0; loopIdx < NUM_SEGMENTS; loopIdx++) {
     const i = isWest ? loopIdx : (NUM_SEGMENTS - 1 - loopIdx);
@@ -23,8 +27,8 @@ export function renderForwardScene(ctx, renderContext, dynamicSegs, metrics) {
     if (far.depth <= 0) continue;
 
     const isOpening = activeOpenings.includes(i);
-    const clampedNearT = Math.max(0, Math.min(1, near.t));
-    const stoneBright = 56 + (1 - clampedNearT) * 28;
+    const clampedNearDepth = Math.max(0, Math.min(1, near.depth));
+    const stoneBright = 56 + (1 - clampedNearDepth) * 28;
 
     if (!isOpening) {
       renderSolidWallPanel(ctx, near, far, true, stoneBright, 20);
@@ -35,7 +39,7 @@ export function renderForwardScene(ctx, renderContext, dynamicSegs, metrics) {
     }
   }
 
-  renderFarEndWall(ctx, dynamicSegs, metrics);
+  renderFarEndWall(ctx, dynamicSegs, metrics, orientation);
 }
 
 function renderMainCeiling(ctx, segs, playerZ, metrics) {
@@ -145,7 +149,7 @@ function renderBranchingCorridor(ctx, near, far, isLeft, stoneBright, metrics) {
   const cc = Math.max(8, Math.min(220, Math.round(60 * lerp(1.0, 0.38, Math.max(0, Math.min(1, far.t))))));
   const ceilGrad = ctx.createLinearGradient(nearX, 0, nearX + sign * sideWNear, 0);
   ceilGrad.addColorStop(0, `rgb(${cc},${Math.round(cc*0.93)},${Math.round(cc*0.82)})`);
-  ceilGrad.addColorStop(0.25, `rgb(${Math.round(cc*0.4)},${Math.round(cc*0.37)},${Math.round(stoneBright*0.33)})`);
+  ceilGrad.addColorStop(0.25, `rgb(${Math.round(cf*0.4)},${Math.round(cf*0.37)},${Math.round(stoneBright*0.33)})`);
   ceilGrad.addColorStop(1, '#0b0907');
   ctx.fillStyle = ceilGrad; ctx.fill();
 
@@ -167,10 +171,12 @@ function renderBranchingCorridor(ctx, near, far, isLeft, stoneBright, metrics) {
   ctx.restore();
 }
 
-function renderFarEndWall(ctx, segs, metrics) {
+function renderFarEndWall(ctx, segs, metrics, orientation) {
   const { NUM_SEGMENTS } = metrics;
-  const segN = segs[NUM_SEGMENTS];
+  const targetIdx = (orientation === 'WEST') ? 0 : NUM_SEGMENTS;
+  const segN = segs[targetIdx];
   if (!segN) return;
+  
   const fw = segN.rx - segN.lx; const fh = segN.by - segN.ty;
   ctx.save();
   ctx.beginPath(); ctx.rect(segN.lx, segN.ty, fw, fh); ctx.clip();

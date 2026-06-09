@@ -9,7 +9,6 @@ export const PlayerMovementSystem = {
       const key = e.key.toLowerCase();
       this.keysPressed[key] = true;
 
-      // FIXED ONE-SHOT CAPTURES: Triggers a clean, discrete 90-degree snap turn instantly
       if (key === 'a' || key === 'arrowleft') {
         GameInterface.turnPlayer('LEFT');
       }
@@ -24,7 +23,12 @@ export const PlayerMovementSystem = {
   },
 
   update(deltaTime) {
-    const moveSpeed = 2.5 * deltaTime; // World units per second
+    const context = GameInterface.getSceneRenderContext();
+    const orientation = context.player.orientation;
+    
+    // Reverse travel vector sign if looking WEST so forward goes toward Z=0
+    const directionModifier = (orientation === 'WEST') ? -1 : 1;
+    const moveSpeed = 2.5 * deltaTime * directionModifier;
 
     if (this.keysPressed['w'] || this.keysPressed['arrowup']) {
       GameInterface.attemptEntityMovement('player', moveSpeed);

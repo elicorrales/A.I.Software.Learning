@@ -16,8 +16,8 @@ export function getSegmentEdges(playerZ, orientation, metrics) {
   const isWest = (orientation === 'WEST');
   const { NUM_SEGMENTS, Z_NEAR, LEFT, RIGHT, TOP, BOTTOM, VPX, VPY } = metrics;
 
-  // Render 2 extra segments past the horizon limit to handle clipping cleanly
-  for (let i = 0; i <= NUM_SEGMENTS + 2; i++) {
+  // Calculate from -2 to NUM_SEGMENTS + 2 to fully cover past-horizon clips for both directions
+  for (let i = -2; i <= NUM_SEGMENTS + 2; i++) {
     const worldZ = isWest ? (playerZ - i) : (i - playerZ);
     const distance = worldZ + Z_NEAR;
     
@@ -35,7 +35,7 @@ export function getSegmentEdges(playerZ, orientation, metrics) {
     const by = BOTTOM - (BOTTOM - VPY) * depth;
     
     const t = worldZ / NUM_SEGMENTS; 
-    segments.push({ lx, rx, ty, by, depth, t });
+    segments[i] = { lx, rx, ty, by, depth, t };
   }
   return segments;
 }

@@ -57,28 +57,37 @@ export function drawWallLightPool(ctx, tx, ty, radius, brightness, time) {
   ctx.beginPath(); ctx.ellipse(tx, ty, r * 1.1, r * 0.9, 0, 0, Math.PI * 2); ctx.fill();
 }
 
-export function renderTorchesAndLighting(ctx, segs, openings, time, metrics) {
+export function renderTorchesAndLighting(ctx, segs, openings, time, metrics, orientation) {
   const torchPositions = [];
   const { NUM_SEGMENTS } = metrics;
+  const isWest = (orientation === 'WEST');
 
-  for (let i = 0; i <= NUM_SEGMENTS; i++) {
+  // Adjust segment panel indexing targets to account for shifted depth perspective views
+  const startIdx = isWest ? -1 : 0;
+  const endIdx = isWest ? NUM_SEGMENTS - 1 : NUM_SEGMENTS;
+
+  for (let i = startIdx; i <= endIdx; i++) {
     const near = segs[i], far = segs[i + 1];
     if (!near || !far) continue;
     if (far.depth <= 0) continue;
 
     const tlx = lerp(near.lx, far.lx, 0.5); const trx = lerp(near.rx, far.rx, 0.5);
     const ty  = lerp(near.ty, far.ty, 0.5) + (lerp(near.by - near.ty, far.by - far.ty, 0.5)) * 0.30;
-    const scale = lerp(TORCH_MAX_SIZE, TORCH_MIN_SIZE, Math.max(0, Math.min(1, near.t)));
-    const brightness = lerp(1.0, 0.35, Math.max(0, Math.min(1, near.t)));
+    
+    const currentDepth = Math.max(0, Math.min(1, near.depth));
+    const scale = lerp(TORCH_MAX_SIZE, TORCH_MIN_SIZE, currentDepth);
+    const brightness = lerp(1.0, 0.35, currentDepth);
 
     if (!openings.includes(i)) {
-      torchPositions.push({ x: tlx + scale * 0.5, y: ty, scale, brightness });
-      torchPositions.push({ x: trx - scale * 0.5, y: ty, scale, brightness });
+      torchPositions.push({ x: tlx + scale * 0.5, y: ty, scale, brightness, depth: currentDepth });
+      torchPositions.push({ x: trx - scale * 0.5, y: ty, scale, brightness, depth: currentDepth });
     }
   }
 
+  torchPositions.sort((a, b) => b.depth - a.depth);
+
   torchPositions.forEach(tp => drawWallLightPool(ctx, tp.x, tp.y - tp.scale * 0.5, tp.scale * 5.5, tp.brightness, time));
-  torchPositions.slice().reverse().forEach(tp => drawTorch(ctx, tp.x, tp.y, tp.scale, tp.brightness, time));
+  torchPositions.forEach(tp => drawTorch(ctx, tp.x, tp.y, tp.scale, tp.brightness, time));
 }
 
 export function renderDepthFog(ctx, segs, metrics) {

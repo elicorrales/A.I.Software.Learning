@@ -57,7 +57,7 @@ export function drawScene(ctx, renderContext, time) {
   // Environmental atmospherics & layers
   const fxMetrics = { NUM_SEGMENTS, VPX, VPY, CX, CY, W, H };
   renderDepthFog(ctx, dynamicSegs, fxMetrics);
-  renderTorchesAndLighting(ctx, dynamicSegs, activeOpenings, time, fxMetrics);
+  renderTorchesAndLighting(ctx, dynamicSegs, activeOpenings, time, fxMetrics, orientation);
 
   const isSameHall = renderContext.ball.currentHall === player.currentHall;
   if (isSameHall) {
