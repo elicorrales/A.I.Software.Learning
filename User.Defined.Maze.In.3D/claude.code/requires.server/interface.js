@@ -95,25 +95,33 @@ export const GameInterface = {
       const movementSign = (entity.orientation === 'NORTH') ? -1 : 1;
       let targetZ = entity.localZ + deltaZ * movementSign;
 
-      // ── PROCEDURAL TUNNEL EXIT GATES ──
+      // ── FIXED: PROCEDURAL NORTH-BOUND TUNNEL EXIT GATE ──
       if (targetZ <= 0.0) {
-        const targetHallIdx = entity.currentHall;
-        const hallLocalZ = this.getGlobalXToLocalZ(targetHallIdx, entity.tunnelGlobalX);
+        // Safe directional decrement pass to target the actual northern hallway level
+        const targetHallIdx = entity.currentHall - 1;
         
-        entity.inTunnel = false;
-        entity.currentTunnelId = null;
-        entity.localZ = hallLocalZ; 
-        
-        // FIX: Arm the decouple filter gate to prevent instant vacuum-back loops
-        entity.justExitedTunnel = true;
-        
-        if (entityId === 'player') {
-          GameDiagnostics.logPlayer('EXT', 'EXT_TUN_N', this.getEntityHallId(entityId), entity.localZ);
-          GameDiagnostics.captureSnapshot();
+        if (targetHallIdx >= 0) {
+          const hallLocalZ = this.getGlobalXToLocalZ(targetHallIdx, entity.tunnelGlobalX);
+          
+          entity.currentHall = targetHallIdx; // Update master structural hallway pointer
+          entity.inTunnel = false;
+          entity.currentTunnelId = null;
+          entity.localZ = hallLocalZ; 
+          
+          // FIX: Arm the decouple filter gate to prevent instant vacuum-back loops
+          entity.justExitedTunnel = true;
+          
+          if (entityId === 'player') {
+            GameDiagnostics.logPlayer('EXT', 'EXT_TUN_N', this.getEntityHallId(entityId), entity.localZ);
+            GameDiagnostics.captureSnapshot();
+          }
+        } else {
+          entity.localZ = 0.0; // Hard fallback boundary clamp
         }
         return;
       }
 
+      // ── PROCEDURAL SOUTH-BOUND TUNNEL EXIT GATE ──
       if (targetZ >= GameState.constants.hallLength) {
         const targetHallIdx = entity.currentHall + 1;
         
@@ -256,7 +264,7 @@ export const GameInterface = {
         localZ: player.localZ,
         orientation: player.orientation,
         globalX: playerGlobalX,
-        // ── EXPANDED TELEMETRY TRACERS ──
+        // ── EXPANDED TELEMETRY TRACERS RETAINED ──
         inTunnel: player.inTunnel,
         tunnelId: player.currentTunnelId,
         tunnelX: player.tunnelGlobalX,
@@ -268,7 +276,7 @@ export const GameInterface = {
         localZ: ball.localZ,
         globalX: ballGlobalX,
         isAlive: ball.isAlive,
-        // ── EXPANDED TELEMETRY TRACERS ──
+        // ── EXPANDED TELEMETRY TRACERS RETAINED ──
         inTunnel: ball.inTunnel,
         tunnelId: ball.currentTunnelId,
         tunnelX: ball.tunnelGlobalX,
