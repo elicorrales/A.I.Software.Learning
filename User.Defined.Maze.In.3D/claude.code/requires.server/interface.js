@@ -63,16 +63,25 @@ export const GameInterface = {
     };
   },
 
+  // ── DIAGNOSTIC LOGGING UTILITIES ──────────────────────────────────────────
+  // RULE 1: Allows diagnostics to get readable string labels (e.g. "H1") via index
+  getEntityHallId(entityId) {
+    const entity = entityId === 'player' ? GameState.player : GameState.ball;
+    if (!entity) return '??';
+    const hall = GameState.halls[entity.currentHall];
+    return hall ? hall.id : '??';
+  },
+
   // ── ARCHITECTURAL EXTENSION ───────────────────────────────────────────────
   // RULE 1/1b: The 2D map module queries state STRICTLY through this façade door
   getBirdsEyeContext() {
     return {
-      halls: GameState.halls,
-      constants: GameState.constants,
+      // Maps a deep primitive copy to prevent downstream reference leak mutations
+      halls: GameState.halls.map(h => ({ id: h.id, worldXOffset: h.worldXOffset, openings: [...h.openings] })),
+      constants: { ...GameState.constants },
       player: {
         hall: GameState.player.currentHall,
         localZ: GameState.player.localZ,
-        // Map space coordinate extraction
         globalX: this.getLocalZToGlobalX(GameState.player.currentHall, GameState.player.localZ)
       },
       ball: {

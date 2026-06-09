@@ -1,16 +1,19 @@
 // GEMINI.3 scene-renderer.js
 let W, H, CX, CY, LEFT, RIGHT, TOP, BOTTOM, VPX, VPY, HALL_WIDTH, HALL_HEIGHT;
 const NUM_SEGMENTS = 9;
+const BALL_BASE_RADIUS = 256;
+const TORCH_MAX_SIZE = 55; 
+const TORCH_MIN_SIZE = 12;  
+
+// Uniform 3D focal near-plane depth distance constant allocation
+const Z_NEAR = 1.0; 
 
 function lerp(a, b, t) { return a + (b - a) * t; }
 
-// REPLACE this function at the top of your scene-renderer.js
 export function initRenderer(canvasElement) {
-  // Exact layout math overhead for padding box trims (32px), structural gap (12px), and grey bar (52px)
   const verticalOverhead = 106;
   const horizontalOverhead = 40;
 
-  // FIX: Stripped out the 1400 and 900 constraints so the scene expands to fill your screen canvas area completely
   W = window.innerWidth - horizontalOverhead;
   H = window.innerHeight - verticalOverhead;
   
@@ -35,19 +38,23 @@ export function initRenderer(canvasElement) {
 function getSegmentEdges(playerZ) {
   const segments = [];
   for (let i = 0; i <= NUM_SEGMENTS + 2; i++) {
-    const t = (i - playerZ) / NUM_SEGMENTS;
+    const worldZ = i - playerZ;
+    const distance = worldZ + Z_NEAR;
     
     let depth;
-    if (t >= 0) {
-      depth = Math.pow(t, 0.65);
+    if (distance <= 0.05) {
+      depth = -3.0; // Pushed safely off-screen completely
     } else {
-      depth = -Math.pow(-t, 0.65);
+      const scale = Z_NEAR / distance;
+      depth = 1.0 - scale;
     }
     
     const lx = LEFT + (VPX - LEFT) * depth;
     const rx = RIGHT - (RIGHT - VPX) * depth;
     const ty = TOP + (VPY - TOP) * depth;
     const by = BOTTOM - (BOTTOM - VPY) * depth;
+    
+    const t = worldZ / NUM_SEGMENTS; 
     segments.push({ lx, rx, ty, by, depth, t });
   }
   return segments;
@@ -88,44 +95,42 @@ function drawWallPanelStones(ctx, near, far, isLeft, bright, variation) {
   const numRows = 4;
   const nearX = isLeft ? near.lx : near.rx;
   const farX  = isLeft ? far.lx  : far.rx;
-  for (let c = 0; c < numCols; c++) {
-    const tc0 = c / numCols;
-    const tc1 = (c + 1) / numCols;
-    const x0 = lerp(nearX, farX, tc0);
-    const x1 = lerp(nearX, farX, tc1);
-    const ty0 = lerp(near.ty, far.ty, tc0);
-    const by0 = lerp(near.by, far.by, tc0);
-    const ty1 = lerp(near.ty, far.ty, tc1);
-    const by1 = lerp(near.by, far.by, tc1);
-    const h0 = by0 - ty0;
-    const h1 = by1 - ty1;
-    for (let r = 0; r < numRows; r++) {
-      const rt0 = r / numRows;
-      const rt1 = (r + 1) / numRows;
-      const n = stoneNoise(c * 7 + r * 13, c * 3 + r * 5, 1, isLeft ? 42 : 55);
-      const cv = Math.max(8, Math.min(220, bright + Math.round((n - 0.5) * variation)));
-      ctx.fillStyle = `rgb(${cv},${Math.round(cv*0.93)},${Math.round(cv*0.82)})`;
-      ctx.beginPath();
-      ctx.moveTo(x0, ty0 + rt0 * h0);
-      ctx.lineTo(x1, ty1 + rt0 * h1);
-      ctx.lineTo(x1, ty1 + rt1 * h1);
-      ctx.lineTo(x0, ty0 + rt1 * h0);
-      ctx.closePath();
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-      ctx.lineWidth = Math.max(0.5, 1.2 * (1 - tc1));
-      ctx.stroke();
-    }
+
+  ctx.beginPath();
+  ctx.strokeStyle = 'rgba(0,0,0,0.32)';
+  ctx.lineWidth = Math.max(0.5, 1.2 * (1 - far.t));
+
+  // 1. Vertical columns
+  for (let c = 0; c <= numCols; c++) {
+    const tc = c / numCols;
+    const x = lerp(nearX, farX, tc);
+    const ty = lerp(near.ty, far.ty, tc);
+    const by = lerp(near.by, far.by, tc);
+    ctx.moveTo(x, ty);
+    ctx.lineTo(x, by);
   }
+
+  // 2. Horizontal brick rows
+  for (let r = 1; r < numRows; r++) {
+    const tr = r / numRows;
+    const yNear = near.ty + tr * (near.by - near.ty);
+    const yFar  = far.ty + tr * (far.by - far.ty);
+    ctx.moveTo(nearX, yNear);
+    ctx.lineTo(farX, yFar);
+  }
+  ctx.stroke();
 }
 
 function drawPerspectiveSurface(ctx, playerZ, isFloor, baseColor, variation, numCols) {
   for (let i = NUM_SEGMENTS + 1; i >= 0; i--) {
-    const tNear = (i - playerZ) / NUM_SEGMENTS;
-    const tFar  = (i + 1 - playerZ) / NUM_SEGMENTS;
-    
-    let dNear = tNear >= 0 ? Math.pow(tNear, 0.6) : -Math.pow(-tNear, 0.6);
-    let dFar  = tFar >= 0 ? Math.pow(tFar, 0.6) : -Math.pow(-tFar, 0.6);
+    const worldZNear = i - playerZ;
+    const worldZFar  = (i + 1) - playerZ;
+
+    const distNear = worldZNear + Z_NEAR;
+    const distFar  = worldZFar + Z_NEAR;
+
+    let dNear = distNear <= 0.05 ? -3.0 : 1.0 - (Z_NEAR / distNear);
+    let dFar  = distFar  <= 0.05 ? -3.0 : 1.0 - (Z_NEAR / distFar);
 
     const nLX = LEFT  + (VPX - LEFT) * dNear;
     const nRX = RIGHT - (RIGHT - VPX) * dNear;
@@ -134,35 +139,59 @@ function drawPerspectiveSurface(ctx, playerZ, isFloor, baseColor, variation, num
     const ny = isFloor ? BOTTOM - (BOTTOM - VPY) * dNear : TOP + (VPY - TOP) * dNear;
     const fy = isFloor ? BOTTOM - (BOTTOM - VPY) * dFar  : TOP + (VPY - TOP) * dFar;
 
-    const clampedFarT = Math.max(0, Math.min(1, tFar));
-    const brightness = lerp(1.0, 0.38, clampedFarT);
-    const mortarW = Math.max(0.4, 1.4 * (1 - clampedFarT));
+    const clampT = Math.max(0, Math.min(1, worldZFar / NUM_SEGMENTS));
+    const brightness = lerp(1.0, 0.38, clampT);
 
-    for (let j = 0; j < numCols; j++) {
-      const t0 = j / numCols;
-      const t1 = (j + 1) / numCols;
-      const nx0 = lerp(nLX, nRX, t0);
-      const nx1 = lerp(nLX, nRX, t1);
-      const fx0 = lerp(fLX, fRX, t0);
-      const fx1 = lerp(fLX, fRX, t1);
+    const c = Math.max(8, Math.min(220, Math.round(baseColor * brightness)));
+    ctx.fillStyle = `rgb(${c},${Math.round(c * 0.93)},${Math.round(c * 0.82)})`;
 
-      const isEven = (i + j) % 2 === 0;
-      const n = stoneNoise(i * 7 + j * 13, j * 5, 1, isFloor ? 17 : 31);
-      const raw = baseColor * brightness + Math.round((n - 0.5) * variation) + (isEven ? 6 : -6);
-      const c = Math.max(8, Math.min(220, Math.round(raw)));
-      ctx.fillStyle = `rgb(${c},${Math.round(c * 0.93)},${Math.round(c * 0.82)})`;
-
-      ctx.beginPath();
-      ctx.moveTo(nx0, ny); ctx.lineTo(nx1, ny);
-      ctx.lineTo(fx1, fy); ctx.lineTo(fx0, fy);
-      ctx.closePath();
-      ctx.fill();
-
-      ctx.strokeStyle = 'rgba(0,0,0,0.45)';
-      ctx.lineWidth = mortarW;
-      ctx.stroke();
-    }
+    ctx.beginPath();
+    ctx.moveTo(nLX, ny); ctx.lineTo(nRX, ny);
+    ctx.lineTo(fRX, fy); ctx.lineTo(fLX, fy);
+    ctx.closePath();
+    ctx.fill();
   }
+
+  // Pass 2: Draw complete floorboard structural lines in a single batched stroke
+  ctx.beginPath();
+  ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+  ctx.lineWidth = 1.2;
+
+  // Horizontal row markers
+  for (let i = 0; i <= NUM_SEGMENTS + 1; i++) {
+    const worldZ = i - playerZ;
+    const distance = worldZ + Z_NEAR;
+    if (distance <= 0.05) continue;
+    const depth = 1.0 - (Z_NEAR / distance);
+    const lx = LEFT + (VPX - LEFT) * depth;
+    const rx = RIGHT - (RIGHT - VPX) * depth;
+    const y = isFloor ? BOTTOM - (BOTTOM - VPY) * depth : TOP + (VPY - TOP) * depth;
+    ctx.moveTo(lx, y);
+    ctx.lineTo(rx, y);
+  }
+
+  // Longitudinal lines to vanishing point
+  for (let j = 0; j <= numCols; j++) {
+    const ratio = j / numCols;
+    const worldZNear = 0 - playerZ;
+    const worldZFar  = (NUM_SEGMENTS + 1) - playerZ;
+    
+    const distNear = worldZNear + Z_NEAR;
+    const distFar  = worldZFar + Z_NEAR;
+    
+    let dNear = distNear <= 0.05 ? -3.0 : 1.0 - (Z_NEAR / distNear);
+    let dFar  = distFar  <= 0.05 ? -3.0 : 1.0 - (Z_NEAR / distFar);
+
+    const nX = lerp(LEFT  + (VPX - LEFT) * dNear, RIGHT - (RIGHT - VPX) * dNear, ratio);
+    const nY = isFloor ? BOTTOM - (BOTTOM - VPY) * dNear : TOP + (VPY - TOP) * dNear;
+    
+    const fX = lerp(LEFT  + (VPX - LEFT) * dFar, RIGHT - (RIGHT - VPX) * dFar, ratio);
+    const fY = isFloor ? BOTTOM - (BOTTOM - VPY) * dFar : TOP + (VPY - TOP) * dFar;
+
+    ctx.moveTo(nX, nY);
+    ctx.lineTo(fX, fY);
+  }
+  ctx.stroke();
 }
 
 // ── 3. BASE ARCHITECTURAL LAYERS ─────────────────────────────────────────────
@@ -311,22 +340,19 @@ function render3DBall(ctx, renderContext) {
   const ball = renderContext.ball;
   const player = renderContext.player;
 
-  const tBall = (ball.localZ - player.localZ) / NUM_SEGMENTS;
+  const worldZBall = ball.localZ - player.localZ;
+  const distBall = worldZBall + Z_NEAR;
   
-  if (tBall < -0.3 || tBall > 1.0) return;
+  if (distBall <= 0.05) return; 
 
-  let depth;
-  if (tBall >= 0) {
-    depth = Math.pow(tBall, 0.65);
-  } else {
-    depth = -Math.pow(-tBall, 0.65);
-  }
+  const scale = Z_NEAR / distBall;
+  const depth = 1.0 - scale;
 
   const widthAtDepth = lerp(HALL_WIDTH, 0, depth);
   const ballX = CX + ball.localX * widthAtDepth;
   const ballFloorY = BOTTOM - (BOTTOM - VPY) * depth;
 
-  const baseRadius = 256;
+  const baseRadius = BALL_BASE_RADIUS;
   const radius = Math.max(2, baseRadius * (1 - depth));
   const ballCenterY = ballFloorY - radius;
 
@@ -464,7 +490,8 @@ function renderTorchesAndLighting(ctx, segs, openings, time) {
     const tlx = lerp(near.lx, far.lx, 0.5);
     const trx = lerp(near.rx, far.rx, 0.5);
     const ty  = lerp(near.ty, far.ty, 0.5) + (lerp(near.by - near.ty, far.by - far.ty, 0.5)) * 0.30;
-    const scale = lerp(55, 12, Math.max(0, Math.min(1, near.t)));
+    const scale = lerp(TORCH_MAX_SIZE, TORCH_MIN_SIZE, Math.max(0, Math.min(1, near.t)));
+    
     const brightness = lerp(1.0, 0.35, Math.max(0, Math.min(1, near.t)));
 
     if (!openings.includes(i)) {
@@ -497,7 +524,6 @@ export function drawScene(ctx, renderContext, time) {
   renderMainCeiling(ctx, dynamicSegs, playerZ);
   renderMainFloor(ctx, dynamicSegs, playerZ);
 
-
   const isSameHall = renderContext.ball.currentHall === renderContext.player.currentHall;
 
   for (let i = NUM_SEGMENTS - 1; i >= 0; i--) {
@@ -522,11 +548,10 @@ export function drawScene(ctx, renderContext, time) {
   renderDepthFog(ctx, dynamicSegs);
   renderFarEndWall(ctx, dynamicSegs);
   renderTorchesAndLighting(ctx, dynamicSegs, activeOpenings, time);
-  
+
   if (isSameHall) {
     render3DBall(ctx, renderContext);
   }
 
-//  renderTorchesAndLighting(ctx, dynamicSegs, activeOpenings, time);
   renderPostProcessingOverlays(ctx);
 }
