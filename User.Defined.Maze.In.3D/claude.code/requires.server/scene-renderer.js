@@ -41,7 +41,7 @@ export function drawScene(ctx, renderContext, time) {
 
   // ── ROUTER DIRECTION CONTROLLER ──
   if (orientation === 'NORTH' || orientation === 'SOUTH') {
-    renderLateralScene(ctx, renderContext, metrics);
+    renderLateralScene(ctx, renderContext, metrics, time);
     return;
   }
 
