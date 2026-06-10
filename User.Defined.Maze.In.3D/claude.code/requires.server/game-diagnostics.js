@@ -1,28 +1,23 @@
 // GEMINI.3 game-diagnostics.js
 import { GameInterface } from './interface.js';
 
-// Internal module memory tracker holding logs, snapshots, and view metrics
 const DiagnosticData = {
   snapshots: { current: null, previous: null },
   playerHistory: [],
   ballHistory: [],
-  activePanel: null, // Holds string key: 'S', 'P', 'B', 'M' or null if completely closed
+  activePanel: null, 
   zoomFactors: { S: 1.0, P: 1.0, B: 1.0, M: 1.0 }
 };
 
 export const GameDiagnostics = {
-  // --- Initialization Hook ---
   init() {
-    // Prime the baseline initial structural snapshot immediately upon launch
     this.captureSnapshot();
   },
 
-  // --- Mutually Exclusive Panel Toggle Machine ---
   togglePanel(panelId) {
     const windowEl = document.getElementById('diagnostic-window');
     if (!windowEl) return;
 
-    // If clicking the same button twice, minimize/hide it completely
     if (DiagnosticData.activePanel === panelId) {
       DiagnosticData.activePanel = null;
       windowEl.style.display = 'none';
@@ -30,7 +25,6 @@ export const GameDiagnostics = {
       return;
     }
 
-    // Otherwise, transition view exclusively to the newly requested tab
     DiagnosticData.activePanel = panelId;
     windowEl.style.display = 'flex';
     
@@ -38,28 +32,21 @@ export const GameDiagnostics = {
     this.updateButtonHighlights();
   },
 
-  // --- State Snapshot Serialization Engine ---
   captureSnapshot() {
-    // Grab clean decoupled deep primitive copies through the interface façade boundary
     const liveStateSnapshot = GameInterface.getBirdsEyeContext();
-    
-    // Cycle chronological indices forward
     DiagnosticData.snapshots.previous = DiagnosticData.snapshots.current;
-    DiagnosticData.snapshots.current = JSON.stringify(liveStateSnapshot); // Minified, packed string payload
+    DiagnosticData.snapshots.current = JSON.stringify(liveStateSnapshot);
 
-    // If the state panel is currently visible, redraw its contents live
     if (DiagnosticData.activePanel === 'S') {
       this.renderActivePanelContent();
     }
   },
 
-  // --- Assembly Style Chronological Logging Methods ---
   logPlayer(opcode, actionText, hallId, localZ) {
     const context = GameInterface.getSceneRenderContext();
     const player = context.player;
-    const globalX = GameInterface.getLocalZToGlobalX(player.currentHall, localZ);
+    const globalX = GameInterface.getLocalZToGlobalX(player.currentHall, localZ, 'player');
   
-    // Create conditional trailing flag alerts
     let stateFlags = "";
     if (player.inTunnel) stateFlags += ` [TUNNEL:${player.currentTunnelId}]`;
     if (player.justExitedTunnel) stateFlags += ` [DECOUPLED]`;
@@ -73,8 +60,7 @@ export const GameDiagnostics = {
 
   logBall(opcode, actionText, hallId, localZ) {
     const context = GameInterface.getSceneRenderContext();
-    // Dynamically query the structural state boundary to calculate true global positioning coordinates
-    const globalX = GameInterface.getLocalZToGlobalX(context.ball.currentHall, localZ);
+    const globalX = GameInterface.getLocalZToGlobalX(context.ball.currentHall, localZ, 'ball');
     
     const logLine = `${opcode.padEnd(4)} ${actionText.padEnd(9)} ${hallId} Z:${localZ.toFixed(3).padEnd(7)} X:${globalX.toFixed(3)}`;
     DiagnosticData.ballHistory.unshift(logLine);
@@ -86,33 +72,27 @@ export const GameDiagnostics = {
     if (DiagnosticData.activePanel === 'B') this.renderActivePanelContent();
   },
 
-  // --- Zoom Scaling Matrix Updates ---
   adjustZoom(panelId, direction) {
     const step = 0.1;
     const currentZoom = DiagnosticData.zoomFactors[panelId];
-    
-    // Lock values within healthy responsive constraints (0.6x to 2.5x magnification)
     const nextZoom = direction === 'IN' 
       ? Math.min(2.5, currentZoom + step) 
       : Math.max(0.6, currentZoom - step);
 
     DiagnosticData.zoomFactors[panelId] = nextZoom;
 
-    // Apply the CSS Transform layout property directly to the active frame scale node
     const scaleNode = document.getElementById('diag-content-scaler');
     if (scaleNode) {
       scaleNode.style.setProperty('--zoom-factor', nextZoom);
     }
   },
 
-  // ── INJECTED CLIPBOARD EXTRACTION UTILITY ──────────────────────────────────
   copyToClipboard() {
     const panel = DiagnosticData.activePanel;
     if (!panel) return;
 
     let textToCopy = "";
 
-    // Serialize text fields neatly based on which panel context is open
     if (panel === 'S') {
       textToCopy = `=== ANCIENT MAZE SYSTEM STATE SNAPSHOTS ===\nPREVIOUS SNAPSHOT:\n${DiagnosticData.snapshots.previous || 'NULL'}\n\nCURRENT SNAPSHOT:\n${DiagnosticData.snapshots.current}`;
     } 
@@ -126,11 +106,9 @@ export const GameDiagnostics = {
       textToCopy = `=== ANCIENT MAZE ARCHITECTURE MAP ===\n; TOPOLOGY SCHEMA SUSPENDED`;
     }
 
-    // Write text string to system clipboard
     navigator.clipboard.writeText(textToCopy).then(() => {
       const copyBtn = document.getElementById('diag-copy-btn');
       if (copyBtn) {
-        // Quick interactive button flash feedback routine
         copyBtn.innerHTML = "<b>[Copied!]</b>";
         copyBtn.style.color = "#00ff66";
         copyBtn.style.borderColor = "#00ff66";
@@ -146,7 +124,6 @@ export const GameDiagnostics = {
     });
   },
 
-  // --- UI Synchronizer Rendering Pipeline ---
   renderActivePanelContent() {
     const titleEl = document.getElementById('diag-panel-title');
     const scrollerEl = document.getElementById('diag-content-scaler');
@@ -155,10 +132,8 @@ export const GameDiagnostics = {
     const panel = DiagnosticData.activePanel;
     if (!panel) return;
 
-    // Apply the corresponding cached zoom factor multiplier smoothly
     scrollerEl.style.setProperty('--zoom-factor', DiagnosticData.zoomFactors[panel]);
 
-    // Map content frames dynamically based on the current panel index target
     if (panel === 'S') {
       titleEl.innerText = "SNAPSHOT SYSTEM STATE [S]";
       scrollerEl.innerHTML = `

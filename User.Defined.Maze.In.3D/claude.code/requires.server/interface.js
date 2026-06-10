@@ -7,9 +7,12 @@ let wasBlocked = false;
 
 export const GameInterface = {
   // --- Structural Space Translators ---
-  getLocalZToGlobalX(hallIndex, localZ) {
-    if (GameState.player.inTunnel && hallIndex === GameState.player.currentHall) {
+  getLocalZToGlobalX(hallIndex, localZ, entityId = 'player') {
+    if (entityId === 'player' && GameState.player.inTunnel && hallIndex === GameState.player.currentHall) {
       return GameState.player.tunnelGlobalX;
+    }
+    if (entityId === 'ball' && GameState.ball.inTunnel && hallIndex === GameState.ball.currentHall) {
+      return GameState.ball.tunnelGlobalX;
     }
     const hall = GameState.halls[hallIndex];
     return hall ? (hall.worldXOffset + localZ) : localZ;
@@ -31,7 +34,7 @@ export const GameInterface = {
     if (sourceHallIndex === 0 && direction === 'NORTH') return null;
     if (sourceHallIndex === GameState.constants.maxHalls - 1 && direction === 'SOUTH') return null;
 
-    const globalX = this.getLocalZToGlobalX(sourceHallIndex, sourceLocalZ);
+    const globalX = this.getLocalZToGlobalX(sourceHallIndex, sourceLocalZ, 'player');
     const step = (direction === 'SOUTH') ? 1 : -1;
     let targetHallIndex = sourceHallIndex + step;
 
@@ -95,45 +98,45 @@ export const GameInterface = {
       const movementSign = (entity.orientation === 'NORTH') ? -1 : 1;
       let targetZ = entity.localZ + deltaZ * movementSign;
 
-      // ── FIXED: PROCEDURAL NORTH-BOUND TUNNEL EXIT GATE ──
+
       if (targetZ <= 0.0) {
-        // Safe directional decrement pass to target the actual northern hallway level
-        const targetHallIdx = entity.currentHall - 1;
+        // If tunnel direction was SOUTH, exiting North means backing out to the original entry hall
+        // If tunnel direction was NORTH, exiting North means successfully reaching the next hall up
+        const targetHallIdx = (entity.tunnelDirection === 'SOUTH') ? entity.currentHall : (entity.currentHall - 1);
         
-        if (targetHallIdx >= 0) {
+        if (targetHallIdx >= 0 && targetHallIdx < GameState.constants.maxHalls) {
           const hallLocalZ = this.getGlobalXToLocalZ(targetHallIdx, entity.tunnelGlobalX);
           
-          entity.currentHall = targetHallIdx; // Update master structural hallway pointer
+          entity.currentHall = targetHallIdx; 
           entity.inTunnel = false;
           entity.currentTunnelId = null;
           entity.localZ = hallLocalZ; 
-          
-          // FIX: Arm the decouple filter gate to prevent instant vacuum-back loops
-          entity.justExitedTunnel = true;
+          entity.justExitedTunnel = true; 
           
           if (entityId === 'player') {
             GameDiagnostics.logPlayer('EXT', 'EXT_TUN_N', this.getEntityHallId(entityId), entity.localZ);
             GameDiagnostics.captureSnapshot();
           }
         } else {
-          entity.localZ = 0.0; // Hard fallback boundary clamp
+          entity.localZ = 0.0; 
         }
         return;
       }
 
-      // ── PROCEDURAL SOUTH-BOUND TUNNEL EXIT GATE ──
+      // ── FIXED: DIRECTION-AWARE SOUTH LIP TUNNEL EXIT GATE ──
       if (targetZ >= GameState.constants.hallLength) {
-        const targetHallIdx = entity.currentHall + 1;
+        // If tunnel direction was SOUTH, exiting South means successfully reaching the next hall down
+        // If tunnel direction was NORTH, exiting South means backing out to the original entry hall
+        const targetHallIdx = (entity.tunnelDirection === 'SOUTH') ? (entity.currentHall + 1) : entity.currentHall;
         
-        if (targetHallIdx < GameState.constants.maxHalls) {
+        if (targetHallIdx >= 0 && targetHallIdx < GameState.constants.maxHalls) {
           const hallLocalZ = this.getGlobalXToLocalZ(targetHallIdx, entity.tunnelGlobalX);
+          
           entity.currentHall = targetHallIdx;
           entity.inTunnel = false;
           entity.currentTunnelId = null;
           entity.localZ = hallLocalZ; 
-          
-          // FIX: Arm the decouple filter gate to prevent instant vacuum-back loops
-          entity.justExitedTunnel = true;
+          entity.justExitedTunnel = true; 
           
           if (entityId === 'player') {
             GameDiagnostics.logPlayer('EXT', 'EXT_TUN_S', this.getEntityHallId(entityId), entity.localZ);
@@ -154,7 +157,7 @@ export const GameInterface = {
       // FIX: Reject tunnel initialization loops if the decouple gate lock is armed
       if (entity.justExitedTunnel) return;
 
-      const globalX = this.getLocalZToGlobalX(entity.currentHall, entity.localZ);
+      const globalX = this.getLocalZToGlobalX(entity.currentHall, entity.localZ, entityId);
       const hasOpening = this.isOpeningAt(entity.currentHall, entity.localZ);
 
       let headingDirection = entity.orientation;
@@ -241,14 +244,14 @@ export const GameInterface = {
     const player = GameState.player;
     const ball = GameState.ball;
 
-    let playerGlobalX = player.inTunnel ? player.tunnelGlobalX : this.getLocalZToGlobalX(player.currentHall, player.localZ);
+    let playerGlobalX = player.inTunnel ? player.tunnelGlobalX : this.getLocalZToGlobalX(player.currentHall, player.localZ, 'player');
     let playerHallContinuous = player.currentHall;
     if (player.inTunnel) {
       const progress = player.localZ / GameState.constants.hallLength;
       playerHallContinuous = (player.tunnelDirection === 'SOUTH') ? (player.currentHall + progress) : (player.currentHall - 1.0 + progress);
     }
 
-    let ballGlobalX = ball.inTunnel ? ball.tunnelGlobalX : this.getLocalZToGlobalX(ball.currentHall, ball.localZ);
+    let ballGlobalX = ball.inTunnel ? ball.tunnelGlobalX : this.getLocalZToGlobalX(ball.currentHall, ball.localZ, 'ball');
     let ballHallContinuous = ball.currentHall;
     if (ball.inTunnel) {
       const progress = ball.localZ / GameState.constants.hallLength;
