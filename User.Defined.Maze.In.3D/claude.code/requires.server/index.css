@@ -11,6 +11,73 @@ body {
   font-family: serif;
 }
 
+/* ── INTERACTIVE APP SPLASH GATEWAY OVERLAY ── */
+#start-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(5, 4, 3, 0.88); /* Deep translucent obsidian shade */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000; /* Force structural layer supremacy */
+  transition: opacity 0.25s ease-out;
+}
+
+#start-modal-content {
+  background: #1c140a;
+  border: 2px solid #5c4d3c;
+  border-radius: 6px;
+  padding: 36px;
+  text-align: center;
+  max-width: 420px;
+  box-shadow: 0 25px 65px rgba(0,0,0,0.95);
+  color: #d4b28a;
+  font-family: monospace;
+}
+
+#start-modal-content h1 {
+  color: #ffaa44;
+  font-family: serif;
+  font-size: 28px;
+  letter-spacing: 3px;
+  margin-bottom: 14px;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+
+#start-modal-content p {
+  font-size: 12px;
+  color: #887a6b;
+  line-height: 1.6;
+  margin-bottom: 28px;
+}
+
+#start-game-btn {
+  background: #ffaa44;
+  color: #111111;
+  border: 1px solid #ffcc66;
+  border-radius: 4px;
+  padding: 12px 36px;
+  font-family: monospace;
+  font-size: 15px;
+  font-weight: bold;
+  cursor: pointer;
+  letter-spacing: 1px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
+}
+
+#start-game-btn:hover {
+  background: #ffbb55;
+  box-shadow: 0 0 20px rgba(255, 170, 68, 0.45);
+}
+
+#start-game-btn:active {
+  transform: scale(0.98);
+}
+
 /* Base structural panel holding game elements */
 #game-container {
   display: flex;

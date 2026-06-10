@@ -1,6 +1,7 @@
 // GEMINI.3 player-movement.js
 import { GameInterface } from './interface.js';
 import { GameDiagnostics } from './game-diagnostics.js';
+import { PlayerSoundSystem } from './player-sounds.js'; 
 
 export const PlayerMovementSystem = {
   keysPressed: {},
@@ -38,18 +39,24 @@ export const PlayerMovementSystem = {
     const player = context.player;
     const orientation = player.orientation;
     
-    // Removed all context-aware speed dampening/easing mechanics completely.
-    // Player maintains a crisp, uniform velocity across all environment structures.
     const activeVelocity = 2.5; 
 
     const directionModifier = (orientation === 'WEST') ? -1 : 1;
     const moveSpeed = activeVelocity * deltaTime * directionModifier;
 
+    let didMoveThisFrame = false;
+    let tryingToMove = false;
+
+    // Capture movement intentions explicitly
     if (this.keysPressed['arrowup']) {
-      GameInterface.attemptEntityMovement('player', moveSpeed);
+      tryingToMove = true;
+      didMoveThisFrame = GameInterface.attemptEntityMovement('player', moveSpeed);
+    } else if (this.keysPressed['arrowdown']) {
+      tryingToMove = true;
+      didMoveThisFrame = GameInterface.attemptEntityMovement('player', -moveSpeed);
     }
-    if (this.keysPressed['arrowdown']) {
-      GameInterface.attemptEntityMovement('player', -moveSpeed);
-    }
+
+    // Send translation successes and raw interaction intent down to the audio system
+    PlayerSoundSystem.update(deltaTime, didMoveThisFrame, tryingToMove);
   }
 };

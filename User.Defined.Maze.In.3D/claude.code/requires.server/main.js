@@ -2,6 +2,8 @@
 import { GameInterface } from './interface.js';
 import { PlayerMovementSystem } from './player-movement.js';
 import { BallMovementSystem } from './ball-movement.js';
+import { BallSoundSystem } from './ball-sounds.js';
+import { PlayerSoundSystem } from './player-sounds.js';
 import { initRenderer, drawScene } from './scene-renderer.js'; 
 import { BirdsEyeView } from './2d-birds-eye-view.js'; 
 import { GameDiagnostics } from './game-diagnostics.js'; 
@@ -21,6 +23,10 @@ const toggleMBtn = document.getElementById('toggle-diag-m-btn');
 const zoomInBtn = document.getElementById('diag-zoom-in-btn');
 const zoomOutBtn = document.getElementById('diag-zoom-out-btn');
 const copyBtn = document.getElementById('diag-copy-btn');
+
+// Modal Elements Latching
+const startModalOverlay = document.getElementById('start-modal-overlay');
+const startGameBtn = document.getElementById('start-game-btn');
 
 window.myGameInterface = GameInterface;
 window.myBallMovementSystem = BallMovementSystem;
@@ -187,6 +193,9 @@ function gameLoop(currentTimestamp) {
 
   PlayerMovementSystem.update(deltaTime);
   BallMovementSystem.update(deltaTime);
+  
+  // Continuous Audio Spatialization update for ball only
+  BallSoundSystem.update();
 
   const currentBallDir = BallMovementSystem.direction;
   if (currentBallDir !== lastBallDir) {
@@ -213,4 +222,16 @@ function gameLoop(currentTimestamp) {
   requestAnimationFrame(gameLoop);
 }
 
-requestAnimationFrame(gameLoop);
+// CONTROLLED GATEWAY INITIALIZATION TRIGGERED BY USER GESTURE
+startGameBtn.addEventListener('click', () => {
+  // Fire audio engines instantly on user gesture
+  BallSoundSystem.init();
+  PlayerSoundSystem.init();
+
+  // Tear down splash graphic layer safely
+  startModalOverlay.style.display = 'none';
+
+  // Lock target alignment timestamp instantly before processing the loop to prevent time jumps
+  lastTimestamp = performance.now();
+  requestAnimationFrame(gameLoop);
+});
