@@ -129,7 +129,8 @@ export const GameInterface = {
           entity.currentTunnelId = `X${globalX.toFixed(1)}_H${entity.currentHall}_H${entity.currentHall + 1}`;
         }
 
-        if (!GameState.tunnels[entity.currentTunnelId]) {
+        // CRITICAL BOUNDARY SECURE LOCK: Only allow the player entity to instantiate map graph links
+        if (entityId === 'player' && !GameState.tunnels[entity.currentTunnelId]) {
           GameState.tunnels[entity.currentTunnelId] = {
             id: entity.currentTunnelId,
             globalX: globalX,
@@ -137,20 +138,41 @@ export const GameInterface = {
             endHall: entity.orientation === 'SOUTH' ? (entity.currentHall + 1) : entity.currentHall
           };
         }
+        
         if (entityId === 'player') GameDiagnostics.logPlayer('ENT', 'ENT_TUN_' + entity.orientation[0], this.getEntityHallId(entityId), entity.localZ);
         GameDiagnostics.captureSnapshot();
         return;
       }
 
-      // Backward Step (arrowdown / negative deltaZ) -> Retreat back into previous segment (No skips/zooms)
+      // Backward Step (arrowdown / negative deltaZ) -> Retreat back into previous segment safely
       if (deltaZ < 0) {
-        entity.inTunnel = true;
-        entity.inFakeHall = false;
         if (entity.orientation === 'SOUTH') {
+          // Facing South, moving backward means traveling North
+          if (entity.currentHall === 0) {
+            if (!wasBlocked && entityId === 'player') {
+              GameDiagnostics.logPlayer('BLKD', 'NORTH_OOB', hallId, entity.localZ);
+              GameDiagnostics.captureSnapshot();
+              wasBlocked = true;
+            }
+            return;
+          }
+          entity.inTunnel = true;
+          entity.inFakeHall = false;
           entity.tunnelDirection = 'NORTH';
           entity.localZ = GameState.constants.hallLength - Math.abs(deltaZ);
           entity.currentTunnelId = `X${globalX.toFixed(1)}_H${entity.currentHall}_H${entity.currentHall + 1}`;
         } else if (entity.orientation === 'NORTH') {
+          // Facing North, moving backward means traveling South
+          if (entity.currentHall >= GameState.constants.maxHalls - 1) {
+            if (!wasBlocked && entityId === 'player') {
+              GameDiagnostics.logPlayer('BLKD', 'SOUTH_OOB', hallId, entity.localZ);
+              GameDiagnostics.captureSnapshot();
+              wasBlocked = true;
+            }
+            return;
+          }
+          entity.inTunnel = true;
+          entity.inFakeHall = false;
           entity.tunnelDirection = 'SOUTH';
           entity.localZ = 0.0 + Math.abs(deltaZ);
           entity.currentTunnelId = `X${globalX.toFixed(1)}_H${entity.currentHall + 1}_H${entity.currentHall + 2}`;
@@ -176,10 +198,8 @@ export const GameInterface = {
       const movementSign = (entity.orientation === 'NORTH') ? -1 : 1;
       let targetZ = entity.localZ + deltaZ * movementSign;
 
-      // ── FIXED: DIRECTION-AWARE NORTH LIP TUNNEL EXIT GATE ──
+      // ── DIRECTION-AWARE NORTH LIP TUNNEL EXIT GATE ──
       if (targetZ <= 0.0) {
-        // If tunnel direction was SOUTH, exiting North means backing out to the original entry hall
-        // If tunnel direction was NORTH, exiting North means successfully reaching the next hall up
         const targetHallIdx = (entity.tunnelDirection === 'SOUTH') ? entity.currentHall : (entity.currentHall - 1);
         
         if (targetHallIdx >= 0 && targetHallIdx < GameState.constants.maxHalls) {
@@ -196,7 +216,7 @@ export const GameInterface = {
             entity.inFakeHall = false;
             if (entityId === 'player') GameDiagnostics.logPlayer('EXT', 'EXT_TUN_N', this.getEntityHallId(entityId), entity.localZ);
           } else {
-            entity.inFakeHall = true; // Safely hold entity inside the Tesseract Void Node
+            entity.inFakeHall = true; 
             if (entityId === 'player') GameDiagnostics.logPlayer('EXT', 'FAKE_HAL_N', this.getEntityHallId(entityId), entity.localZ);
           }
           GameDiagnostics.captureSnapshot();
@@ -206,10 +226,8 @@ export const GameInterface = {
         return;
       }
 
-      // ── FIXED: DIRECTION-AWARE SOUTH LIP TUNNEL EXIT GATE ──
+      // ── DIRECTION-AWARE SOUTH LIP TUNNEL EXIT GATE ──
       if (targetZ >= GameState.constants.hallLength) {
-        // If tunnel direction was SOUTH, exiting South means successfully reaching the next hall down
-        // If tunnel direction was NORTH, exiting South means backing out to the original entry hall
         const targetHallIdx = (entity.tunnelDirection === 'SOUTH') ? (entity.currentHall + 1) : entity.currentHall;
         
         if (targetHallIdx >= 0 && targetHallIdx < GameState.constants.maxHalls) {
@@ -226,7 +244,7 @@ export const GameInterface = {
             entity.inFakeHall = false;
             if (entityId === 'player') GameDiagnostics.logPlayer('EXT', 'EXT_TUN_S', this.getEntityHallId(entityId), entity.localZ);
           } else {
-            entity.inFakeHall = true; // Safely hold entity inside the Tesseract Void Node
+            entity.inFakeHall = true; 
             if (entityId === 'player') GameDiagnostics.logPlayer('EXT', 'FAKE_HAL_S', this.getEntityHallId(entityId), entity.localZ);
           }
           GameDiagnostics.captureSnapshot();
@@ -242,7 +260,6 @@ export const GameInterface = {
 
     // ── CASE B: ENTITY IS WALKING LATERALLY WHILE FACING NORTH OR SOUTH ──
     if (entity.orientation === 'NORTH' || entity.orientation === 'SOUTH') {
-      // FIX: Reject tunnel initialization loops if the decouple gate lock is armed
       if (entity.justExitedTunnel) return;
 
       const hasOpening = this.isOpeningAt(entity.currentHall, entity.localZ);

@@ -6,11 +6,14 @@ const BALL_BASE_RADIUS = 256;
 export function render3DBall(ctx, renderContext, metrics) {
   const ball = renderContext.ball;
   const player = renderContext.player;
-  const isWest = (player.orientation === 'WEST');
+  
+  // Both WEST and NORTH orientations look towards decreasing localZ bounds
+  const isInvertedLook = (player.orientation === 'WEST' || player.orientation === 'NORTH');
 
   const { Z_NEAR, HALL_WIDTH, CX, BOTTOM, VPY } = metrics;
 
-  const worldZBall = isWest ? (player.localZ - ball.localZ) : (ball.localZ - player.localZ);
+  // Compute depth distance relative to the current camera face vector
+  const worldZBall = isInvertedLook ? (player.localZ - ball.localZ) : (ball.localZ - player.localZ);
   const distBall = worldZBall + Z_NEAR;
   if (distBall <= 0.05) return; 
 

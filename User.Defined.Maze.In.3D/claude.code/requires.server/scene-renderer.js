@@ -81,8 +81,13 @@ export function drawScene(ctx, renderContext, time) {
   renderDepthFog(ctx, dynamicSegs, fxMetrics);
   renderTorchesAndLighting(ctx, dynamicSegs, activeOpenings, time, fxMetrics, orientation);
 
-  const isSameHall = !player.inTunnel && (renderContext.ball.currentHall === player.currentHall);
-  if (isSameHall) {
+  // ── TUNNEL VISIBILITY FILTER BUGFIX ──
+  // Check if they are together in a main corridor OR sharing the exact same tunnel pipeline
+  const shouldRenderBall = 
+    (!player.inTunnel && !renderContext.ball.inTunnel && player.currentHall === renderContext.ball.currentHall) ||
+    (player.inTunnel && renderContext.ball.inTunnel && player.currentTunnelId === renderContext.ball.currentTunnelId);
+
+  if (shouldRenderBall) {
     const entityMetrics = { Z_NEAR, HALL_WIDTH, CX, BOTTOM, VPY };
     render3DBall(ctx, renderContext, entityMetrics);
   }
