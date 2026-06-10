@@ -10,9 +10,15 @@ class GameEntity {
     this.speed = 0.0;            // Current travel velocity
     this.isAlive = true;         // State flag
     
-    // ── ADDED FOR STEP 2: CONTINUOUS TUNNEL DISPLACEMENT TRACKERS ──
+    // ── CONTINUOUS TUNNEL DISPLACEMENT TRACKERS ──
     this.inTunnel = false;        // Binary state controller: true flags active vertical navigation
     this.currentTunnelId = null;  // Unique coordinate string key matching the active tunnel object
+    this.tunnelGlobalX = null;
+    this.tunnelDirection = null;
+    this.justExitedTunnel = false;
+
+    // ── TESSERACT VOID NODE TRACKERS ──
+    this.inFakeHall = false;      // True if standing inside a non-existent timeline void hall
   }
 }
 
@@ -34,7 +40,7 @@ export const GameState = {
     { id: "H7", worldXOffset: 0.0,   openings: [1, 3, 5, 7] }  // Southmost Hall
   ],
 
-  // ── ADDED FOR STEP 2: PROCEDURAL PERSISTENT TUNNEL STORAGE MATRIX ──
+  // ── PROCEDURAL PERSISTENT TUNNEL STORAGE MATRIX ──
   tunnels: {}, // Key syntax will look like: "X3.0_H1_H2" to persistently map segments
 
   constants: {
@@ -53,7 +59,11 @@ export const GameState = {
     // Enforce that the starting position for the player and ball are updated to match H1's random offset
     this.player.localZ = 0.0;
     this.player.orientation = 'EAST';
+    this.player.inTunnel = false;
+    this.player.inFakeHall = false;
     this.ball.localZ = 4.5;
+    this.ball.inTunnel = false;
+    this.ball.inFakeHall = false;
     
     // Clear out any stale session tunnel objects upon hot reload resets
     this.tunnels = {};

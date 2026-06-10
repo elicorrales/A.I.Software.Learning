@@ -10,26 +10,22 @@ const canvas = document.getElementById('hall');
 const ctx = canvas.getContext('2d');
 const mapCanvas = document.getElementById('birdsEye');
 
-// DOM Element Node References
 const miniMapWindow = document.getElementById('mini-map-window');
 const toggle2dBtn = document.getElementById('toggle-2d-btn');
 const resizeHandle = document.getElementById('mini-map-resize-handle');
 
-// New Diagnostic Overlay DOM Component Target Lookups
 const toggleSBtn = document.getElementById('toggle-diag-s-btn');
 const togglePBtn = document.getElementById('toggle-diag-p-btn');
 const toggleBBtn = document.getElementById('toggle-diag-b-btn');
 const toggleMBtn = document.getElementById('toggle-diag-m-btn');
 const zoomInBtn = document.getElementById('diag-zoom-in-btn');
 const zoomOutBtn = document.getElementById('diag-zoom-out-btn');
-// FIX A: Added DOM selector lookup reference for the Copy button
 const copyBtn = document.getElementById('diag-copy-btn');
 
 window.myGameInterface = GameInterface;
 window.myBallMovementSystem = BallMovementSystem;
 window.myPlayerMovementSystem = PlayerMovementSystem;
 
-// Initialize graphic display pipelines and core diagnostics model tracker
 initRenderer(canvas); 
 BirdsEyeView.init(mapCanvas);
 GameDiagnostics.init();
@@ -37,23 +33,19 @@ GameDiagnostics.init();
 let lastTimestamp = 0;
 PlayerMovementSystem.init();
 
-// ── FIXED WINDOW RESIZE LISTENER TRACKING MATRIX ───────────────────────────
 window.addEventListener('resize', () => {
   initRenderer(canvas);
 });
 
-// ── EXCLUSIVE DIAGNOSTIC TOGGLE EVENT HANDLERS ──────────────────────────────
 toggleSBtn.addEventListener('click', () => GameDiagnostics.togglePanel('S'));
 togglePBtn.addEventListener('click', () => GameDiagnostics.togglePanel('P'));
 toggleBBtn.addEventListener('click', () => GameDiagnostics.togglePanel('B'));
 toggleMBtn.addEventListener('click', () => GameDiagnostics.togglePanel('M'));
 
-// FIX B: Wire up the click event listener right to the diagnostic method
 if (copyBtn) {
   copyBtn.addEventListener('click', () => GameDiagnostics.copyToClipboard());
 }
 
-// Helper utility mapping active window visibility parameters back to the zoom lens
 function getActivePanelId() {
   if (toggleSBtn.classList.contains('active')) return 'S';
   if (togglePBtn.classList.contains('active')) return 'P';
@@ -72,14 +64,13 @@ zoomOutBtn.addEventListener('click', () => {
   if (activePanel) GameDiagnostics.adjustZoom(activePanel, 'OUT');
 });
 
-// ── PLAYER INERTIAL BOUNDARY STATE INTERCEPTORS ──
 let isMovingForward = false;
 let isMovingBackward = false;
 
 window.addEventListener('keydown', (e) => {
   const key = e.key.toLowerCase();
-  const up = key === 'arrowup';      // Cleaned: Removed 'w'
-  const down = key === 'arrowdown';  // Cleaned: Removed 's'
+  const up = key === 'arrowup';      
+  const down = key === 'arrowdown';  
 
   if (up || down) {
     const wasMoving = isMovingForward || isMovingBackward;
@@ -111,14 +102,14 @@ window.addEventListener('keydown', (e) => {
 
 window.addEventListener('keyup', (e) => {
   const key = e.key.toLowerCase();
-  const up = key === 'arrowup';      // Cleaned: Removed 'w'
-  const down = key === 'arrowdown';  // Cleaned: Removed 's'
+  const up = key === 'arrowup';      
+  const down = key === 'arrowdown';  
 
   if (up || down) {
     setTimeout(() => {
       const keys = PlayerMovementSystem.keysPressed;
-      const stillMovingUp = keys['arrowup'];      // Cleaned: Removed 'w'
-      const stillMovingDown = keys['arrowdown'];  // Cleaned: Removed 's'
+      const stillMovingUp = keys['arrowup'];      
+      const stillMovingDown = keys['arrowdown'];  
 
       if (!stillMovingUp && !stillMovingDown && (isMovingForward || isMovingBackward)) {
         isMovingForward = false;
@@ -135,12 +126,10 @@ window.addEventListener('keyup', (e) => {
   }
 });
 
-// Prime an initial baseline trace for the ball movement system context map
 const initBallHall = GameInterface.getEntityHallId('ball');
 const initBallZ = GameInterface.getSceneRenderContext().ball.localZ;
 GameDiagnostics.logBall('ROL', 'MOV_FWD', initBallHall, initBallZ);
 
-// ── VISIBILITY MATRIX CACHE LOOP CONTEXTS ───────────────────────────────────
 let isMapVisible = false;
 let savedWidth = 250;  
 let savedHeight = 250; 
@@ -158,7 +147,6 @@ toggle2dBtn.addEventListener('click', () => {
   }
 });
 
-// ── DRAG-TO-RESIZE INTERACTION TRACKING ENGINE ──────────────────────────────
 let isResizing = false;
 let startX, startY, startWidth, startHeight;
 
@@ -191,7 +179,6 @@ function terminateResizeDrag() {
   document.removeEventListener('mouseup', terminateResizeDrag);
 }
 
-// ── CORE GAME LOOP ENGINE ───────────────────────────────────────────────────
 let lastBallDir = 1;
 
 function gameLoop(currentTimestamp) {

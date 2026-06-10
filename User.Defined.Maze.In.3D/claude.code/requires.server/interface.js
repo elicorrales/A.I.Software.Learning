@@ -63,7 +63,6 @@ export const GameInterface = {
     const nextOrientation = DIRECTIONS[newIndex];
     GameState.player.orientation = nextOrientation;
 
-    // FIX: Clear the decouple gate lock instantly if the player turns their gaze
     GameState.player.justExitedTunnel = false;
 
     if (nextOrientation === 'NORTH' || nextOrientation === 'SOUTH') {
@@ -75,7 +74,6 @@ export const GameInterface = {
     const entity = entityId === 'player' ? GameState.player : GameState.ball;
     if (!entity) return;
 
-    // FIX: Reset tracking blocks and clear the decouple gate the instant input rest velocity is hit
     if (deltaZ === 0) {
       wasBlocked = false;
       entity.justExitedTunnel = false;
@@ -83,6 +81,86 @@ export const GameInterface = {
     }
 
     const hallId = this.getEntityHallId(entityId);
+    const globalX = entity.inTunnel || entity.inFakeHall ? entity.tunnelGlobalX : this.getLocalZToGlobalX(entity.currentHall, entity.localZ, entityId);
+
+    // ── CASE AA: ENTITY IS WALKING INSIDE A TESSERACT VOID NODE (FAKE HALLWAY) ──
+    if (entity.inFakeHall) {
+      // If facing EAST or WEST, they are staring directly at a solid lateral torch wall panel
+      if (entity.orientation === 'EAST' || entity.orientation === 'WEST') {
+        if (!wasBlocked && entityId === 'player') {
+          GameDiagnostics.logPlayer('BLKD', 'SOLID_WLL', hallId, entity.localZ);
+          GameDiagnostics.captureSnapshot();
+          wasBlocked = true;
+        }
+        return;
+      }
+
+      // Forward Step (arrowup / positive deltaZ) -> Forge next vertical bridge segment
+      if (deltaZ > 0) {
+        if (entity.orientation === 'SOUTH') {
+          const targetHallIdx = entity.currentHall + 1;
+          if (targetHallIdx >= GameState.constants.maxHalls) {
+            if (!wasBlocked && entityId === 'player') {
+              GameDiagnostics.logPlayer('BLKD', 'SOUTH_OOB', hallId, entity.localZ);
+              GameDiagnostics.captureSnapshot();
+              wasBlocked = true;
+            }
+            return;
+          }
+          entity.inTunnel = true;
+          entity.inFakeHall = false;
+          entity.tunnelDirection = 'SOUTH';
+          entity.localZ = 0.0 + Math.abs(deltaZ);
+          entity.currentTunnelId = `X${globalX.toFixed(1)}_H${entity.currentHall + 1}_H${entity.currentHall + 2}`;
+        } else if (entity.orientation === 'NORTH') {
+          const targetHallIdx = entity.currentHall - 1;
+          if (targetHallIdx < 0) {
+            if (!wasBlocked && entityId === 'player') {
+              GameDiagnostics.logPlayer('BLKD', 'NORTH_OOB', hallId, entity.localZ);
+              GameDiagnostics.captureSnapshot();
+              wasBlocked = true;
+            }
+            return;
+          }
+          entity.inTunnel = true;
+          entity.inFakeHall = false;
+          entity.tunnelDirection = 'NORTH';
+          entity.localZ = GameState.constants.hallLength - Math.abs(deltaZ);
+          entity.currentTunnelId = `X${globalX.toFixed(1)}_H${entity.currentHall}_H${entity.currentHall + 1}`;
+        }
+
+        if (!GameState.tunnels[entity.currentTunnelId]) {
+          GameState.tunnels[entity.currentTunnelId] = {
+            id: entity.currentTunnelId,
+            globalX: globalX,
+            startHall: entity.orientation === 'SOUTH' ? entity.currentHall : (entity.currentHall - 1),
+            endHall: entity.orientation === 'SOUTH' ? (entity.currentHall + 1) : entity.currentHall
+          };
+        }
+        if (entityId === 'player') GameDiagnostics.logPlayer('ENT', 'ENT_TUN_' + entity.orientation[0], this.getEntityHallId(entityId), entity.localZ);
+        GameDiagnostics.captureSnapshot();
+        return;
+      }
+
+      // Backward Step (arrowdown / negative deltaZ) -> Retreat back into previous segment (No skips/zooms)
+      if (deltaZ < 0) {
+        entity.inTunnel = true;
+        entity.inFakeHall = false;
+        if (entity.orientation === 'SOUTH') {
+          entity.tunnelDirection = 'NORTH';
+          entity.localZ = GameState.constants.hallLength - Math.abs(deltaZ);
+          entity.currentTunnelId = `X${globalX.toFixed(1)}_H${entity.currentHall}_H${entity.currentHall + 1}`;
+        } else if (entity.orientation === 'NORTH') {
+          entity.tunnelDirection = 'SOUTH';
+          entity.localZ = 0.0 + Math.abs(deltaZ);
+          entity.currentTunnelId = `X${globalX.toFixed(1)}_H${entity.currentHall + 1}_H${entity.currentHall + 2}`;
+        }
+        if (entityId === 'player') GameDiagnostics.logPlayer('ENT', 'RET_TUN_' + entity.orientation[0], this.getEntityHallId(entityId), entity.localZ);
+        GameDiagnostics.captureSnapshot();
+        return;
+      }
+      return;
+    }
 
     // ── CASE A: ENTITY IS WALKING INSIDE A VERTICAL TUNNEL PIPELINE ──
     if (entity.inTunnel) {
@@ -98,7 +176,7 @@ export const GameInterface = {
       const movementSign = (entity.orientation === 'NORTH') ? -1 : 1;
       let targetZ = entity.localZ + deltaZ * movementSign;
 
-
+      // ── FIXED: DIRECTION-AWARE NORTH LIP TUNNEL EXIT GATE ──
       if (targetZ <= 0.0) {
         // If tunnel direction was SOUTH, exiting North means backing out to the original entry hall
         // If tunnel direction was NORTH, exiting North means successfully reaching the next hall up
@@ -106,6 +184,7 @@ export const GameInterface = {
         
         if (targetHallIdx >= 0 && targetHallIdx < GameState.constants.maxHalls) {
           const hallLocalZ = this.getGlobalXToLocalZ(targetHallIdx, entity.tunnelGlobalX);
+          const hasOpening = this.isOpeningAt(targetHallIdx, hallLocalZ);
           
           entity.currentHall = targetHallIdx; 
           entity.inTunnel = false;
@@ -113,10 +192,14 @@ export const GameInterface = {
           entity.localZ = hallLocalZ; 
           entity.justExitedTunnel = true; 
           
-          if (entityId === 'player') {
-            GameDiagnostics.logPlayer('EXT', 'EXT_TUN_N', this.getEntityHallId(entityId), entity.localZ);
-            GameDiagnostics.captureSnapshot();
+          if (hasOpening) {
+            entity.inFakeHall = false;
+            if (entityId === 'player') GameDiagnostics.logPlayer('EXT', 'EXT_TUN_N', this.getEntityHallId(entityId), entity.localZ);
+          } else {
+            entity.inFakeHall = true; // Safely hold entity inside the Tesseract Void Node
+            if (entityId === 'player') GameDiagnostics.logPlayer('EXT', 'FAKE_HAL_N', this.getEntityHallId(entityId), entity.localZ);
           }
+          GameDiagnostics.captureSnapshot();
         } else {
           entity.localZ = 0.0; 
         }
@@ -131,6 +214,7 @@ export const GameInterface = {
         
         if (targetHallIdx >= 0 && targetHallIdx < GameState.constants.maxHalls) {
           const hallLocalZ = this.getGlobalXToLocalZ(targetHallIdx, entity.tunnelGlobalX);
+          const hasOpening = this.isOpeningAt(targetHallIdx, hallLocalZ);
           
           entity.currentHall = targetHallIdx;
           entity.inTunnel = false;
@@ -138,10 +222,14 @@ export const GameInterface = {
           entity.localZ = hallLocalZ; 
           entity.justExitedTunnel = true; 
           
-          if (entityId === 'player') {
-            GameDiagnostics.logPlayer('EXT', 'EXT_TUN_S', this.getEntityHallId(entityId), entity.localZ);
-            GameDiagnostics.captureSnapshot();
+          if (hasOpening) {
+            entity.inFakeHall = false;
+            if (entityId === 'player') GameDiagnostics.logPlayer('EXT', 'EXT_TUN_S', this.getEntityHallId(entityId), entity.localZ);
+          } else {
+            entity.inFakeHall = true; // Safely hold entity inside the Tesseract Void Node
+            if (entityId === 'player') GameDiagnostics.logPlayer('EXT', 'FAKE_HAL_S', this.getEntityHallId(entityId), entity.localZ);
           }
+          GameDiagnostics.captureSnapshot();
         } else {
           entity.localZ = GameState.constants.hallLength; 
         }
@@ -157,7 +245,6 @@ export const GameInterface = {
       // FIX: Reject tunnel initialization loops if the decouple gate lock is armed
       if (entity.justExitedTunnel) return;
 
-      const globalX = this.getLocalZToGlobalX(entity.currentHall, entity.localZ, entityId);
       const hasOpening = this.isOpeningAt(entity.currentHall, entity.localZ);
 
       let headingDirection = entity.orientation;
@@ -244,14 +331,14 @@ export const GameInterface = {
     const player = GameState.player;
     const ball = GameState.ball;
 
-    let playerGlobalX = player.inTunnel ? player.tunnelGlobalX : this.getLocalZToGlobalX(player.currentHall, player.localZ, 'player');
+    let playerGlobalX = player.inTunnel || player.inFakeHall ? player.tunnelGlobalX : this.getLocalZToGlobalX(player.currentHall, player.localZ, 'player');
     let playerHallContinuous = player.currentHall;
     if (player.inTunnel) {
       const progress = player.localZ / GameState.constants.hallLength;
       playerHallContinuous = (player.tunnelDirection === 'SOUTH') ? (player.currentHall + progress) : (player.currentHall - 1.0 + progress);
     }
 
-    let ballGlobalX = ball.inTunnel ? ball.tunnelGlobalX : this.getLocalZToGlobalX(ball.currentHall, ball.localZ, 'ball');
+    let ballGlobalX = ball.inTunnel || ball.inFakeHall ? ball.tunnelGlobalX : this.getLocalZToGlobalX(ball.currentHall, ball.localZ, 'ball');
     let ballHallContinuous = ball.currentHall;
     if (ball.inTunnel) {
       const progress = ball.localZ / GameState.constants.hallLength;
@@ -267,8 +354,8 @@ export const GameInterface = {
         localZ: player.localZ,
         orientation: player.orientation,
         globalX: playerGlobalX,
-        // ── EXPANDED TELEMETRY TRACERS RETAINED ──
         inTunnel: player.inTunnel,
+        inFakeHall: player.inFakeHall,
         tunnelId: player.currentTunnelId,
         tunnelX: player.tunnelGlobalX,
         tunnelDir: player.tunnelDirection,
@@ -279,8 +366,8 @@ export const GameInterface = {
         localZ: ball.localZ,
         globalX: ballGlobalX,
         isAlive: ball.isAlive,
-        // ── EXPANDED TELEMETRY TRACERS RETAINED ──
         inTunnel: ball.inTunnel,
+        inFakeHall: ball.inFakeHall,
         tunnelId: ball.currentTunnelId,
         tunnelX: ball.tunnelGlobalX,
         tunnelDir: ball.tunnelDirection,

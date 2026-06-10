@@ -37,14 +37,22 @@ export function drawScene(ctx, renderContext, time) {
 
   const metrics = { NUM_SEGMENTS, Z_NEAR, LEFT, RIGHT, TOP, BOTTOM, VPX, VPY, HALL_WIDTH, HALL_HEIGHT, CX, CY, W, H };
 
-  // FIX: Setup situational lateral checking rules (Hall: N/S is side. Tunnel: E/W is side)
-  const isLateralView = (!player.inTunnel && (orientation === 'NORTH' || orientation === 'SOUTH')) ||
-                        (player.inTunnel && (orientation === 'EAST' || orientation === 'WEST'));
+  // Setup situational lateral checking rules (Hall: N/S is side. Tunnel: E/W is side)
+  let isLateralView = (!player.inTunnel && (orientation === 'NORTH' || orientation === 'SOUTH')) ||
+                      (player.inTunnel && (orientation === 'EAST' || orientation === 'WEST'));
 
   // ── DYNAMIC THRESHOLD COMPILER FOR THE 3-ZONE ILLUSION PIPELINE ──
   let activeOpenings = [];
   
-  if (player.inTunnel) {
+  if (player.inFakeHall) {
+    // FIX: Force ALL views within a fake hall void node to project as lateral wall matrices
+    isLateralView = true; 
+    if (orientation === 'NORTH' || orientation === 'SOUTH') {
+      activeOpenings = [Math.floor(playerZ)]; // Compiles the appearance of a lateral tunnel entry door
+    } else {
+      activeOpenings = []; // Compiles a solid masonry wall panel with side torches
+    }
+  } else if (player.inTunnel) {
     if (orientation === 'SOUTH') {
       if (playerZ < 1.5) activeOpenings.push(0); 
       if (playerZ > 7.5) activeOpenings.push(8); 
@@ -56,7 +64,7 @@ export function drawScene(ctx, renderContext, time) {
     activeOpenings = renderContext.activeHallLayout.openings;
   }
 
-  // FIX: Pass the compiled layout array directly down to the side view mapper
+  // Pass the compiled layout array directly down to the side view mapper
   if (isLateralView) {
     renderLateralScene(ctx, renderContext, metrics, time, activeOpenings);
     return;
@@ -67,7 +75,6 @@ export function drawScene(ctx, renderContext, time) {
   ctx.clearRect(0, 0, W, H);
   ctx.fillStyle = '#1c140a'; ctx.fillRect(0, 0, W, H);
 
-  // FIX: Pass compiled openings downstream to prevent ghost openings on walls
   renderForwardScene(ctx, renderContext, dynamicSegs, metrics, activeOpenings);
 
   const fxMetrics = { NUM_SEGMENTS, VPX, VPY, CX, CY, W, H };
