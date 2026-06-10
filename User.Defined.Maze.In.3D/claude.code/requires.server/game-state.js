@@ -67,6 +67,7 @@ export const GameState = {
     
     // Clear out any stale session tunnel objects upon hot reload resets
     this.tunnels = {};
+    this.visitedHalls = new Set([0]);
   }
 };
 

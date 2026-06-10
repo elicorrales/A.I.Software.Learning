@@ -7,10 +7,12 @@ import { PlayerSoundSystem } from './player-sounds.js';
 import { initRenderer, drawScene } from './scene-renderer.js'; 
 import { BirdsEyeView } from './2d-birds-eye-view.js'; 
 import { GameDiagnostics } from './game-diagnostics.js'; 
+import { CompassRenderer } from './compass-renderer.js';
 
 const canvas = document.getElementById('hall');
 const ctx = canvas.getContext('2d');
 const mapCanvas = document.getElementById('birdsEye');
+const compassCanvas = document.getElementById('compassCanvas');
 
 const miniMapWindow = document.getElementById('mini-map-window');
 const toggle2dBtn = document.getElementById('toggle-2d-btn');
@@ -34,6 +36,7 @@ window.myPlayerMovementSystem = PlayerMovementSystem;
 
 initRenderer(canvas); 
 BirdsEyeView.init(mapCanvas);
+CompassRenderer.init(compassCanvas);
 GameDiagnostics.init();
 
 let lastTimestamp = 0;
@@ -74,8 +77,14 @@ let isMovingForward = false;
 let isMovingBackward = false;
 
 window.addEventListener('keydown', (e) => {
+  if (e.key.toLowerCase() === 'm') {
+    BirdsEyeView.toggleMapMode();
+  }
+});
+
+window.addEventListener('keydown', (e) => {
   const key = e.key.toLowerCase();
-  const up = key === 'arrowup';      
+  const up = key === 'arrowup';
   const down = key === 'arrowdown';  
 
   if (up || down) {
@@ -143,12 +152,12 @@ let savedHeight = 250;
 toggle2dBtn.addEventListener('click', () => {
   isMapVisible = !isMapVisible;
   if (isMapVisible) {
-    miniMapWindow.style.display = 'block';
-    miniMapWindow.style.width = `${savedWidth}px`;
-    miniMapWindow.style.height = `${savedHeight}px`;
+    mapCanvas.style.display = 'block';
+    compassCanvas.style.display = 'none';
     toggle2dBtn.classList.add('active');
   } else {
-    miniMapWindow.style.display = 'none';
+    mapCanvas.style.display = 'none';
+    compassCanvas.style.display = 'block';
     toggle2dBtn.classList.remove('active');
   }
 });
@@ -217,6 +226,8 @@ function gameLoop(currentTimestamp) {
   
   if (isMapVisible) {
     BirdsEyeView.draw();
+  } else {
+    CompassRenderer.draw();
   }
 
   requestAnimationFrame(gameLoop);

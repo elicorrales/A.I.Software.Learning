@@ -352,6 +352,10 @@ export const GameInterface = {
     const entity = entityId === 'player' ? GameState.player : GameState.ball;
     if (!entity) return false;
 
+    if (entityId === 'player' && !entity.inTunnel && !entity.inFakeHall) {
+      GameState.visitedHalls.add(entity.currentHall);
+    }
+
     if (deltaZ === 0) {
       wasBlocked = false;
       entity.justExitedTunnel = false;
@@ -419,6 +423,7 @@ export const GameInterface = {
       halls: GameState.halls.map(h => ({ id: h.id, worldXOffset: h.worldXOffset, openings: [...h.openings] })),
       tunnels: Object.values(GameState.tunnels),
       constants: { ...GameState.constants },
+      visitedHalls: new Set(GameState.visitedHalls),
       player: {
         hall: playerHallContinuous,
         localZ: player.localZ,

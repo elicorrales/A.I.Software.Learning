@@ -2,6 +2,7 @@
 import { GameInterface } from './interface.js';
 
 let canvas, ctx;
+let mapRevealAll = false;
 
 const MAP_W = 400;
 const MAP_H = 400;
@@ -13,6 +14,10 @@ const ORIGIN_Y = 50;
 const GLOBAL_COLUMN_TRACKS = [-1.0, 1.0, 3.0, 5.0, 7.0, 9.0, 11.0];
 
 export const BirdsEyeView = {
+  toggleMapMode() {
+    mapRevealAll = !mapRevealAll;
+  },
+
   init(canvasElement) {
     canvas = canvasElement;
     ctx = canvas.getContext('2d');
@@ -66,6 +71,8 @@ export const BirdsEyeView = {
 
     // ── 3. RENDER HALLWAY PATHWAYS & PORTALS ─────────────────────────────────
     mapData.halls.forEach((hall, hIdx) => {
+      if (!mapRevealAll && !mapData.visitedHalls.has(hIdx)) return;
+
       const startPos = this.worldToScreen(hall.worldXOffset, hIdx);
       const endPos = this.worldToScreen(hall.worldXOffset + mapData.constants.hallLength, hIdx);
 
@@ -78,7 +85,7 @@ export const BirdsEyeView = {
       hall.openings.forEach(opZ => {
         const portalGlobalX = hall.worldXOffset + opZ;
         const ptStart = this.worldToScreen(portalGlobalX, hIdx);
-        ctx.fillStyle = '#ffcc44'; ctx.fillRect(ptStart.x, ptStart.y - 4, SCALE_X, 8); 
+        ctx.fillStyle = '#ffcc44'; ctx.fillRect(ptStart.x, ptStart.y - 4, SCALE_X, 8);
       });
     });
 
@@ -110,6 +117,7 @@ export const BirdsEyeView = {
     }
 
     ctx.strokeStyle = '#3e342a'; ctx.lineWidth = 2; ctx.strokeRect(0, 0, MAP_W, MAP_H);
-    ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.font = '9px monospace'; ctx.fillText("2D MAP VISUAL TRUTH", 12, 20);
+    ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.font = '9px monospace';
+    ctx.fillText(mapRevealAll ? "2D MAP VISUAL TRUTH [M: ALL]" : "2D MAP VISUAL TRUTH [M: FOG]", 12, 20);
   }
 };
